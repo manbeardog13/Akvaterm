@@ -1,0 +1,15 @@
+{
+  "name": "Akvaterm",
+  "short_name": "Akvaterm",
+  "description": "Katalog opreme, dizajner prostorija i digitalni savjetnik. Demo katalog — podaci nisu stvarna ponuda.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef0f1",
+  "theme_color": "#00008C",
+  "lang": "hr",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

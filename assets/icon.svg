@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Akvaterm app icon — echoes the AKVA|TERM wordmark: navy tile, white
+       italic A + T, the red divider bar standing in for the wordmark split.
+       Kept to three flat colours so it stays legible at 16 px. -->
+  <title>Akvaterm</title>
+  <rect width="512" height="512" rx="116" fill="#00008C"/>
+  <g transform="translate(258,264) skewX(-12)">
+    <rect x="-16" y="-104" width="32" height="208" rx="16" fill="#d6252e"/>
+  </g>
+  <g font-family="'Open Sans','Segoe UI',Arial,Helvetica,sans-serif" font-weight="800"
+     font-style="italic" font-size="252" fill="#ffffff" text-anchor="middle">
+    <text x="142" y="352">A</text>
+    <text x="382" y="352">T</text>
+  </g>
+</svg>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Akvaterm — Katalog i dizajner</title>
+<meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
+<meta name="theme-color" content="#00008C">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+
+<!-- Open Sans (brand type) — system-ui fallback is declared in css/styles.css -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,700;1,800&display=swap">
+
+<link rel="stylesheet" href="css/styles.css">
+
+<!-- three.js resolves through this map to the vendored copy (lazy-loaded by
+     js/room3d.js only when the 3D room opens). Must precede any module script. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- Branded splash — visible on first paint (styles.css is render-blocking),
+     dismissed by the inline script below once the app has loaded. -->
+<div id="splash" aria-hidden="true">
+  <div class="sp-core">
+    <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>
+    <div class="sp-rule"><i></i></div>
+  </div>
+</div>
+
+<!-- App mount point — js/app.js owns everything inside. -->
+<div id="app"></div>
+
+<noscript>
+  <div style="max-width:420px;margin:15vh auto 0;padding:24px;text-align:center;font-family:system-ui,sans-serif">
+    <p><b>Akvaterm</b></p>
+    <p>Aplikacija zahtijeva uključen JavaScript. Molimo omogućite JavaScript u pregledniku.</p>
+  </div>
+</noscript>
+
+<script>
+/* Splash dismissal + service-worker registration.
+   The splash fades once the window has loaded (min 700 ms so it never blinks);
+   a 4 s watchdog guarantees it can never trap the user behind the veil. */
+(function () {
+  var MIN_MS = 700, WATCHDOG_MS = 4000, t0 = Date.now(), done = false;
+
+  function hideSplash() {
+    if (done) return;
+    done = true;
+    var splash = document.getElementById("splash");
+    if (!splash) return;
+    var wait = Math.max(0, MIN_MS - (Date.now() - t0));
+    setTimeout(function () {
+      splash.classList.add("out");
+      setTimeout(function () { splash.classList.add("gone"); }, 560);
+    }, wait);
+  }
+
+  window.addEventListener("load", hideSplash);
+  setTimeout(hideSplash, WATCHDOG_MS);
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./service-worker.js").catch(function () {});
+    });
+  }
+})();
+</script>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
