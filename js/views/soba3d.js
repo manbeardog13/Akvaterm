@@ -683,14 +683,24 @@ function markup() {
       .s3d-hbtn:hover{border-color:var(--s3d-amber-500)}      /* warm amber rim on hover */
       .s3d-hbtn:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
 
-      /* The hint chip is deliberately SOLID: the glass budget for this screen is
-         already spent on the HUD (top bar + tab bar are the standing pair). */
-      .s3d-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
-        max-width:calc(100% - 24px);padding:8px 16px;border-radius:var(--s3d-r-pill);
-        background:var(--s3d-glass-solid);color:var(--s3d-ink);   /* 12.34:1 */
-        font-size:13px;font-weight:600;letter-spacing:.01em;
-        box-shadow:0 2px 8px rgba(93,79,79,.22);pointer-events:none;text-align:center;z-index:1}
-      .s3d-hint.is-gone{opacity:0}
+      /* MOVED OUT OF THE VIEWPORT — see the markup. It was
+         position:absolute;bottom:12px inside .s3d-stage, i.e. a solid chip
+         parked over the floor of the room the user is inspecting. Now it is an
+         ordinary block in the flow above the stage, so it obstructs nothing and
+         needs no z-index, no pointer-events:none and no backdrop of its own.
+         It keeps the fade: .is-gone still retires it once the user has clearly
+         understood the interaction, it just no longer fades out of the scene.
+         margin-bottom collapses to 0 when it goes, so the stage rises to meet
+         the header instead of leaving a gap where the chip used to be. */
+         No transition declared here on purpose: the rule that owns it lives in
+         the prefers-reduced-motion:no-preference block below, so a user who
+         asked for no motion gets an instant change rather than a shortened one.
+      */
+      .s3d-hint{
+        margin:2px 0 10px;padding:0;text-align:center;
+        font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--muted);
+      }
+      .s3d-hint.is-gone{opacity:0;margin-bottom:0;pointer-events:none}
 
       /* ---- Degradation paths — FIVE, all landing on --glass-solid ----
          css/styles.css:1450-1545 ships five, and calls the manual one
@@ -742,7 +752,7 @@ function markup() {
         .s3d-chip.is-active{background:Highlight;color:HighlightText;border-color:Highlight}
       }
       @media (prefers-reduced-motion:no-preference){
-        .s3d-hint{transition:opacity .35s var(--smooth,ease)}
+        .s3d-hint{transition:opacity .35s var(--smooth,ease),margin-bottom .35s var(--smooth,ease)}
         .s3d-chip,.s3d-hbtn,.s3d-prod{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
       }
       /* Never animate blur() — it forces a full re-composite every frame. */
@@ -879,9 +889,17 @@ function markup() {
       </header>
       <p class="s3d-sub">${esc(tt("soba3d.sub", "Zadajte dimenzije prostorije, dodajte gotovu opremu i povucite je po podu. Obložite svaku površinu pločicama."))}</p>
 
+      <!-- The hint sits ABOVE the stage, not inside it. Operator instruction,
+           2026-08-02: informational text must never be laid over a 3D
+           environment, because the environment IS the content — a chip
+           floating in the viewport covers the very floor the user is trying
+           to judge. Above rather than below so it is read before the eye
+           drops into the scene, and so it does not collide with the help
+           paragraph that already follows the stage. -->
+      <p class="s3d-hint" id="s3d-hint">${esc(tt("soba3d.hint", "Povucite za okretanje. Dodirnite opremu pa je povucite po podu."))}</p>
+
       <div class="room3d-stage s3d-stage" id="s3d-stage">
         <div class="room3d-loading" id="s3d-loading"><span class="spinner" aria-hidden="true"></span>${esc(tt("soba3d.loading", "Učitavanje 3D prikaza…"))}</div>
-        <span class="s3d-hint" id="s3d-hint" aria-hidden="true">${esc(tt("soba3d.hint", "Povucite za okretanje. Dodirnite opremu pa je povucite po podu."))}</span>
         <div class="s3d-hud glass glass-interactive" id="s3d-hud" hidden role="group" aria-label="${esc(tt("soba3d.hudLabel", "Odabrana oprema"))}"></div>
       </div>
       <p class="s3d-help">${esc(tt("soba3d.moveHint", "Povucite opremu po podu da je premjestite."))}

@@ -886,17 +886,25 @@ function markup() {
      plus the standing top bar / tab bar pair would be four. It borrows only
      --glass-bg-dark, whose worst case (over a white backdrop) still gives
      --paper 8.22:1. */
-  .diz-coach{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:5;
-    width:calc(100% - 20px);max-width:410px;display:flex;align-items:center;gap:10px;
+  /* OUT OF THE VIEWPORT — see the markup. Now an ordinary block below the
+     stage, so it needs no absolute positioning, no z-index and no
+     pointer-events:none (nothing sits under it any more). It also drops the
+     dark glass: that existed to stay legible over an arbitrary 3D scene, and
+     against the page it can simply use the page's own surface, which is both
+     calmer and one fewer blurred surface against this view's glass budget. */
+  .diz-coach{position:relative;margin:10px auto 0;
+    width:100%;max-width:410px;display:flex;align-items:center;gap:10px;
     padding:10px 10px 10px 16px;border-radius:var(--diz-r-lg);
-    background:var(--glass-bg-dark);color:var(--glass-on-dark);
-    font-family:var(--font-text);font-size:12.5px;font-weight:600;line-height:1.4;
-    box-shadow:var(--glass-shadow-2);pointer-events:none}
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    font-family:var(--font-text);font-size:12.5px;font-weight:600;line-height:1.4}
   .diz-coach[hidden]{display:none}
   .diz-coach p{margin:0;flex:1;min-width:0}
-  .diz-coach button{pointer-events:auto;flex:none;min-height:var(--tap,44px);padding:8px 16px;
-    border-radius:var(--diz-pill);border:1px solid rgba(242,242,242,.66);background:transparent;
-    color:var(--glass-on-dark);font-family:var(--font-text);font-weight:700;font-size:12px;
+  /* Recoloured with the banner: a near-white border and --glass-on-dark label
+     were for a dark glass ground that no longer exists, and would have left an
+     invisible button on --panel. */
+  .diz-coach button{flex:none;min-height:var(--tap,44px);padding:8px 16px;
+    border-radius:var(--diz-pill);border:1px solid var(--line-strong,var(--line));background:transparent;
+    color:var(--ink);font-family:var(--font-text);font-weight:700;font-size:12px;
     letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
 
   /* ---- the "you can move the furniture" hint ---------------------------- */
@@ -1029,18 +1037,20 @@ function markup() {
      the wipe chrome and both panels are opaque or plainly translucent by
      construction; none of them ever asked for a blur. */
 
-  /* Path 2 — reduced transparency, mirroring the same two triggers (OS hint
-     and manual toggle) css/styles.css uses, so the coach mark follows the
-     user's choice instead of only the OS one. */
-  @media (prefers-reduced-transparency:reduce){
-    html:not([data-transparency="full"]) .diz-coach{background:var(--dark)}
-  }
-  html[data-transparency="reduced"] .diz-coach{background:var(--dark)}
+  /* Path 2 — reduced transparency. THE COACH MARK NO LONGER PARTICIPATES.
+     These rules used to force background:var(--dark) on it, which was right
+     while it was translucent dark glass carrying --glass-on-dark text. Now
+     that it has moved out of the viewport it is opaque --panel with --ink
+     text, and forcing a near-black ground under dark ink would render it
+     unreadable — a degradation path that BREAKS the thing it exists to
+     protect. There is no translucency left here to reduce, so there is
+     nothing for this path to do. */
 
   /* Path 3 — high contrast: lift every secondary tier to --ink, thicken the
      control boundaries, drop the panel washes to flat --surface. */
   @media (prefers-contrast:more){
-    .diz-coach{background:var(--dark)}
+    /* --surface, not --dark: the coach mark carries --ink now. */
+    .diz-coach{background:var(--surface);border-color:var(--ink);border-width:2px}
     .diz-head p,.diz-k,.diz-hint,.diz-est-note,.diz-est-area,.diz-sw .diz-price,
     .diz-est-total span,.diz-move-hint{color:var(--ink)}
     .diz-tab,.diz-surf,.diz-seg button,.diz-btn,.diz-hud-btn,.diz-wipe-grip{border-width:2px}
@@ -1120,13 +1130,20 @@ function markup() {
         aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
         aria-label="${esc(T("diz.wipeA11y", "Klizač usporedbe prije i poslije"))}">&#8942;</span>
     </div>
-    <div class="diz-coach" id="dizCoach" hidden>
-      <p>${esc(T("diz.coach", "Dodirnite površinu pa odaberite pločicu. Namještaj možete povući i premjestiti."))}</p>
-      <button type="button" id="dizCoachOk">${esc(T("diz.coachOk", "U redu"))}</button>
-    </div>
     <div class="room3d-loading diz-loading" id="dizLoading">
       <span class="spinner" aria-hidden="true"></span>${esc(T("diz.loading", "Učitavanje 3D prikaza…"))}
     </div>
+  </div>
+  <!-- The coach banner sits BELOW the stage, outside it. Operator instruction,
+       2026-08-02: guidance text must not be laid over a 3D environment. It used
+       to be position:absolute at top:10px INSIDE .diz-stage — a dark bar across
+       the top of the room, over the exact wall the user is being told to tap.
+       The loading overlay above stays inside deliberately: it is not guidance,
+       it is the stage's own state, and it covers a viewport that has nothing in
+       it yet. -->
+  <div class="diz-coach" id="dizCoach" hidden>
+    <p>${esc(T("diz.coach", "Dodirnite površinu pa odaberite pločicu. Namještaj možete povući i premjestiti."))}</p>
+    <button type="button" id="dizCoachOk">${esc(T("diz.coachOk", "U redu"))}</button>
   </div>
   <div class="diz-hud glass-hud" id="dizHud">
     <span class="diz-chip" id="dizChip"></span>
