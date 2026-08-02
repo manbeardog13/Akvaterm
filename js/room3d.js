@@ -18,6 +18,17 @@
 //        selectByIndex(i) }
 //
 // ---------------------------------------------------------------------------
+// SHARED CORE. Everything this module and js/scene3d.js (the Dizajner) both
+// need lives in js/gfx3d.js and is imported from there: the MODEL_SPECS table
+// (file / scale / sizeM / yaw / install height, all from
+// vendor/models/PROVENANCE.md), the GLB prototype cache with its
+// measure → scale → re-origin pass, the pattern-cell → CanvasTexture tiling at
+// physical scale, and the placement maths (footprint, rotated extent, travel
+// limits, 5 cm grid, wall magnet). What stays here is what only a free-orbit
+// room has: OrbitControls, the intent gate, wall hiding by camera azimuth, the
+// Croatian fixture catalogue and the two primitives with no CC0 model.
+//
+// ---------------------------------------------------------------------------
 // MOVABLE FIXTURES — hand-rolled raycast-to-floor drag.
 //
 // three's DragControls and TransformControls are both disqualified here and the
@@ -59,17 +70,20 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { buildPatternCell } from "./texture.js";
-import { GROUT_COLORS, cellMeters } from "./domain.js";
 import { t } from "./i18n.js";
+// The shared 3D core. GLB loading/caching, the measure→scale→re-origin pass,
+// the physical-scale tile texturing and the placement maths live in ONE place
+// so js/scene3d.js (the Dizajner) and this module cannot drift apart.
+import {
+  GRID_M, IRIS, BARE_SURFACE_COLOR,
+  MODEL_SPECS,
+  makeSurfaceTexture,
+  measureFootprint, rotatedExtent, limitsFor, axisSettle, reanchor,
+  buildPlaceholder, loadPrototype, retainPrototypes, releasePrototypes, disposeObject,
+} from "./gfx3d.js";
 
 const DIM_MIN = 1.5, DIM_MAX = 8;
 const SURFACE_IDS = ["floor", "wallN", "wallE", "wallS", "wallW"];
-
-// Placement grid and wall magnet, in metres.
-const GRID_M = 0.05;
-const WALL_SNAP_M = 0.15;
 
 // i18n with an inline Croatian fallback (t() returns the key when missing), so
 // the assistive-tech description is Croatian even before the dictionary lands.
@@ -88,35 +102,6 @@ const SURFACE_HR = {
 // documented way to disable a finger count.
 const TOUCH_NONE = -1;
 
-// ---- Iris palette (docs/DESIGN_SYSTEM.md — pixel-sampled, not invented) -----
-// Only the values this module actually paints into the WebGL scene.
-const IRIS = {
-  paper: 0xf2f2f2,     // --paper  #F2F2F2 — scene background
-  teal600: 0x139eb1,   // --teal-600 #139EB1 — selection footprint tint
-  amber500: 0xeaa651,  // --amber-500 #EAA651 — selection outline
-  sky200: 0xc0d8f2,    // --sky-200 #C0D8F2 — "model still loading" massing block
-};
-
-// A 3D pattern cell is only ever seen across a whole wall, so raster past ~1k
-// buys nothing while costing 4x the GPU memory: a 2048² RGBA cell is ~16 MB and
-// a browsing session pins dozens of them. Mirrors texture.js's VARIANT_MULT so
-// the estimate matches the canvas that buildPatternCell will actually produce.
-const MAX_3D_CELL_PX = 1024;
-const MAX_3D_SCALE = 1.5;
-const CELL_MULT = { grid: [2, 2], runningBond: [2, 1], herringbone: [1, 1], diagonal: [1, 1] };
-
-function cellScaleFor(product, pattern, groutWidthMm) {
-  try {
-    const m = cellMeters(product, pattern, groutWidthMm);
-    const mult = CELL_MULT[pattern] || [2, 2];
-    const maxMm = Math.max(m[0] * mult[0], m[1] * mult[1]) * 1000;
-    if (Number.isFinite(maxMm) && maxMm > 0) {
-      return Math.min(MAX_3D_SCALE, Math.max(0.25, MAX_3D_CELL_PX / maxMm));
-    }
-  } catch { /* pure-math helper — fall through to the safe default */ }
-  return 0.5;
-}
-
 // "2,55" — Croatian decimal comma, trailing zeros trimmed.
 const fmtM = (n) => String(Math.round((Number(n) || 0) * 100) / 100).replace(".", ",");
 // Outward normals (pointing away from the room) — a wall is hidden while the
@@ -131,37 +116,31 @@ const OUTWARD = {
 const clampDim = (v, fallback) =>
   Number.isFinite(v) ? Math.min(DIM_MAX, Math.max(DIM_MIN, v)) : fallback;
 
-function groutHexById(id) {
-  const g = GROUT_COLORS.find((c) => c.id === id);
-  return g ? g.hex : "#9a9a9a";
-}
-
 // ============================================================================
 // Fixture catalogue
 // ============================================================================
-// Every `scale` and `sizeM` below is copied from vendor/models/PROVENANCE.md,
-// where the bounding boxes were MEASURED by walking each glTF scene graph and
-// transforming every accessor's POSITION min/max — they are not estimates and
-// they are not eyeballed here. sizeM is measured-bbox × scale, i.e. the real
-// world size the model actually ends up at.
+// This table is the room's LABELLING and PERSISTENCE layer: it maps a saved
+// design's Croatian type id (`kada`, `sudoper`, …) onto a file in
+// vendor/models/. The geometry facts — file name, scale vector, real-world
+// sizeM, yaw correction, mount and install height — all come from
+// `MODEL_SPECS` in js/gfx3d.js, which copies them from
+// vendor/models/PROVENANCE.md, where the bounding boxes were MEASURED by
+// walking each glTF scene graph and transforming every accessor's POSITION
+// min/max. They are not estimates and they are not restated here: `...MODEL("x")`
+// spreads the one authoritative record. The persisted type ids never change —
+// saved designs depend on them.
 //
-// The eight Kenney kitchen modules are authored on one grid, so PROVENANCE
+// The eight Kenney kitchen modules are authored on one grid and PROVENANCE
 // requires ONE shared scale across all of them or worktop heights stop lining
-// up. That is this constant; do not give a kitchen module its own vector.
-const KITCHEN_RUN_SCALE = [1.3953, 2.0, 1.3333];
-
-// `mountY` is the height (m) the model's own floor sits at inside the fixture
-// group. 0 = stands on the floor. A non-zero value is an INSTALL height, i.e.
-// an EU building convention, not something measured off the asset — each one is
-// commented with where it comes from so the operator can move it.
-// `mount:'wall'` only affects labelling and the default placement.
+// up; that is `KITCHEN_RUN_SCALE`, which lives in gfx3d.js beside the specs it
+// governs. Do not give a kitchen module its own vector.
 //
-// `yaw` is a per-file correction, NOT a preference. This module's convention is
+// `yaw` is a per-file correction, NOT a preference. The shared convention is
 // "rotY 0 = back toward north (−Z)", but the three source kits do not agree with
 // each other or internally (PROVENANCE already records that toilet.glb runs
-// Z −0.477…0 while toilet-square.glb runs 0…+0.387). Each value below was
-// VERIFIED, not assumed, by two independent checks run against the actual files
-// in a browser:
+// Z −0.477…0 while toilet-square.glb runs 0…+0.387). Each value in MODEL_SPECS
+// was VERIFIED, not assumed, by two independent checks run against the actual
+// files in a browser:
 //   1. Rendering every model from due south (+Z) AND due north (−Z) and reading
 //      which side carries the front detail — door frames, handles, drawer pulls,
 //      the seat in front of a cistern, mirror glass, a condenser fan.
@@ -179,154 +158,44 @@ const KITCHEN_RUN_SCALE = [1.3953, 2.0, 1.3333];
 // and bathroom-cabinet-tall it pointed at the wrong face, because a tessellated
 // curve or a recessed door frame piles vertices on the front. It is recorded
 // here so nobody re-derives these numbers from it.
+// Every geometry fact is spread in from gfx3d.js's MODEL_SPECS by file stem.
+// A `mount`/`mountY` written after the spread would override the shared record
+// — none does today, and any that ever does is a deliberate room-only override
+// that must say why.
+const MODEL = (stem) => MODEL_SPECS[stem];
+
 const FIXTURE_SPECS = {
   // ---- Kupaonica — sanitarije ------------------------------------------
-  kada: {
-    hr: "Kada", group: "kupaonica", file: "bathtub.glb",
-    yaw: 0,
-    scale: [1.4286, 1.4286, 1.3393], sizeM: [1.7, 0.6, 0.75], mount: "floor",
-  },
-  kadaSlobodna: {
-    hr: "Samostojeća kada", group: "kupaonica", file: "bathtub-freestanding.glb",
-    yaw: 0,
-    scale: [1.1995, 0.7865, 1.1876], sizeM: [1.7, 0.62, 0.75], mount: "floor",
-  },
-  wc: {
-    hr: "WC školjka", group: "kupaonica", file: "toilet.glb",
-    yaw: Math.PI,
-    scale: [1.1516, 1.7295, 1.404], sizeM: [0.36, 0.78, 0.67], mount: "floor",
-  },
-  wcKockasti: {
-    hr: "WC školjka, kockasta", group: "kupaonica", file: "toilet-square.glb",
-    yaw: Math.PI,
-    scale: [1.1858, 1.7295, 1.6012], sizeM: [0.36, 0.78, 0.62], mount: "floor",
-  },
-  wcModerni: {
-    hr: "WC školjka, moderna", group: "kupaonica", file: "toilet-modern.glb",
-    yaw: 0,
-    scale: [1.4274, 1.4796, 1.427], sizeM: [0.36, 0.82, 0.66], mount: "floor",
-  },
-  umivaonik: {
-    hr: "Umivaonik s ormarićem", group: "kupaonica", file: "washbasin-vanity.glb",
-    yaw: Math.PI,
-    scale: [1.3953, 1.8016, 1.4375], sizeM: [0.6, 0.85, 0.46], mount: "floor",
-  },
-  umivaonikStup: {
-    hr: "Umivaonik na stupu", group: "kupaonica", file: "washbasin-pedestal.glb",
-    yaw: Math.PI,
-    scale: [1.6176, 1.5179, 1.5517], sizeM: [0.55, 0.85, 0.45], mount: "floor",
-  },
-  umivaonikViseci: {
-    hr: "Viseći umivaonik", group: "kupaonica", file: "washbasin-vanity-wall.glb",
-    yaw: 0,
-    scale: [0.8463, 1.1494, 1.0289], sizeM: [0.6, 0.55, 0.46], mount: "wall",
-    // PROVENANCE: "gornji rub na 0.85 m". 0.85 − 0.55 tall = 0.30 m off the floor.
-    mountY: 0.3,
-  },
-  tusKabina: {
-    hr: "Tuš kabina", group: "kupaonica", file: "shower-enclosure.glb",
-    yaw: Math.PI,
-    scale: [1.602, 1.7824, 1.602], sizeM: [0.9, 1.95, 0.9], mount: "floor",
-  },
-  ormaricVisoki: {
-    hr: "Zidni ormarić", group: "kupaonica", file: "bathroom-cabinet-tall.glb",
-    yaw: Math.PI,
-    scale: [1.7391, 1.7949, 1.2308], sizeM: [0.4, 0.7, 0.16], mount: "wall",
-    // Install height: bottom 20 cm above a 0.85 m washbasin rim.
-    mountY: 1.05,
-  },
-  ogledalo: {
-    hr: "Ogledalo s policom", group: "kupaonica", file: "bathroom-mirror.glb",
-    yaw: Math.PI,
-    scale: [1.9914, 1.8408, 0.831], sizeM: [0.6, 0.8, 0.12], mount: "wall",
-    // Install height: same 1.05 m datum as the wall cabinet, so a run lines up.
-    mountY: 1.05,
-  },
-  drzacRucnika: {
-    // PROVENANCE is explicit: this is a towel bar, NOT a heated towel rail.
-    hr: "Držač ručnika", group: "kupaonica", file: "towel-rail.glb",
-    yaw: 0,
-    scale: [0.375, 0.8578, 0.2158], sizeM: [0.6, 0.5, 0.1], mount: "wall",
-    mountY: 0.9,
-  },
+  kada: { hr: "Kada", group: "kupaonica", ...MODEL("bathtub") },
+  kadaSlobodna: { hr: "Samostojeća kada", group: "kupaonica", ...MODEL("bathtub-freestanding") },
+  wc: { hr: "WC školjka", group: "kupaonica", ...MODEL("toilet") },
+  wcKockasti: { hr: "WC školjka, kockasta", group: "kupaonica", ...MODEL("toilet-square") },
+  wcModerni: { hr: "WC školjka, moderna", group: "kupaonica", ...MODEL("toilet-modern") },
+  umivaonik: { hr: "Umivaonik s ormarićem", group: "kupaonica", ...MODEL("washbasin-vanity") },
+  umivaonikStup: { hr: "Umivaonik na stupu", group: "kupaonica", ...MODEL("washbasin-pedestal") },
+  umivaonikViseci: { hr: "Viseći umivaonik", group: "kupaonica", ...MODEL("washbasin-vanity-wall") },
+  tusKabina: { hr: "Tuš kabina", group: "kupaonica", ...MODEL("shower-enclosure") },
+  ormaricVisoki: { hr: "Zidni ormarić", group: "kupaonica", ...MODEL("bathroom-cabinet-tall") },
+  ogledalo: { hr: "Ogledalo s policom", group: "kupaonica", ...MODEL("bathroom-mirror") },
+  // PROVENANCE is explicit: this is a towel bar, NOT a heated towel rail.
+  drzacRucnika: { hr: "Držač ručnika", group: "kupaonica", ...MODEL("towel-rail") },
 
   // ---- Kuhinja — the run (one shared scale, see KITCHEN_RUN_SCALE) ------
-  kuhinjaDonji: {
-    hr: "Donji element 60", group: "kuhinja", file: "kitchen-cabinet-base.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.9, 0.6], mount: "floor",
-  },
-  kuhinjaLadice: {
-    hr: "Donji element s ladicama", group: "kuhinja", file: "kitchen-cabinet-drawer.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.9, 0.6], mount: "floor",
-  },
-  kuhinjaKutni: {
-    // 0.46 × 1.3953 = 0.642 and 0.46 × 1.3333 = 0.613 — the shared run scale is
-    // mandatory, so the corner unit lands at 0.64 × 0.90 × 0.61, not the 0.90
-    // PROVENANCE names as the ideal target. Worktop alignment wins.
-    hr: "Kutni donji element", group: "kuhinja", file: "kitchen-cabinet-corner.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.64, 0.9, 0.61], mount: "floor",
-  },
-  sudoper: {
-    hr: "Sudoper element", group: "kuhinja", file: "kitchen-sink-unit.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.98, 0.6], mount: "floor",
-  },
-  stednjak: {
-    hr: "Štednjak 60", group: "kuhinja", file: "kitchen-stove.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.9, 0.6], mount: "floor",
-  },
-  hladnjak: {
-    hr: "Hladnjak", group: "kuhinja", file: "kitchen-fridge.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 1.84, 0.39], mount: "floor",
-  },
-  kuhinjaGornji: {
-    hr: "Gornji element 60", group: "kuhinja", file: "kitchen-cabinet-upper.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.78, 0.29], mount: "wall",
-    // Install height: 0.90 m worktop + 0.55 m standard EU splashback gap.
-    mountY: 1.45,
-  },
-  napa: {
-    hr: "Napa 60", group: "kuhinja", file: "kitchen-hood.glb",
-    yaw: Math.PI,
-    scale: KITCHEN_RUN_SCALE, sizeM: [0.6, 0.74, 0.38], mount: "wall",
-    // Install height: 0.65 m clearance over a 0.90 m hob.
-    mountY: 1.55,
-  },
+  kuhinjaDonji: { hr: "Donji element 60", group: "kuhinja", ...MODEL("kitchen-cabinet-base") },
+  kuhinjaLadice: { hr: "Donji element s ladicama", group: "kuhinja", ...MODEL("kitchen-cabinet-drawer") },
+  kuhinjaKutni: { hr: "Kutni donji element", group: "kuhinja", ...MODEL("kitchen-cabinet-corner") },
+  sudoper: { hr: "Sudoper element", group: "kuhinja", ...MODEL("kitchen-sink-unit") },
+  stednjak: { hr: "Štednjak 60", group: "kuhinja", ...MODEL("kitchen-stove") },
+  hladnjak: { hr: "Hladnjak", group: "kuhinja", ...MODEL("kitchen-fridge") },
+  kuhinjaGornji: { hr: "Gornji element 60", group: "kuhinja", ...MODEL("kitchen-cabinet-upper") },
+  napa: { hr: "Napa 60", group: "kuhinja", ...MODEL("kitchen-hood") },
 
   // ---- Otvori i ostalo --------------------------------------------------
-  vrata: {
-    hr: "Vrata s dovratnikom", group: "ostalo", file: "door.glb",
-    yaw: 0,
-    scale: [1.8519, 2.0307, 0.8818], sizeM: [0.9, 2.05, 0.1], mount: "wall", mountY: 0,
-  },
-  vrataKrilo: {
-    hr: "Vrata (krilo)", group: "ostalo", file: "door-leaf.glb",
-    yaw: 0,
-    scale: [0.4897, 0.4895, 0.4999], sizeM: [0.85, 2.05, 0.21], mount: "wall", mountY: 0,
-  },
-  prozorVeliki: {
-    hr: "Prozor veliki", group: "ostalo", file: "window-large.glb",
-    yaw: 0,
-    scale: [0.4912, 0.4887, 0.4961], sizeM: [0.9, 0.83, 0.07], mount: "wall",
-    mountY: 0.9,   // Install height: standard 0.90 m sill.
-  },
-  prozorMali: {
-    hr: "Prozor mali", group: "ostalo", file: "window-small.glb",
-    yaw: 0,
-    scale: [0.4956, 0.4927, 0.4961], sizeM: [0.46, 0.61, 0.07], mount: "wall",
-    mountY: 1.2,   // Install height: high sill, the usual bathroom window.
-  },
-  klimaVanjska: {
-    hr: "Vanjska jedinica klime", group: "ostalo", file: "ac-outdoor-unit.glb",
-    yaw: 0,
-    scale: [0.4913, 0.4959, 0.4929], sizeM: [0.51, 0.34, 0.38], mount: "floor",
-  },
+  vrata: { hr: "Vrata s dovratnikom", group: "ostalo", ...MODEL("door") },
+  vrataKrilo: { hr: "Vrata (krilo)", group: "ostalo", ...MODEL("door-leaf") },
+  prozorVeliki: { hr: "Prozor veliki", group: "ostalo", ...MODEL("window-large") },
+  prozorMali: { hr: "Prozor mali", group: "ostalo", ...MODEL("window-small") },
+  klimaVanjska: { hr: "Vanjska jedinica klime", group: "ostalo", ...MODEL("ac-outdoor-unit") },
 
   // ---- No CC0 model exists — primitive geometry, and that is documented ---
   // PROVENANCE.md records the searches: Poly Pizza has 16 radiators and every
@@ -435,205 +304,19 @@ function buildKlima() {
 
 const PRIMITIVE_BUILDERS = { radijator: buildRadijator, klima: buildKlima };
 
-/** Massing block shown the instant a fixture is added, replaced by the GLB.
- *  Sized to the model's documented real-world size so the swap barely moves. */
-function buildPlaceholder(sizeM) {
-  const g = new THREE.Group();
-  const [w, h, d] = sizeM;
-  const box = shadowed(new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({
-      color: IRIS.sky200, roughness: 0.95, transparent: true, opacity: 0.55,
-    })), false);
-  box.position.y = h / 2;
-  g.add(box);
-  g.userData.placeholder = true;
-  return g;
-}
-
-// ---- Geometry helpers ------------------------------------------------------
-
-const _box = new THREE.Box3();
-
-/**
- * Local-space floor footprint of a group, measured at identity.
- * @returns {{minX:number,maxX:number,minZ:number,maxZ:number,topY:number}}
- * Box3.setFromObject calls updateWorldMatrix(false,false) per node and then
- * recurses, so the traversal is self-correcting from the root down — only the
- * root's own transform has to be neutral, which is what we force here.
- */
-function measureFootprint(group) {
-  const p = group.position.clone(), r = group.rotation.clone(), s = group.scale.clone();
-  group.position.set(0, 0, 0);
-  group.rotation.set(0, 0, 0);
-  group.scale.setScalar(1);
-  group.updateMatrixWorld(true);
-  _box.setFromObject(group);
-  group.position.copy(p);
-  group.rotation.copy(r);
-  group.scale.copy(s);
-  group.updateMatrixWorld(true);
-  if (!Number.isFinite(_box.min.x) || _box.isEmpty()) {
-    return { minX: -0.25, maxX: 0.25, minZ: -0.25, maxZ: 0.25, topY: 0.5 };
-  }
-  return { minX: _box.min.x, maxX: _box.max.x, minZ: _box.min.z, maxZ: _box.max.z, topY: _box.max.y };
-}
-
-/**
- * World-space AABB offsets of a footprint relative to the group origin, at yaw.
- * three's Object3D.rotation.y = t is R_y(t) = [[c,0,s],[0,1,0],[-s,0,c]], so a
- * local point maps to wx = lx·c + lz·s, wz = −lx·s + lz·c.
- */
-function rotatedExtent(fp, rotY) {
-  const c = Math.cos(rotY), s = Math.sin(rotY);
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  const corners = [[fp.minX, fp.minZ], [fp.maxX, fp.minZ], [fp.maxX, fp.maxZ], [fp.minX, fp.maxZ]];
-  for (const [lx, lz] of corners) {
-    const wx = lx * c + lz * s;
-    const wz = -lx * s + lz * c;
-    if (wx < minX) minX = wx;
-    if (wx > maxX) maxX = wx;
-    if (wz < minZ) minZ = wz;
-    if (wz > maxZ) maxZ = wz;
-  }
-  return { minX, maxX, minZ, maxZ };
-}
-
-/** Travel limits for the fixture ORIGIN, in room-local metres. The wall-flush
- *  position IS the bound, so snapping to lo/hi is "flush, bbox accounted for". */
-function limitsFor(fp, rotY, dims) {
-  const e = rotatedExtent(fp, rotY);
-  return {
-    loX: -e.minX, hiX: dims.widthM - e.maxX,
-    loZ: -e.minZ, hiZ: dims.depthM - e.maxZ,
-  };
-}
-
-/** @returns {{v:number, anchor:-1|0|1}} */
-function axisSettle(v, lo, hi) {
-  if (hi < lo) return { v: (lo + hi) / 2, anchor: 0 };       // wider than the room: centre it
-  if (v <= lo + WALL_SNAP_M) return { v: lo, anchor: -1 };
-  if (v >= hi - WALL_SNAP_M) return { v: hi, anchor: 1 };
-  const g = Math.round(v / GRID_M) * GRID_M;
-  return { v: Math.min(hi, Math.max(lo, g)), anchor: 0 };    // rounding can overshoot by 2.5 cm
-}
-
-/** Free axis: keep the world position, re-clamp. Anchored: recompute flush
- *  against THAT wall in the NEW room — this is the whole resize fix. */
-function reanchor(v, anchor, lo, hi) {
-  if (hi < lo) return (lo + hi) / 2;
-  if (anchor === -1) return lo;
-  if (anchor === 1) return hi;
-  return Math.min(hi, Math.max(lo, v));
-}
-
-// ---- GLB prototypes --------------------------------------------------------
-// Loaded once per file, normalised, then cloned per instance so every copy of a
-// cabinet shares one geometry and one material set.
-
-// Resolved against THIS MODULE rather than the document, so a deployment under
-// a sub-path (GitHub Pages /Akvaterm/) resolves without a build step.
-const MODELS_URL = new URL("../vendor/models/", import.meta.url).href;
-const protoCache = new Map();   // file -> Promise<{root, footprint}>
-let gltfLoader = null;
-
-// KNOWN LIMITATION, measured not assumed — index.html's CSP vs embedded
-// textures. GLTFLoader wraps a bufferView-backed image in a Blob and hands the
-// resulting `blob:` URL to ImageBitmapLoader (GLTFLoader.js:3314 and :2606;
-// Chrome/modern Safari take that branch, Safari <17 and Firefox <98 fall back
-// to TextureLoader and an <img>). Both were tested live against this app's
-// policy and BOTH are refused: fetch() by `connect-src 'self'` and <img> by
-// `img-src 'self' data:`. three then logs "Couldn't load texture" and resolves
-// the material without a map, so the model still renders — verified — but four
-// files lose their texture: toilet-modern.glb, bathtub-freestanding.glb,
-// washbasin-vanity-wall.glb and towel-rail.glb (PROVENANCE lists exactly these
-// four as carrying an embedded image; the other 21 have none and are unaffected).
-// The fix is a one-line CSP change in index.html, which this module does not
-// own: add `blob:` to img-src AND to connect-src.
-function loaderFor() {
-  if (!gltfLoader) gltfLoader = new GLTFLoader().setPath(MODELS_URL);
-  return gltfLoader;
-}
-
-/**
- * @param {object} spec  entry from FIXTURE_SPECS (needs file + scale)
- * @param {number} maxAniso
- * @returns {Promise<{root:THREE.Group, footprint:object}>}
- *
- * Re-origin is the part that makes dragging feel right: the wrapper's origin
- * ends up at the FLOOR CENTRE of the footprint, so grab offsets stay small,
- * rotation turns about the object instead of swinging it, and the contact
- * shadow lands where the object touches the floor. Kenney's models pivot at a
- * bbox CORNER and washbasin-pedestal.glb even runs down to y = −0.40, so
- * skipping this step shifts every model by half its own footprint.
- */
-function loadPrototype(spec, maxAniso) {
-  const cached = protoCache.get(spec.file);
-  if (cached) return cached;
-
-  const p = new Promise((resolve, reject) => {
-    loaderFor().load(spec.file, resolve, undefined, reject);
-  }).then((gltf) => {
-    const inner = gltf.scene;
-    inner.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(inner);
-    const ctr = box.getCenter(new THREE.Vector3());
-    const [sx, sy, sz] = spec.scale;
-    inner.scale.set(sx, sy, sz);
-    inner.position.set(-ctr.x * sx, -box.min.y * sy, -ctr.z * sz);
-    // Yaw lives on its own wrapper: the model's own origin is at a bbox corner,
-    // so rotating `inner` directly would swing the centring offset with it.
-    const spin = new THREE.Group();
-    spin.rotation.y = spec.yaw || 0;
-    spin.add(inner);
-    const root = new THREE.Group();
-    root.add(spin);
-    root.traverse((o) => {
-      if (!o.isMesh) return;
-      o.castShadow = true;
-      o.receiveShadow = false;          // self-shadowing on low-poly furniture is noise
-      o.userData.shared = true;         // disposeObject() must not free a shared resource
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) if (m && m.map) m.map.anisotropy = maxAniso;
-    });
-    return { root, footprint: measureFootprint(root) };
-  });
-
-  protoCache.set(spec.file, p);
-  return p;
-}
-
-/** Frees the shared prototypes. Pending loads dispose themselves on arrival. */
-function disposePrototypes() {
-  for (const p of protoCache.values()) {
-    p.then((proto) => disposeObject(proto.root, true)).catch(() => { /* never loaded */ });
-  }
-  protoCache.clear();
-  gltfLoader = null;
-}
-
-/** @param {boolean} force  dispose even resources flagged as shared. */
-function disposeObject(root, force = false) {
-  root.traverse((obj) => {
-    // Lines and points carry geometry + material too — the selection outline is
-    // a LineLoop, and an isMesh-only walk would leak it on every teardown.
-    if (!obj.isMesh && !obj.isLine && !obj.isPoints) return;
-    if (obj.userData.shared && !force) return;   // cloned GLB — the prototype owns it
-    if (obj.geometry) obj.geometry.dispose();
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const m of mats) {
-      if (!m) continue;
-      if (m.map) m.map.dispose();
-      m.dispose();
-    }
-  });
-}
+// ---- What moved to js/gfx3d.js ---------------------------------------------
+// measureFootprint / rotatedExtent / limitsFor / axisSettle / reanchor, the
+// placeholder massing block, the GLB prototype cache (loadPrototype /
+// retain / release / disposeObject) and the pattern-cell → CanvasTexture pass
+// are all imported now. The Dizajner engine drags fixtures and lays tiles with
+// exactly the same maths, so there is one implementation, not two.
 
 // ============================================================================
 // Mount
 // ============================================================================
 
 export async function mountRoom(el, { room = {}, assignments = {}, products = [], onReady } = {}) {
+  retainPrototypes();
   const dims = {
     widthM: clampDim(room.widthM, 3),
     depthM: clampDim(room.depthM, 2.5),
@@ -749,10 +432,13 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   }
 
   // ---- Surfaces ------------------------------------------------------------
+  const bareColor = (sid) =>
+    (sid === "floor" ? BARE_SURFACE_COLOR.floor : BARE_SURFACE_COLOR.wall);
+
   const surfaceRecs = {};
   for (const sid of SURFACE_IDS) {
     const mat = new THREE.MeshStandardMaterial({
-      color: sid === "floor" ? 0xd8d6d2 : 0xf2f0ec,
+      color: bareColor(sid),
       roughness: 0.9,
       metalness: 0,
     });
@@ -805,7 +491,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   function resetSurface(sid) {
     const mat = surfaceRecs[sid].mesh.material;
     if (mat.map) { mat.map.dispose(); mat.map = null; }
-    mat.color.set(sid === "floor" ? 0xd8d6d2 : 0xf2f0ec);
+    mat.color.set(bareColor(sid));
     mat.roughness = 0.9;
     mat.needsUpdate = true;
   }
@@ -819,25 +505,14 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       updateAriaLabel();
       return;
     }
-    const normalized = {
-      pattern: opts.pattern || "grid",
-      groutColorHex: opts.groutColorHex || groutHexById(opts.groutColorId),
-      groutWidthMm: Number.isFinite(opts.groutWidthMm) ? opts.groutWidthMm : 3,
-    };
-    const { canvas, cellSizeMm } = buildPatternCell(product, {
-      ...normalized,
-      scalePxPerMm: cellScaleFor(product, normalized.pattern, normalized.groutWidthMm),
-    });
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = maxAniso;
-    const [sw, sh] = surfaceSizeM(sid);
-    tex.repeat.set(sw / (cellSizeMm[0] / 1000), sh / (cellSizeMm[1] / 1000));
+    // gfx3d.makeSurfaceTexture is the single tiling pass: buildPatternCell →
+    // CanvasTexture, sRGB, RepeatWrapping, max anisotropy, and
+    // repeat = surfaceMetres / cellMetres so a 600 mm tile stays 600 mm.
+    const { texture, normalized } =
+      makeSurfaceTexture(product, opts, surfaceSizeM(sid), maxAniso);
     const mat = rec.mesh.material;
     if (mat.map) mat.map.dispose();
-    mat.map = tex;
+    mat.map = texture;
     mat.color.set(0xffffff);
     mat.roughness = product.glossy ? 0.28 : 0.8;
     mat.needsUpdate = true;
@@ -1453,7 +1128,10 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       recByGroup.clear();
       fixtureRecs.length = 0;
       disposeObject(scene, true);
-      disposePrototypes();
+      // Refcounted: the shared GLB prototypes are only actually freed when the
+      // last consumer (this room, a mounted Dizajner scene, an in-flight
+      // thumbnail render) lets go. See gfx3d.js.
+      releasePrototypes();
       envRT.dispose();
       pmrem.dispose();
       renderer.dispose();

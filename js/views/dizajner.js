@@ -1,40 +1,72 @@
 // ============================================================================
-// views/dizajner.js — Stage-1 2D designer. Scene tabs, responsive letterboxed
-// canvas stage, surface selection by tap OR keyboard (visible surface buttons
-// + arrow keys on the stage), curated starter combinations, keramika product
-// drawer with swatches, pattern / grout color / grout width segmented
-// controls, a live price estimate bar (Procjena cijene), live re-render
-// (<100ms via scene2d pattern caches), A/B compare (two assignment snapshots
-// side by side), Spremi dizajn (db.saveDesign), Zatraži ponudu (mailto with a
-// plain-text summary), share via serialized assignments in the location.hash
-// query (QR panel when js/qrshare.js is present, clipboard otherwise), a
-// debounced localStorage draft ("akv:diz-draft") restored on the next visit,
-// a first-run coach mark, and loading of ?product= (preselect) and ?design=
-// (saved design) query parameters.
+// views/dizajner.js — the Dizajner, now driven by the REAL 3D engine.
 //
-// Selection is painted on a separate overlay canvas stacked over the scene
-// canvas: switching surfaces (and the coach-mark pulse) never re-renders the
-// scene, and the scene render stays untouched by UI chrome.
+// Operator, 2026-08-02: "dizajner section. why arent the elements in those
+// rooms quality objects? that's guesswork kitchen counter and windows. i don't
+// want that"
 //
-// Stage layers, bottom to top: scene canvas -> bare-room canvas (clipped by
-// the before/after wipe) -> selection overlay -> wipe divider -> glass HUD ->
-// coach mark.
+// So this view no longer draws anything. The old pipeline (js/scene2d.js +
+// hand-authored draw() functions in data/scenes.js — an invented window, an
+// invented worktop, a bezier sofa) is gone from here entirely: not imported,
+// not called, not fallen back to. Every pixel inside the stage is produced by
+// js/scene3d.js, which builds each scene from the vendored CC0 .glb models at
+// the scale vendor/models/PROVENANCE.md measured. This file authors NO
+// geometry of any kind.
+//
+// What this file still owns — and what had to keep working across the swap:
+//   scene tabs · surface selection by tap AND keyboard · product drawer ·
+//   pattern / grout colour / grout width · per-surface tile rotation ·
+//   live price estimate · curated starter combinations · first-run coach mark ·
+//   A/B compare · before/after wipe · draft persistence (akv:diz-draft, SAME
+//   shape — js/views/katalog.js reads it) · share link + QR · "Zatraži ponudu"
+//   mailto · the glass HUD.
+//
+// NEW, because the fixtures are real models rather than drawings: the user can
+// drag the furniture, exactly as in the 3D room. The camera stays LOCKED —
+// this is a designed view, not an orbit sandbox — so the only thing that moves
+// is the furniture. A standing Croatian hint under the stage says so.
+//
+// ---------------------------------------------------------------------------
+// HOW THE PIECES MAP ONTO THE ENGINE CONTRACT (docs/DESIGNER_REBUILD.md)
+//
+//   stage            mountScene(el, {sceneId, assignments, products,
+//                                    onReady, onSelect})
+//   tap / keyboard   onSelect(surfaceId|null) in, selectSurface(id) out.
+//                    selectSurface() deliberately does not echo onSelect, so
+//                    there is no feedback loop.
+//   one control      setAssignment(surfaceId, entry)
+//   combo / restore  setAssignments(obj)
+//   scene tab        setScene(id) then setAssignments(thatScene'sEntries)
+//   price estimate   listSurfaces().areaM2 — REAL geometry, never an authored
+//                    number. There are no realSizeM fields anywhere here now.
+//   before / after   setBareMode(true) → snapshotTo(2d) → setBareMode(false).
+//                    The still is pixel-aligned with the live canvas because
+//                    it is the same locked camera, so the wipe is a CSS
+//                    clip-path over a frozen frame and costs nothing to drag.
+//   A/B compare      snapshotTo(cvB) for the live side, renderSceneThumbnail()
+//                    for the remembered A side.
+//
+// SURFACE IDS ARE NOT HARD-CODED. Everything the view needs about a surface —
+// which exist, what they are, how big they are — comes from the scene
+// definition and from listSurfaces(). The curated combinations are therefore
+// authored by ROLE (floor look + wall looks in declaration order) rather than
+// against literal ids like "zid-lijevi", so a scene may rename or add surfaces
+// without silently dropping a combination.
+//
+// TILE LAYING OFFSET: kept, honestly labelled. The 3D texture pipeline
+// (js/gfx3d.js makeSurfaceTexture) has no phase-shift parameter, so the offset
+// does not show in the preview. It is a real instruction to the fitter, it is
+// still stored in the draft and it still appears in the quote e-mail, and the
+// hint under the control says exactly that rather than pretending.
 //
 // IRIS / GLASS NOTES ---------------------------------------------------------
-// Colours are the pixel-sampled tokens from docs/DESIGN_SYSTEM.md, referenced
-// as var(--token, <sampled hex>) so the view is correct whether or not
-// css/styles.css has landed the token yet. Derived shades (--teal-700,
-// the HUD glass tint) were computed, not guessed, and every text pair is
-// recorded next to its rule with the measured ratio.
-//
-// Exactly ONE backdrop-filter surface lives in this view: the canvas HUD. The
-// standing pair (top bar + tab bar) plus this HUD is the whole 3-surface
-// budget, so the panels, the estimate bar and the coach mark are painted with
-// opaque/tinted layers instead of blur. The HUD also drops its blur while the
-// user is dragging on the stage (.is-busy), and blur is never animated.
+// Unchanged from the 2D view and re-verified against it: exactly ONE
+// backdrop-filter surface lives here (the canvas HUD), which with the standing
+// top bar + tab bar pair is the whole 3-surface budget. Every colour is a
+// var() on a shipped token; the few computed ratios are recorded next to the
+// rule that needed them.
 // ============================================================================
 import { SCENES } from "../../data/scenes.js";
-import { renderScene, hitSurface, DESIGN_W, DESIGN_H } from "../scene2d.js";
 import * as db from "../db.js";
 import { t } from "../i18n.js";
 import { PATTERNS, GROUT_COLORS, formatEur, pricePerRoom } from "../domain.js";
@@ -44,10 +76,22 @@ import { PATTERNS, GROUT_COLORS, formatEur, pricePerRoom } from "../domain.js";
 import * as domain from "../domain.js";
 import { swatchDataUrl } from "../texture.js";
 
+// The stage's letterbox. It used to come from js/scene2d.js's design space;
+// it is now this view's own composition choice and nothing else depends on it.
+const STAGE_W = 1000;
+const STAGE_H = 700;
+
+// Mirrors js/scene3d.js's FALLBACK_ROOM. Used only to compute a price when the
+// engine is not available (no WebGL, module failed to load) — the same
+// geometric rule the engine uses, never a per-surface authored number.
+const FALLBACK_ROOM = { widthM: 3, depthM: 2.5, heightM: 2.6 };
+const WALL_IDS = ["N", "E", "S", "W"];
+
 const GROUT_WIDTHS_MM = [2, 3, 5, 8];
 
-// Per-surface laying options handed to scene2d.js. 0/90 is the honest set for
-// a rectangular tile: 180 and 270 produce an identical repeat.
+// Per-surface laying options. 0/90 is the honest set for a rectangular tile:
+// 180 and 270 produce an identical repeat, and js/gfx3d.js snaps anything else
+// to the nearest quarter turn anyway.
 const ROTATIONS_DEG = [0, 90];
 // Laying offset as a fraction of one repeat cell. Only patterns whose repeat is
 // a real course support it as a decision a tiler makes on site; herringbone and
@@ -61,7 +105,6 @@ const COACH_KEY = "akv:diz-coached";    // "1" once the user selected a surface
 const RESERVE_KEY = "akv:diz-reserve";  // "1"/"0" — estimate reserve toggle
 const DRAFT_DEBOUNCE_MS = 400;
 const QUOTE_EMAIL = "info@akvaterm.hr";
-const PULSE_MS = 2000;
 const WIPE_STEP = 2;                    // % per arrow key on the wipe divider
 
 // i18n with an inline Croatian fallback so the view demos well even before
@@ -73,23 +116,64 @@ const SURFACE_FB = {
   "zid-lijevi": "Lijevi zid",
   "zid-desni": "Desni zid",
   "zid-straznji": "Stražnji zid",
+  "zid-prednji": "Prednji zid",
 };
+// Last resort when a scene declares a surface id this view has never seen and
+// i18n has no key for it: name it by what it is, from the scene's own `kind`.
+const KIND_FB = { floor: "Pod", wall: "Zid" };
 const SCENE_FB = {
   "kupaonica": "Kupaonica",
   "mala-kupaonica": "Mala kupaonica",
   "kuhinja": "Kuhinja",
   "dnevni-boravak": "Dnevni boravak",
-  "predsoblje": "Predsoblje",
+  "wc": "WC / toalet",
 };
 const PATTERN_FB = { grid: "Mreža", runningBond: "Pomaknuti slog", herringbone: "Riblja kost", diagonal: "Dijagonalno" };
 const GROUT_FB = { bijela: "Bijela", siva: "Siva", antracit: "Antracit" };
 const OFFSET_FB = { 0: "Bez pomaka", 0.25: "1/4 pločice", 0.5: "1/2 pločice" };
 const OFFSET_SHORT = { 0: "0", 0.25: "¼", 0.5: "½" };
 
+// Croatian names for the vendored model file stems, used only for the HUD line
+// that tells the user which object they just grabbed. js/i18n.js already ships
+// the whole `soba3d.fixture.<stem>` family; these are the inline fallbacks.
+const FIXTURE_FB = {
+  "bathtub": "Kada",
+  "bathtub-freestanding": "Samostojeća kada",
+  "toilet": "WC školjka",
+  "toilet-square": "WC školjka (kvadratna)",
+  "toilet-modern": "WC školjka (moderna)",
+  "washbasin-vanity": "Umivaonik s ormarićem",
+  "washbasin-vanity-wall": "Viseći umivaonik s ormarićem",
+  "washbasin-pedestal": "Umivaonik na stupu",
+  "shower-enclosure": "Tuš kabina",
+  "bathroom-cabinet-tall": "Visoki kupaonski ormarić",
+  "bathroom-mirror": "Ogledalo",
+  "towel-rail": "Držač ručnika",
+  "kitchen-cabinet-base": "Kuhinjski element",
+  "kitchen-cabinet-drawer": "Kuhinjski element s ladicama",
+  "kitchen-cabinet-corner": "Kutni kuhinjski element",
+  "kitchen-cabinet-upper": "Gornji kuhinjski element",
+  "kitchen-sink-unit": "Sudoper",
+  "kitchen-stove": "Štednjak",
+  "kitchen-fridge": "Hladnjak",
+  "kitchen-hood": "Napa",
+  "door": "Vrata",
+  "door-leaf": "Vrata s krilom",
+  "window-large": "Prozor (veliki)",
+  "window-small": "Prozor (mali)",
+  "ac-outdoor-unit": "Klima uređaj — vanjska jedinica",
+};
+
 // ---------------------------------------------------------------------------
 // Curated starter combinations — four named looks per scene, product ids from
-// data/catalog.seed.json. Same shape sanitizeAssignments() accepts, so a combo
-// is validated against the live catalog before it is applied.
+// data/catalog.seed.json.
+//
+// Authored by ROLE, not by surface id: `floor` is applied to every floor the
+// scene declares, and `walls` is applied to the walls in the order the scene
+// declares them, cycling if there are more walls than looks. That is what
+// makes a combination survive a scene gaining, losing or renaming a surface —
+// which the 3D rebuild does, since a scene's surfaces are now planes of a real
+// room rather than quads of a drawing.
 // ---------------------------------------------------------------------------
 
 const A = (productId, pattern, groutColorId, groutWidthMm, rotationDeg = 0, offsetPct = 0) =>
@@ -97,126 +181,79 @@ const A = (productId, pattern, groutColorId, groutWidthMm, rotationDeg = 0, offs
 
 const COMBOS = {
   "kupaonica": [
-    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran", surfaces: {
-      "pod": A("ker-05", "grid", "bijela", 3),
-      "zid-lijevi": A("ker-11", "grid", "bijela", 3),
-      "zid-desni": A("ker-08", "runningBond", "bijela", 3),
-    } },
-    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton", surfaces: {
-      "pod": A("ker-14", "grid", "siva", 3),
-      "zid-lijevi": A("ker-12", "grid", "siva", 3),
-      "zid-desni": A("ker-12", "grid", "siva", 3),
-    } },
-    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast", surfaces: {
-      "pod": A("ker-03", "grid", "antracit", 2),
-      "zid-lijevi": A("ker-20", "runningBond", "antracit", 3),
-      "zid-desni": A("ker-20", "runningBond", "antracit", 3),
-    } },
-    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli", surfaces: {
-      "pod": A("ker-15", "runningBond", "bijela", 2),
-      "zid-lijevi": A("ker-08", "grid", "bijela", 2),
-      "zid-desni": A("ker-01", "grid", "bijela", 2),
-    } },
+    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran",
+      floor: A("ker-05", "grid", "bijela", 3),
+      walls: [A("ker-11", "grid", "bijela", 3), A("ker-08", "runningBond", "bijela", 3), A("ker-11", "grid", "bijela", 3)] },
+    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton",
+      floor: A("ker-14", "grid", "siva", 3),
+      walls: [A("ker-12", "grid", "siva", 3), A("ker-12", "grid", "siva", 3), A("ker-12", "grid", "siva", 3)] },
+    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast",
+      floor: A("ker-03", "grid", "antracit", 2),
+      walls: [A("ker-20", "runningBond", "antracit", 3), A("ker-20", "runningBond", "antracit", 3), A("ker-21", "runningBond", "antracit", 3)] },
+    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli",
+      floor: A("ker-15", "runningBond", "bijela", 2),
+      walls: [A("ker-08", "grid", "bijela", 2), A("ker-01", "grid", "bijela", 2), A("ker-08", "grid", "bijela", 2)] },
   ],
-  // Mala kupaonica adds a fourth surface (the back wall), which is the scene's
-  // point: a compact room reads best with a single accent plane facing you.
   "mala-kupaonica": [
-    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran", surfaces: {
-      "pod": A("ker-05", "grid", "bijela", 3),
-      "zid-lijevi": A("ker-08", "runningBond", "bijela", 2),
-      "zid-desni": A("ker-08", "runningBond", "bijela", 2),
-      "zid-straznji": A("ker-11", "grid", "bijela", 2),
-    } },
-    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton", surfaces: {
-      "pod": A("ker-13", "grid", "siva", 3),
-      "zid-lijevi": A("ker-12", "grid", "siva", 3),
-      "zid-desni": A("ker-12", "grid", "siva", 3),
-      "zid-straznji": A("ker-14", "grid", "siva", 3),
-    } },
-    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast", surfaces: {
-      "pod": A("ker-03", "grid", "antracit", 2),
-      "zid-lijevi": A("ker-20", "runningBond", "antracit", 2),
-      "zid-desni": A("ker-20", "runningBond", "antracit", 2),
-      "zid-straznji": A("ker-21", "runningBond", "antracit", 2, 90),
-    } },
-    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli", surfaces: {
-      "pod": A("ker-15", "runningBond", "bijela", 2, 0, 0.5),
-      "zid-lijevi": A("ker-08", "grid", "bijela", 2),
-      "zid-desni": A("ker-08", "grid", "bijela", 2),
-      "zid-straznji": A("ker-10", "grid", "bijela", 2),
-    } },
+    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran",
+      floor: A("ker-05", "grid", "bijela", 3),
+      walls: [A("ker-08", "runningBond", "bijela", 2), A("ker-08", "runningBond", "bijela", 2), A("ker-11", "grid", "bijela", 2)] },
+    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton",
+      floor: A("ker-13", "grid", "siva", 3),
+      walls: [A("ker-12", "grid", "siva", 3), A("ker-12", "grid", "siva", 3), A("ker-14", "grid", "siva", 3)] },
+    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast",
+      floor: A("ker-03", "grid", "antracit", 2),
+      walls: [A("ker-20", "runningBond", "antracit", 2), A("ker-20", "runningBond", "antracit", 2), A("ker-21", "runningBond", "antracit", 2, 90)] },
+    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli",
+      floor: A("ker-15", "runningBond", "bijela", 2, 0, 0.5),
+      walls: [A("ker-08", "grid", "bijela", 2), A("ker-08", "grid", "bijela", 2), A("ker-10", "grid", "bijela", 2)] },
   ],
-  // Predsoblje: the corridor floor is the star, so every combo commits to an
-  // orientation for it — planks running the length of the hall (rotation 90).
-  "predsoblje": [
-    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran", surfaces: {
-      "pod": A("ker-05", "grid", "bijela", 3, 90),
-      "zid-lijevi": A("ker-09", "grid", "bijela", 3),
-      "zid-desni": A("ker-09", "grid", "bijela", 3),
-      "zid-straznji": A("ker-19", "grid", "bijela", 3),
-    } },
-    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton", surfaces: {
-      "pod": A("ker-12", "grid", "siva", 3),
-      "zid-lijevi": A("ker-14", "grid", "siva", 3),
-      "zid-desni": A("ker-14", "grid", "siva", 3),
-      "zid-straznji": A("ker-13", "grid", "siva", 3),
-    } },
-    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast", surfaces: {
-      "pod": A("ker-18", "grid", "antracit", 2),
-      "zid-lijevi": A("ker-01", "grid", "bijela", 2, 90),
-      "zid-desni": A("ker-01", "grid", "bijela", 2, 90),
-      "zid-straznji": A("ker-03", "grid", "antracit", 2),
-    } },
-    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli", surfaces: {
-      "pod": A("ker-15", "runningBond", "bijela", 2, 90, 0.5),
-      "zid-lijevi": A("ker-08", "grid", "bijela", 2),
-      "zid-desni": A("ker-08", "grid", "bijela", 2),
-      "zid-straznji": A("ker-17", "grid", "bijela", 2, 90),
-    } },
+  // WC / toalet — 1.4 × 1.9 m, so the looks stay small-format and the wall you
+  // face carries the accent. (This scene replaced the hand-drawn "predsoblje"
+  // corridor when data/scenes.js became data: the CC0 set has no hallway
+  // furniture, so the corridor could not be built honestly. Its combinations
+  // went with it rather than being left pointing at a scene that is gone.)
+  "wc": [
+    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran",
+      floor: A("ker-05", "grid", "bijela", 3),
+      walls: [A("ker-08", "runningBond", "bijela", 2), A("ker-11", "grid", "bijela", 2), A("ker-08", "runningBond", "bijela", 2)] },
+    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton",
+      floor: A("ker-13", "grid", "siva", 3),
+      walls: [A("ker-12", "grid", "siva", 3), A("ker-14", "grid", "siva", 3), A("ker-12", "grid", "siva", 3)] },
+    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast",
+      floor: A("ker-03", "grid", "antracit", 2),
+      walls: [A("ker-20", "runningBond", "antracit", 2), A("ker-21", "runningBond", "antracit", 2), A("ker-20", "runningBond", "antracit", 2)] },
+    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli",
+      floor: A("ker-22", "grid", "bijela", 2),
+      walls: [A("ker-08", "grid", "bijela", 2), A("ker-01", "grid", "bijela", 2), A("ker-08", "grid", "bijela", 2)] },
   ],
   "kuhinja": [
-    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran", surfaces: {
-      "pod": A("ker-05", "grid", "bijela", 3),
-      "zid-lijevi": A("ker-10", "grid", "bijela", 3),
-      "zid-desni": A("ker-08", "runningBond", "bijela", 3),
-    } },
-    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton", surfaces: {
-      "pod": A("ker-12", "grid", "siva", 3),
-      "zid-lijevi": A("ker-14", "grid", "siva", 3),
-      "zid-desni": A("ker-14", "grid", "siva", 3),
-    } },
-    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast", surfaces: {
-      "pod": A("ker-13", "grid", "antracit", 3),
-      "zid-lijevi": A("ker-20", "runningBond", "antracit", 3),
-      "zid-desni": A("ker-21", "runningBond", "antracit", 3),
-    } },
-    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli", surfaces: {
-      "pod": A("ker-15", "runningBond", "bijela", 2),
-      "zid-lijevi": A("ker-01", "grid", "bijela", 2),
-      "zid-desni": A("ker-08", "grid", "bijela", 2),
-    } },
+    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran",
+      floor: A("ker-05", "grid", "bijela", 3),
+      walls: [A("ker-10", "grid", "bijela", 3), A("ker-08", "runningBond", "bijela", 3), A("ker-10", "grid", "bijela", 3)] },
+    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton",
+      floor: A("ker-12", "grid", "siva", 3),
+      walls: [A("ker-14", "grid", "siva", 3), A("ker-14", "grid", "siva", 3), A("ker-14", "grid", "siva", 3)] },
+    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast",
+      floor: A("ker-13", "grid", "antracit", 3),
+      walls: [A("ker-20", "runningBond", "antracit", 3), A("ker-21", "runningBond", "antracit", 3), A("ker-20", "runningBond", "antracit", 3)] },
+    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli",
+      floor: A("ker-15", "runningBond", "bijela", 2),
+      walls: [A("ker-01", "grid", "bijela", 2), A("ker-08", "grid", "bijela", 2), A("ker-01", "grid", "bijela", 2)] },
   ],
   "dnevni-boravak": [
-    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran", surfaces: {
-      "pod": A("ker-06", "grid", "bijela", 3),
-      "zid-lijevi": A("ker-09", "grid", "bijela", 3),
-      "zid-desni": A("ker-09", "grid", "bijela", 3),
-    } },
-    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton", surfaces: {
-      "pod": A("ker-12", "grid", "siva", 3),
-      "zid-lijevi": A("ker-14", "grid", "siva", 3),
-      "zid-desni": A("ker-14", "grid", "siva", 3),
-    } },
-    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast", surfaces: {
-      "pod": A("ker-03", "grid", "antracit", 2),
-      "zid-lijevi": A("ker-01", "grid", "bijela", 2),
-      "zid-desni": A("ker-01", "grid", "bijela", 2),
-    } },
-    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli", surfaces: {
-      "pod": A("ker-17", "runningBond", "bijela", 2),
-      "zid-lijevi": A("ker-08", "grid", "bijela", 2),
-      "zid-desni": A("ker-18", "grid", "bijela", 2),
-    } },
+    { id: "mediteran", i18nKey: "diz.combo.mediteran", fb: "Mediteran",
+      floor: A("ker-06", "grid", "bijela", 3),
+      walls: [A("ker-09", "grid", "bijela", 3), A("ker-09", "grid", "bijela", 3), A("ker-09", "grid", "bijela", 3)] },
+    { id: "topli-beton", i18nKey: "diz.combo.topliBeton", fb: "Topli beton",
+      floor: A("ker-12", "grid", "siva", 3),
+      walls: [A("ker-14", "grid", "siva", 3), A("ker-14", "grid", "siva", 3), A("ker-14", "grid", "siva", 3)] },
+    { id: "kontrast", i18nKey: "diz.combo.kontrast", fb: "Crno-bijeli kontrast",
+      floor: A("ker-03", "grid", "antracit", 2),
+      walls: [A("ker-01", "grid", "bijela", 2), A("ker-01", "grid", "bijela", 2), A("ker-01", "grid", "bijela", 2)] },
+    { id: "nordijski", i18nKey: "diz.combo.nordijski", fb: "Nordijski svijetli",
+      floor: A("ker-17", "runningBond", "bijela", 2),
+      walls: [A("ker-08", "grid", "bijela", 2), A("ker-18", "grid", "bijela", 2), A("ker-08", "grid", "bijela", 2)] },
   ],
 };
 
@@ -230,6 +267,9 @@ const fmtM2 = (n) => `${round2(n).toFixed(2).replace(".", ",")} m²`;
 
 // view state (reset on every render, released in teardown)
 let S = null;
+// Bumped by every render() and every teardown(); an async mount whose token is
+// stale drops its handle instead of attaching it to a view that is gone.
+let mountToken = 0;
 
 // ---------------------------------------------------------------------------
 // render
@@ -237,15 +277,19 @@ let S = null;
 
 export async function render(container, params) {
   teardown();
+  const token = ++mountToken;
   S = {
     container, products: [], tiles: [],
     sceneId: null, perScene: {}, selected: null,
-    snapA: null, comparing: false,
-    wipe: { on: false, pct: 50, dragging: false }, bareKey: "",
+    areas: new Map(),
+    api: null, scene3d: null, mountToken: token,
+    snapA: null, comparing: false, compareAKey: "",
+    wipe: { on: false, pct: 50, dragging: false },
+    fixture: null,                      // {index, model} while one is grabbed
     reserve: readFlag(RESERVE_KEY),
     coached: readFlag(COACH_KEY),
     reducedMotion: prefersReducedMotion(),
-    rafId: 0, pulseRaf: 0, pulseUntil: 0, draftTimer: 0,
+    draftTimer: 0, bareTimer: 0,
     observers: [], listeners: [],
   };
 
@@ -254,6 +298,7 @@ export async function render(container, params) {
 
   S.products = (await db.listProducts()) || [];
   S.tiles = S.products.filter((p) => p.category === "keramika");
+  if (!S || S.mountToken !== token) return;
 
   const wantsDesign = !!q.query.get("design");
   const wantsShare = !!q.query.get("a");
@@ -261,6 +306,7 @@ export async function render(container, params) {
   // ?design= — load a saved design (scene kind only)
   if (wantsDesign) {
     const d = await db.getDesign(q.query.get("design"));
+    if (!S || S.mountToken !== token) return;
     if (d && d.kind === "scene" && sceneById(d.refId)) {
       sceneId = d.refId;
       S.perScene[sceneId] = clone(d.assignments || {});
@@ -285,6 +331,9 @@ export async function render(container, params) {
 
   ensureAssignments(scene());
   S.selected = defaultSurfaceId(scene());
+  // Geometric areas so the price bar is right from the first paint; the engine
+  // overwrites them with its own measurements as soon as it is up.
+  S.areas = geometricAreas(scene());
 
   // ?product= — preselect a tile (from "primijeni u dizajneru")
   const pre = q.query.get("product");
@@ -296,22 +345,23 @@ export async function render(container, params) {
   renderSurfaceButtons();
   renderCombos();
   syncControls();
-  fitCanvas();
-  scheduleRender();
 
   if (preTile) {
     toast(`${T("diz.applied", "Primijenjeno")}: ${preTile.name} — ${surfaceLabel(S.selected)}`);
   }
   maybeCoach();
+
+  await mountEngine(token);
 }
 
 export function teardown() {
   if (!S) return;
+  mountToken++;
   if (S.draftTimer) { clearTimeout(S.draftTimer); S.draftTimer = 0; saveDraftNow(); }
+  if (S.bareTimer) { clearTimeout(S.bareTimer); S.bareTimer = 0; }
   for (const o of S.observers) o.disconnect();
   for (const [target, type, fn] of S.listeners) target.removeEventListener(type, fn);
-  if (S.rafId) cancelAnimationFrame(S.rafId);
-  if (S.pulseRaf) cancelAnimationFrame(S.pulseRaf);
+  if (S.api) { try { S.api.dispose(); } catch (err) { /* already gone */ } S.api = null; }
   S = null;
 }
 
@@ -324,16 +374,23 @@ const scene = () => sceneById(S.sceneId);
 const assignments = () => S.perScene[S.sceneId];
 const current = () => assignments()[S.selected];
 
+/** The surfaces a scene declares, defensively (a scene may ship none). */
+const sceneSurfaces = (sc) => (sc && Array.isArray(sc.surfaces) ? sc.surfaces.filter((s) => s && s.id) : []);
+
 /** Floors first, then walls — the order used by the buttons and arrow keys. */
 function orderedSurfaces(sc = scene()) {
-  return sc.surfaces.slice().sort((a, b) => (a.kind === "floor" ? 0 : 1) - (b.kind === "floor" ? 0 : 1));
+  return sceneSurfaces(sc).slice()
+    .sort((a, b) => (a.kind === "floor" ? 0 : 1) - (b.kind === "floor" ? 0 : 1));
 }
 
-const defaultSurfaceId = (sc) => orderedSurfaces(sc)[0].id;
+function defaultSurfaceId(sc) {
+  const list = orderedSurfaces(sc);
+  return list.length ? list[0].id : null;
+}
 
 function ensureAssignments(sc) {
   const a = S.perScene[sc.id] || (S.perScene[sc.id] = {});
-  for (const s of sc.surfaces) {
+  for (const s of sceneSurfaces(sc)) {
     if (!a[s.id]) {
       a[s.id] = {
         productId: validTileId(s.defaultProductId),
@@ -369,7 +426,7 @@ function validTileId(id) {
 function sanitizeAssignments(raw, sc) {
   const out = {};
   if (!raw || typeof raw !== "object") return out;
-  for (const s of sc.surfaces) {
+  for (const s of sceneSurfaces(sc)) {
     const e = raw[s.id];
     if (!e || typeof e !== "object") continue;
     const pattern = PATTERNS.some((p) => p.id === e.pattern) ? e.pattern : (PATTERNS[0] || { id: "grid" }).id;
@@ -406,8 +463,10 @@ function paramSceneId(params) {
   return params.sceneId || params.id || null;
 }
 
-const sceneLabel = (sc) => T(sc.i18nKey, SCENE_FB[sc.id] || sc.id);
-const surfaceLabel = (id) => T("surface." + id, SURFACE_FB[id] || id);
+// data/scenes.js carries a `nameHr` on every scene, so a scene added later is
+// named correctly here without this file having to learn about it; SCENE_FB is
+// only the third rung, below the dictionary and below the scene's own name.
+const sceneLabel = (sc) => T(sc.i18nKey, sc.nameHr || SCENE_FB[sc.id] || sc.id);
 const patternLabel = (p) => T(p.i18nKey, PATTERN_FB[p.id] || p.id);
 const groutLabel = (g) => T(g.i18nKey, GROUT_FB[g.id] || g.id);
 const comboLabel = (c) => T(c.i18nKey, c.fb);
@@ -416,10 +475,72 @@ const offsetTitle = (o) => T("diz.offset." + String(o), OFFSET_FB[o] || String(o
 const rotationLabel = (d) => `${d}°`;
 const productById = (id) => (id ? S.products.find((p) => p.id === id) || null : null);
 
+/**
+ * A surface's visible name. Tries, in order: the scene's own labelKey, the
+ * shared `surface.<id>` key, this view's inline Croatian map, and finally the
+ * surface's kind. Nothing here assumes a particular set of ids.
+ */
+function surfaceLabel(id) {
+  if (!id) return T("designer.surface", "Površina");
+  const surf = sceneSurfaces(scene()).find((s) => s.id === id);
+  const fb = SURFACE_FB[id] || (surf ? KIND_FB[surf.kind === "floor" ? "floor" : "wall"] : null) || id;
+  const key = surf && (surf.labelKey || surf.i18nKey);
+  if (key) { const v = t(key); if (v !== key) return v; }
+  return T("surface." + id, fb);
+}
+
+const fixtureLabel = (model) => T("soba3d.fixture." + model, FIXTURE_FB[model] || model);
+
 function prefersReducedMotion() {
   try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
   catch (err) { return false; }
 }
+
+// ---------------------------------------------------------------------------
+// Areas — REAL geometry only
+// ---------------------------------------------------------------------------
+
+const clampDimM = (v, fb) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fb);
+
+/**
+ * The same rule js/scene3d.js's surfaceLayout() applies, computed from the
+ * scene's room block: floor = width × depth, a north/south wall = width ×
+ * height, an east/west wall = depth × height. A scene that declares no `wall`
+ * for a surface gets N, E, S, W in declaration order, exactly as the engine
+ * does, so the two agree before the engine has even mounted.
+ *
+ * This exists only so the price bar is correct on the first paint and stays
+ * correct if WebGL is unavailable. When the engine is up, listSurfaces()
+ * measurements replace every value here.
+ */
+function geometricAreas(sc) {
+  const r = (sc && sc.room) || {};
+  const w = clampDimM(r.widthM, FALLBACK_ROOM.widthM);
+  const d = clampDimM(r.depthM, FALLBACK_ROOM.depthM);
+  const h = clampDimM(r.heightM, FALLBACK_ROOM.heightM);
+  const out = new Map();
+  let autoWall = 0;
+  for (const s of sceneSurfaces(sc)) {
+    if (out.has(s.id)) continue;
+    if (s.kind === "floor") { out.set(s.id, w * d); continue; }
+    const wall = WALL_IDS.includes(s.wall) ? s.wall : WALL_IDS[autoWall++ % WALL_IDS.length];
+    out.set(s.id, (wall === "N" || wall === "S") ? w * h : d * h);
+  }
+  return out;
+}
+
+/** Pull the engine's measured areas over the geometric ones. */
+function refreshAreas() {
+  const next = geometricAreas(scene());
+  if (S.api) {
+    for (const s of S.api.listSurfaces()) {
+      if (Number.isFinite(s.areaM2) && s.areaM2 > 0) next.set(s.id, s.areaM2);
+    }
+  }
+  S.areas = next;
+}
+
+const areaFor = (id) => Number(S.areas.get(id)) || 0;
 
 // ---------------------------------------------------------------------------
 // localStorage: draft, coach flag, reserve toggle (all failure-tolerant)
@@ -440,11 +561,12 @@ function writeFlag(key, on) {
 }
 
 /**
- * Draft contract (also read by the katalog "continue where you left off" card):
+ * Draft contract — UNCHANGED by the 3D rebuild, and deliberately so: the
+ * katalog "continue where you left off" card reads exactly this shape.
  * { sceneId, perScene:{[sceneId]:{[surfaceId]:{productId,pattern,groutColorId,
  * groutWidthMm,rotationDeg,offsetPct}}}, savedAt }
- * The two laying fields are additive: katalog.js hands the whole assignment
- * object straight to renderScene, which ignores fields it does not know.
+ * Fixture positions are NOT written here — that would change the shape for a
+ * reader that has no use for them.
  */
 function saveDraftNow() {
   if (!S || !S.sceneId) return;
@@ -453,7 +575,7 @@ function saveDraftNow() {
     const a = S.perScene[sc.id];
     if (!a) continue;
     const clean = {};
-    for (const s of sc.surfaces) {
+    for (const s of sceneSurfaces(sc)) {
       const e = a[s.id];
       if (!e || !e.productId) continue;
       clean[s.id] = {
@@ -498,7 +620,7 @@ function markup() {
   return `
   <style>
   /* =========================================================================
-     Iris skin for the 2D designer.
+     Iris skin for the Dizajner.
 
      This block adds NO new palette. Every colour is a var() on a token that
      css/styles.css defines and whose ratio is recorded in its contrast ledger;
@@ -559,17 +681,24 @@ function markup() {
   .diz-surf[aria-pressed="true"]{background:var(--accent);border-color:transparent;color:var(--on-accent)}
 
   /* ---- stage ------------------------------------------------------------ */
-  .diz-stage{position:relative;width:100%;
-    max-width:min(100%,max(340px,calc((100vh - 330px)*10/7)));margin:0 auto 14px;
+  /* The letterbox now lives on the stage itself: the engine's canvas is sized
+     to its mount, not the other way round. */
+  .diz-stage{position:relative;width:100%;aspect-ratio:${STAGE_W}/${STAGE_H};
+    max-width:min(100%,max(340px,calc((100vh - 330px)*10/7)));margin:0 auto 10px;
     --diz-wipe:50%}
-  .diz-cv{display:block;width:100%;aspect-ratio:${DESIGN_W}/${DESIGN_H};
-    border-radius:var(--diz-r);background:var(--panel);cursor:pointer;
-    touch-action:manipulation;box-shadow:var(--shadow-card)}
-  .diz-bare,.diz-overlay{position:absolute;left:0;top:0;width:100%;height:100%;
-    border-radius:var(--diz-r);pointer-events:none;background:none}
-  .diz-bare{clip-path:inset(0 calc(100% - var(--diz-wipe)) 0 0)}
-  .diz-overlay{z-index:2}
+  .diz-mount{position:absolute;inset:0;border-radius:var(--diz-r);overflow:hidden;
+    background:var(--panel);box-shadow:var(--shadow-card)}
+  .diz-mount canvas{display:block;width:100%;height:100%}
+  .diz-bare{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;
+    border-radius:var(--diz-r);pointer-events:none;background:none;
+    clip-path:inset(0 calc(100% - var(--diz-wipe)) 0 0)}
   .diz-bare[hidden],.diz-wipe[hidden],.diz-wipe-tag[hidden]{display:none}
+  /* The loading state uses the shipped .room3d-loading recipe (dark card +
+     spinner) so the two 3D views look like one product while they warm up. */
+  .diz-loading{z-index:4;border-radius:var(--diz-r)}
+  .diz-fail{position:absolute;inset:0;z-index:4;display:flex;align-items:center;
+    justify-content:center;text-align:center;padding:24px;border-radius:var(--diz-r);
+    background:var(--panel);color:var(--muted);font-size:13px;line-height:1.5}
 
   /* ---- before / after wipe ---------------------------------------------- */
   /* Sits BELOW the HUD (z-index 2 vs 3) so the 46px drag strip can never steal
@@ -632,6 +761,7 @@ function markup() {
   .diz-hud-btn::before{content:"";position:absolute;inset:-4px 0;border-radius:inherit}
   .diz-hud-btn[aria-pressed="true"]{background:var(--accent);border-color:transparent;
     color:var(--on-accent)}
+  .diz-hud-btn:disabled{opacity:.55;cursor:default}
   /* Cost drop: while a pointer is down on the stage the HUD goes fully solid —
      blur off AND opaque, so the compositor stops reading back the canvas
      entirely for the duration of the drag. It is deliberately opaque rather
@@ -650,7 +780,7 @@ function markup() {
      --glass-bg-dark, whose worst case (over a white backdrop) still gives
      --paper 8.22:1. */
   .diz-coach{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:5;
-    width:calc(100% - 20px);max-width:390px;display:flex;align-items:center;gap:10px;
+    width:calc(100% - 20px);max-width:410px;display:flex;align-items:center;gap:10px;
     padding:10px 10px 10px 14px;border-radius:var(--glass-radius-sm);
     background:var(--glass-bg-dark);color:var(--glass-on-dark);
     font-family:var(--font-text);font-size:12.5px;font-weight:600;line-height:1.4;
@@ -661,6 +791,12 @@ function markup() {
     border-radius:10px;border:1px solid rgba(242,242,242,.66);background:transparent;
     color:var(--glass-on-dark);font-family:var(--font-text);font-weight:700;font-size:12px;
     letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+
+  /* ---- the "you can move the furniture" hint ---------------------------- */
+  .diz-move-hint{margin:0 auto 14px;max-width:min(100%,max(340px,calc((100vh - 330px)*10/7)));
+    display:flex;align-items:flex-start;gap:8px;font-family:var(--font-text);
+    font-size:12px;line-height:1.45;color:var(--muted)}
+  .diz-move-hint b{flex:none;font-weight:700;color:var(--ink)}
 
   /* ---- estimate bar — the warm half of the identity --------------------- */
   /* Opaque --surface under a --accent-2-tint wash; its darkest point is the
@@ -759,12 +895,15 @@ function markup() {
   .diz-compare.is-open{display:block}
   .diz-cmp-grid{display:flex;gap:12px;flex-wrap:wrap}
   .diz-cmp-cell{flex:1 1 300px;min-width:260px}
-  .diz-cmp-cell canvas{display:block;width:100%;aspect-ratio:${DESIGN_W}/${DESIGN_H};
+  .diz-cmp-cell canvas{display:block;width:100%;aspect-ratio:${STAGE_W}/${STAGE_H};
     border-radius:var(--diz-r-sm);background:var(--panel);box-shadow:var(--shadow-card)}
   .diz-cmp-cell .diz-k{margin:9px 0 0;text-align:center}
 
   /* ---- focus -------------------------------------------------------------- */
   .diz-root :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+  /* The engine sets outline-offset:-3px on its own canvas so the ring stays
+     inside the rounded mount instead of being clipped by overflow:hidden. */
+  .diz-mount canvas:focus-visible{outline:3px solid var(--accent)}
 
   /* =========================================================================
      DEGRADATION. The HUD carries .glass-hud, and css/styles.css already ships
@@ -794,7 +933,7 @@ function markup() {
   @media (prefers-contrast:more){
     .diz-coach{background:var(--dark)}
     .diz-head p,.diz-k,.diz-hint,.diz-est-note,.diz-est-area,.diz-sw .diz-price,
-    .diz-est-total span{color:var(--ink)}
+    .diz-est-total span,.diz-move-hint{color:var(--ink)}
     .diz-tab,.diz-surf,.diz-seg button,.diz-btn,.diz-hud-btn,.diz-wipe-grip{border-width:2px}
     .diz-est-rows li{border-bottom-color:var(--line-strong)}
     .diz-est,.diz-panel{background:var(--surface);border-color:var(--ink)}
@@ -815,8 +954,7 @@ function markup() {
     .diz-est,.diz-panel{background:Canvas;border-color:CanvasText}
   }
   /* Path 4 — reduced motion. Nothing here animates blur(); these are the
-     colour/border transitions on the controls and the coach-mark pulse (which
-     js/views/dizajner.js also skips in JS via prefersReducedMotion()). */
+     colour/border transitions on the controls. */
   @media (prefers-reduced-motion:no-preference){
     .diz-tab,.diz-surf,.diz-seg button,.diz-btn,.diz-hud-btn,.diz-sw,.diz-combo{
       transition:background-color var(--dur,200ms) var(--glass-ease,ease),
@@ -846,10 +984,8 @@ function markup() {
     </div>
   </div>
   <div class="diz-stage" id="dizStage">
-    <canvas class="diz-cv" id="dizCanvas" role="img" tabindex="0"
-      aria-label="${esc(T("diz.canvasAlt", "Ilustracija prostorije"))}"></canvas>
+    <div class="diz-mount" id="dizMount"></div>
     <canvas class="diz-bare" id="dizBare" aria-hidden="true" hidden></canvas>
-    <canvas class="diz-overlay" id="dizOverlay" aria-hidden="true"></canvas>
     <span class="diz-wipe-tag is-before" id="dizWipeBefore" hidden>${esc(T("diz.before", "Prije"))}</span>
     <span class="diz-wipe-tag is-after" id="dizWipeAfter" hidden>${esc(T("diz.after", "Poslije"))}</span>
     <div class="diz-wipe" id="dizWipe" hidden>
@@ -865,10 +1001,18 @@ function markup() {
       <button class="diz-hud-btn" type="button" id="dizHudWipe" aria-pressed="false">${esc(T("diz.wipe", "Prije/poslije"))}</button>
     </div>
     <div class="diz-coach" id="dizCoach" hidden>
-      <p>${esc(T("designer.pickSurface", "Dodirnite površinu, zatim odaberite proizvod"))}</p>
+      <p>${esc(T("diz.coach", "Dodirnite površinu pa odaberite pločicu. Namještaj možete povući i premjestiti."))}</p>
       <button type="button" id="dizCoachOk">${esc(T("diz.coachOk", "U redu"))}</button>
     </div>
+    <div class="room3d-loading diz-loading" id="dizLoading">
+      <span class="spinner" aria-hidden="true"></span>${esc(T("diz.loading", "Učitavanje 3D prikaza…"))}
+    </div>
   </div>
+  <p class="diz-move-hint" id="dizMoveHint">
+    <b>${esc(T("diz.moveHintLead", "Savjet:"))}</b>
+    <span>${esc(T("diz.moveHint", "Namještaj i sanitarije stvarni su 3D modeli — povucite ih prstom ili mišem da ih premjestite. Tipkom R zakrećete odabrani predmet, strelicama ga pomičete. Pogled je fiksan."))}</span>
+  </p>
+  <p class="sr-only" id="dizStatus" aria-live="polite"></p>
   <section class="diz-est" id="dizEst" aria-labelledby="dizEstK">
     <div class="diz-est-head">
       <span class="diz-k" id="dizEstK" style="margin:0">${esc(T("designer.estimate", "Procjena cijene"))}</span>
@@ -882,7 +1026,7 @@ function markup() {
       <span>${esc(T("diz.total", "Ukupno"))}</span>
       <b id="dizEstTotal" aria-live="polite"></b>
     </div>
-    <p class="diz-est-note">${esc(T("diz.estNote", "Informativna procjena po demo cijenama — bez ugradnje, ljepila i fuge."))}</p>
+    <p class="diz-est-note">${esc(T("diz.estNoteGeo", "Površine su izmjerene iz stvarne geometrije prostorije. Informativna procjena po demo cijenama — bez ugradnje, ljepila i fuge."))}</p>
   </section>
   <div class="diz-panel">
     <div class="diz-row">
@@ -911,6 +1055,7 @@ function markup() {
         ${OFFSETS.map((o) => `<button type="button" data-offset="${o}" aria-pressed="false">${esc(offsetLabel(o))}</button>`).join("")}
       </div>
       <p class="diz-hint" id="dizOffsetHint" hidden>${esc(T("diz.offsetNa", "Pomak se ne primjenjuje na riblju kost i dijagonalu."))}</p>
+      <p class="diz-hint">${esc(T("diz.offsetPreviewNote", "Pomak se bilježi u dizajnu i u upitu za ponudu; 3D prikaz ga zasad ne prikazuje."))}</p>
     </div>
     <div class="diz-row">
       <span class="diz-k">${esc(T("diz.grout", "Boja fuge"))}</span>
@@ -974,9 +1119,10 @@ function combosMarkup() {
   const list = COMBOS[S.sceneId] || [];
   if (!list.length) return "";
   return list.map((c) => {
-    // One thumb per surface: the new scenes have four, and a combo that only
-    // showed three would hide the accent wall that is the point of the look.
-    const ids = orderedSurfaces().map((s) => (c.surfaces[s.id] || {}).productId);
+    // One thumb per surface, in the same order the combination is applied, so
+    // the strip previews the actual result rather than a fixed trio.
+    const built = comboAssignments(c);
+    const ids = orderedSurfaces().map((s) => (built[s.id] || {}).productId);
     const thumbs = ids.slice(0, 4).map((id) => swatchMarkup(productById(id), 64)).join("");
     return `
       <button class="diz-combo" type="button" data-combo="${esc(c.id)}" aria-pressed="false">
@@ -984,6 +1130,22 @@ function combosMarkup() {
         <small>${esc(comboLabel(c))}</small>
       </button>`;
   }).join("");
+}
+
+/**
+ * Expand a role-authored combination against the CURRENT scene's surfaces:
+ * every floor gets `floor`, and the walls get `walls` in declaration order,
+ * cycling. Returns the same {surfaceId: entry} shape sanitizeAssignments takes.
+ */
+function comboAssignments(combo) {
+  const out = {};
+  if (!combo) return out;
+  const walls = Array.isArray(combo.walls) && combo.walls.length ? combo.walls : [combo.floor];
+  let wi = 0;
+  for (const s of sceneSurfaces(scene())) {
+    out[s.id] = s.kind === "floor" ? { ...combo.floor } : { ...walls[wi++ % walls.length] };
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -997,8 +1159,6 @@ function on(target, type, fn, opts) {
 
 function wire(container) {
   const $ = (sel) => container.querySelector(sel);
-  S.canvas = $("#dizCanvas");
-  S.overlay = $("#dizOverlay");
   S.cvA = $("#dizCvA");
   S.cvB = $("#dizCvB");
   S.el = {
@@ -1006,7 +1166,8 @@ function wire(container) {
     combos: $("#dizCombos"), drawer: $("#dizDrawer"), patterns: $("#dizPatterns"), grout: $("#dizGrout"),
     groutW: $("#dizGroutW"), compare: $("#dizCompare"), compareBtn: $("#dizCompareBtn"),
     setA: $("#dizSetA"), save: $("#dizSave"), quote: $("#dizQuote"), share: $("#dizShare"),
-    name: $("#dizName"), stage: $("#dizStage"), coach: $("#dizCoach"), coachOk: $("#dizCoachOk"),
+    name: $("#dizName"), stage: $("#dizStage"), mount: $("#dizMount"), loading: $("#dizLoading"),
+    coach: $("#dizCoach"), coachOk: $("#dizCoachOk"), status: $("#dizStatus"),
     estRows: $("#dizEstRows"), estTotal: $("#dizEstTotal"), reserve: $("#dizReserve"),
     rotation: $("#dizRotation"), offset: $("#dizOffset"), offsetHint: $("#dizOffsetHint"),
     hudRotate: $("#dizHudRotate"), hudWipe: $("#dizHudWipe"),
@@ -1020,48 +1181,13 @@ function wire(container) {
   on(S.el.tabs, "click", (e) => {
     const btn = e.target.closest("[data-scene]");
     if (!btn || btn.dataset.scene === S.sceneId) return;
-    S.sceneId = btn.dataset.scene;
-    ensureAssignments(scene());
-    S.selected = defaultSurfaceId(scene());
-    S.bareKey = "";                      // the "prije" half belongs to a scene
-    history.replaceState(null, "", location.pathname + location.search + "#/dizajner/" + S.sceneId);
-    for (const b of S.el.tabs.querySelectorAll("[data-scene]")) {
-      b.setAttribute("aria-pressed", String(b.dataset.scene === S.sceneId));
-    }
-    renderSurfaceButtons();
-    renderCombos();
-    syncControls();
-    scheduleDraftSave();
-    scheduleRender();
+    switchScene(btn.dataset.scene);
   });
 
   on(S.el.surfaces, "click", (e) => {
     const btn = e.target.closest("[data-surface]");
     if (!btn) return;
     selectSurface(btn.dataset.surface);
-  });
-
-  on(S.canvas, "click", (e) => {
-    const r = S.canvas.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * DESIGN_W;
-    const y = ((e.clientY - r.top) / r.height) * DESIGN_H;
-    const id = hitSurface(scene(), x, y);
-    if (id) selectSurface(id);
-  });
-
-  // Keyboard access to the stage: arrows cycle the scene's surfaces so the
-  // walls are reachable without a pointer (WCAG 2.1.1).
-  on(S.canvas, "keydown", (e) => {
-    const list = orderedSurfaces();
-    const i = Math.max(0, list.findIndex((s) => s.id === S.selected));
-    let next = -1;
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % list.length;
-    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + list.length) % list.length;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = list.length - 1;
-    if (next < 0) return;
-    e.preventDefault();
-    selectSurface(list[next].id);
   });
 
   on(S.el.combos, "click", (e) => {
@@ -1123,6 +1249,21 @@ function wire(container) {
 
   on(S.el.coachOk, "click", () => dismissCoach());
 
+  // --- the engine's own fixture events ----------------------------------
+  // They bubble from the renderer's canvas, so the mount is the natural place
+  // to hear them; the canvas itself is created inside mountScene().
+  on(S.el.mount, "akv:scene-fixture-selected", (e) => {
+    S.fixture = e.detail || null;
+    if (S.fixture) markCoached();
+    syncChip();
+  });
+  on(S.el.mount, "akv:scene-fixture-moved", () => {
+    // The furniture moved, so the "prije" still and the compare stills are now
+    // out of date. Both are cheap frozen frames, so they are simply retaken.
+    refreshBare(true);
+    paintCompare();
+  });
+
   // --- before/after wipe -----------------------------------------------
   on(S.el.hudWipe, "click", () => setWipe(!S.wipe.on));
 
@@ -1165,12 +1306,13 @@ function wire(container) {
 
   // Dragging or tapping on the stage is the moment the blur costs the most,
   // so the HUD drops it for the duration (never animated, just switched).
-  on(S.canvas, "pointerdown", () => setBusy(true));
+  on(S.el.mount, "pointerdown", () => setBusy(true));
   on(window, "pointerup", () => setBusy(false));
   on(window, "pointercancel", () => setBusy(false));
 
   on(S.el.setA, "click", () => {
     S.snapA = { sceneId: S.sceneId, assignments: clone(assignments()) };
+    S.compareAKey = "";
     S.el.compareBtn.disabled = false;
     S.el.compareBtn.removeAttribute("title");
     toast(T("diz.snapSet", "Verzija A zapamćena"));
@@ -1192,8 +1334,8 @@ function wire(container) {
       // settle, so scrollIntoView aims at the panel's final position.
       void S.el.compare.getBoundingClientRect();
       S.el.compare.scrollIntoView({ behavior: S.reducedMotion ? "auto" : "smooth", block: "start" });
+      paintCompare();
     }
-    scheduleRender();
   });
 
   on(S.el.save, "click", async () => {
@@ -1236,14 +1378,164 @@ function wire(container) {
   on(window, "pagehide", flush);
   on(document, "visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
 
+  // The engine keeps its own ResizeObserver on the mount and re-frames itself.
+  // This one exists for the two things it cannot know about: the frozen "prije"
+  // still and the compare stills.
+  //
+  // The bare still is deferred to a task rather than taken here: BOTH observers
+  // fire in the same delivery, this one first (it was registered before the
+  // engine mounted), so at this instant the renderer's drawing buffer is still
+  // the OLD size and a snapshot taken now would be frozen at the wrong
+  // resolution. A task runs after the whole delivery, by which time the engine
+  // has resized. Deliberately not requestAnimationFrame: rAF is paused in a
+  // hidden tab, and the wipe must not be left stale there.
   const ro = new ResizeObserver(() => {
-    fitCanvas();
-    if (S.comparing) fitCompare();
-    if (S.wipe.on) { sizeToElement(S.el.bare); S.bareKey = ""; }
-    scheduleRender();
+    if (!S) return;
+    if (S.comparing) { fitCompare(); paintCompare(); }
+    if (S.wipe.on) scheduleBareRefresh();
   });
   ro.observe(S.el.stage);
   S.observers.push(ro);
+}
+
+// ---------------------------------------------------------------------------
+// engine mount
+// ---------------------------------------------------------------------------
+
+async function mountEngine(token) {
+  let mod;
+  try {
+    // Lazy: three.js and the engine enter the page only when the Dizajner does.
+    mod = await import("../scene3d.js");
+  } catch (err) {
+    engineUnavailable();
+    return;
+  }
+  if (!S || S.mountToken !== token) return;
+  S.scene3d = mod;
+
+  let handle;
+  try {
+    handle = await mod.mountScene(S.el.mount, {
+      sceneId: S.sceneId,
+      assignments: assignments(),
+      products: S.products,
+      onReady: () => {
+        if (!S || S.mountToken !== token) return;
+        if (S.el.loading) { S.el.loading.remove(); S.el.loading = null; }
+      },
+      onSelect: onEngineSelect,
+    });
+  } catch (err) {
+    engineUnavailable();
+    return;
+  }
+  if (!S || S.mountToken !== token) { try { handle.dispose(); } catch (e) { /* nothing to free */ } return; }
+
+  S.api = handle;
+  refreshAreas();
+  S.api.selectSurface(S.selected);
+  syncControls();
+}
+
+/**
+ * No WebGL, or the engine module failed to load. The controls, the estimate
+ * (on geometric areas) and the quote all still work; what is gone is the
+ * picture, and the message says so rather than substituting a drawing.
+ */
+function engineUnavailable() {
+  if (!S || !S.el) return;
+  if (S.el.loading) { S.el.loading.remove(); S.el.loading = null; }
+  if (S.el.mount.querySelector(".diz-fail")) return;
+  const p = document.createElement("div");
+  p.className = "diz-fail";
+  p.textContent = T("diz.no3d",
+    "3D prikaz nije dostupan na ovom uređaju. Odabir pločica, procjena cijene i upit za ponudu i dalje rade.");
+  S.el.mount.appendChild(p);
+  S.el.hudWipe.disabled = true;
+}
+
+/** onSelect from the engine: a tap on a surface, or keyboard cycling. */
+function onEngineSelect(id) {
+  if (!S) return;
+  if (!id) {
+    // A tap on empty space (or Escape). The whole control panel is bound to a
+    // surface, so the view keeps one selected and simply re-asserts it.
+    // selectSurface() does not echo onSelect, so this cannot loop.
+    if (S.api) S.api.selectSurface(S.selected);
+    return;
+  }
+  if (id === S.selected) return;
+  S.selected = id;
+  markCoached();
+  syncControls();
+}
+
+// ---------------------------------------------------------------------------
+// state changes
+// ---------------------------------------------------------------------------
+
+function switchScene(id) {
+  S.sceneId = id;
+  ensureAssignments(scene());
+  S.selected = defaultSurfaceId(scene());
+  S.fixture = null;
+  history.replaceState(null, "", location.pathname + location.search + "#/dizajner/" + S.sceneId);
+  for (const b of S.el.tabs.querySelectorAll("[data-scene]")) {
+    b.setAttribute("aria-pressed", String(b.dataset.scene === S.sceneId));
+  }
+  if (S.api) {
+    S.api.setScene(S.sceneId);
+    // setScene keeps only the assignments whose surface ids the new scene also
+    // declares — which is not this scene's own set, so install it explicitly.
+    S.api.setAssignments(assignments());
+    S.api.selectSurface(S.selected);
+  }
+  refreshAreas();
+  renderSurfaceButtons();
+  renderCombos();
+  syncControls();
+  scheduleDraftSave();
+  if (S.wipe.on) refreshBare(true);
+  if (S.comparing) paintCompare();
+}
+
+/** A control changed the current surface: retexture it, resync, persist. */
+function afterChange() {
+  if (S.api) S.api.setAssignment(S.selected, assignments()[S.selected] || null);
+  syncControls();
+  scheduleDraftSave();
+  if (S.comparing) paintCompare();
+}
+
+function selectSurface(id) {
+  if (!S || !assignments()[id]) return;
+  S.selected = id;
+  S.fixture = null;
+  markCoached();
+  if (S.api) S.api.selectSurface(id);
+  syncControls();
+}
+
+function applyCombo(comboId) {
+  const combo = (COMBOS[S.sceneId] || []).find((c) => c.id === comboId);
+  if (!combo) return;
+  S.perScene[S.sceneId] = sanitizeAssignments(comboAssignments(combo), scene());
+  ensureAssignments(scene());
+  if (!assignments()[S.selected]) S.selected = defaultSurfaceId(scene());
+  if (S.api) S.api.setAssignments(assignments());
+  syncControls();
+  scheduleDraftSave();
+  if (S.comparing) paintCompare();
+  toast(`${T("diz.comboApplied", "Kombinacija primijenjena")}: ${comboLabel(combo)}`);
+}
+
+function renderSurfaceButtons() {
+  S.el.surfaces.innerHTML = surfaceButtonsMarkup();
+}
+
+function renderCombos() {
+  S.el.combos.innerHTML = combosMarkup();
 }
 
 /** Toggle the "pointer is down on the stage" state that drops the HUD blur. */
@@ -1253,17 +1545,20 @@ function setBusy(on) {
   S.el.stage.classList.toggle("is-busy", !!on);
 }
 
+// ---------------------------------------------------------------------------
+// before / after wipe
+// ---------------------------------------------------------------------------
+
 function setWipe(on) {
   if (!S) return;
-  S.wipe.on = !!on;
+  S.wipe.on = !!on && !!S.api;
   S.el.hudWipe.setAttribute("aria-pressed", String(S.wipe.on));
   S.el.bare.hidden = !S.wipe.on;
   S.el.wipe.hidden = !S.wipe.on;
   S.el.wipeBefore.hidden = !S.wipe.on;
   S.el.wipeAfter.hidden = !S.wipe.on;
   if (S.wipe.on) {
-    sizeToElement(S.el.bare);
-    renderBare();
+    refreshBare(true);
     applyWipe();
     S.el.wipeGrip.focus({ preventScroll: true });
   } else {
@@ -1282,52 +1577,89 @@ function applyWipe() {
 }
 
 /**
- * The "prije" half: the same scene with NO assignments, which makes every
- * surface fall through to its bare-plaster gradient. Rendered only when the
- * wipe is open and only when the scene or the canvas size actually changed —
- * dragging the divider is pure CSS clip-path and repaints nothing.
+ * The "prije" half: the SAME scene, same locked camera, same real models, with
+ * no tiles on any surface — which is exactly what setBareMode(true) gives. It
+ * is snapshotted into a plain 2D canvas and left frozen there, so dragging the
+ * divider is pure CSS clip-path and repaints nothing.
+ *
+ * Because it is the same camera, the still is pixel-registered with the live
+ * canvas underneath it; that is the whole reason the wipe reads as one room.
  */
-function renderBare() {
-  if (!S || !S.wipe.on || !S.el.bare || !S.el.bare.width) return;
-  const key = `${S.sceneId}|${S.el.bare.width}x${S.el.bare.height}`;
-  if (S.bareKey === key) return;
-  renderScene(S.el.bare, scene(), {}, S.products);
-  S.bareKey = key;
+function scheduleBareRefresh() {
+  if (!S || S.bareTimer) return;
+  S.bareTimer = setTimeout(() => {
+    if (!S) return;
+    S.bareTimer = 0;
+    refreshBare(true);
+  }, 0);
 }
 
-/** A control changed the current surface: repaint, resync, persist. */
-function afterChange() {
-  syncControls();
-  scheduleDraftSave();
-  scheduleRender();
+function refreshBare(force) {
+  if (!S || !S.wipe.on || !S.api) return;
+  const cv = S.el.bare;
+  const size = liveBufferSize();
+  if (!size) return;
+  const [w, h] = size;
+  const resized = cv.width !== w || cv.height !== h;
+  if (resized) { cv.width = w; cv.height = h; }
+  if (!resized && !force) return;
+  S.api.setBareMode(true);
+  S.api.snapshotTo(cv);
+  S.api.setBareMode(false);
 }
 
-function selectSurface(id) {
-  if (!S || !assignments()[id]) return;
-  S.selected = id;
-  markCoached();
-  syncControls();
-  paintSelection();
+/**
+ * The DRAWING-BUFFER size of the live canvas, not its CSS box: snapshotTo()
+ * renders at exactly the target's pixel dimensions, so matching the renderer's
+ * own buffer makes the two halves of the wipe identical in framing AND in
+ * sharpness. Reading the canvas is the only honest source for this — the
+ * engine owns its pixel ratio and the contract does not expose it, and
+ * assuming devicePixelRatio here is wrong the moment the two disagree (they do
+ * whenever the device pixel ratio changes after mount).
+ */
+function liveBufferSize() {
+  const cv = S.el.mount.querySelector("canvas");
+  if (cv && cv.width > 0 && cv.height > 0) return [cv.width, cv.height];
+  const r = S.el.mount.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  return [Math.max(1, Math.round(r.width * dpr)), Math.max(1, Math.round(r.height * dpr))];
 }
 
-function applyCombo(comboId) {
-  const combo = (COMBOS[S.sceneId] || []).find((c) => c.id === comboId);
-  if (!combo) return;
-  S.perScene[S.sceneId] = sanitizeAssignments(combo.surfaces, scene());
-  ensureAssignments(scene());
-  if (!assignments()[S.selected]) S.selected = defaultSurfaceId(scene());
-  syncControls();
-  scheduleDraftSave();
-  scheduleRender();
-  toast(`${T("diz.comboApplied", "Kombinacija primijenjena")}: ${comboLabel(combo)}`);
+// ---------------------------------------------------------------------------
+// A/B compare
+// ---------------------------------------------------------------------------
+
+function fitCompare() {
+  sizeToWidth(S.cvA);
+  sizeToWidth(S.cvB);
 }
 
-function renderSurfaceButtons() {
-  S.el.surfaces.innerHTML = surfaceButtonsMarkup();
+function sizeToWidth(canvas) {
+  const r = canvas.getBoundingClientRect();
+  if (!r.width) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(r.width * dpr);
+  const h = Math.round((r.width * STAGE_H / STAGE_W) * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 }
 
-function renderCombos() {
-  S.el.combos.innerHTML = combosMarkup();
+/**
+ * B is the live view, so it is a snapshot of the mounted renderer — no second
+ * WebGL context. A is a remembered assignment set that may even belong to a
+ * different scene, so it goes through renderSceneThumbnail(), which owns and
+ * hands back its own context. A is only re-rendered when it actually changed:
+ * it is a still of something the user is no longer editing.
+ */
+function paintCompare() {
+  if (!S || !S.comparing) return;
+  fitCompare();
+  if (S.api) S.api.snapshotTo(S.cvB);
+  if (!S.snapA || !S.scene3d) return;
+  const key = `${S.snapA.sceneId}|${S.cvA.width}x${S.cvA.height}|${JSON.stringify(S.snapA.assignments)}`;
+  if (key === S.compareAKey) return;
+  S.compareAKey = key;
+  S.scene3d.renderSceneThumbnail(S.cvA, S.snapA.sceneId, S.snapA.assignments, S.products);
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,21 +1669,6 @@ function renderCombos() {
 function maybeCoach() {
   if (!S || S.coached) return;
   S.el.coach.hidden = false;
-  if (S.reducedMotion) return;
-  S.pulseUntil = performance.now() + PULSE_MS;
-  pulseLoop();
-}
-
-function pulseLoop() {
-  if (!S || !S.pulseUntil) return;
-  paintSelection();
-  if (performance.now() < S.pulseUntil) {
-    S.pulseRaf = requestAnimationFrame(pulseLoop);
-  } else {
-    S.pulseRaf = 0;
-    S.pulseUntil = 0;
-    paintSelection();
-  }
 }
 
 function markCoached() {
@@ -1366,9 +1683,6 @@ function dismissCoach() {
   S.coached = true;
   writeFlag(COACH_KEY, true);
   S.el.coach.hidden = true;
-  if (S.pulseRaf) { cancelAnimationFrame(S.pulseRaf); S.pulseRaf = 0; }
-  S.pulseUntil = 0;
-  paintSelection();
 }
 
 // ---------------------------------------------------------------------------
@@ -1376,12 +1690,14 @@ function dismissCoach() {
 // ---------------------------------------------------------------------------
 
 /**
- * Per-surface order estimate. Prefers domain.orderEstimate(product, areaM2,
- * pattern) when that helper exists; otherwise falls back to the same rule the
- * advisor FAQ teaches: +10% reserve, +15% for herringbone/diagonal cuts.
+ * Per-surface order estimate. The area is the engine's MEASURED areaM2 — the
+ * old authored realSizeM product is gone from this file entirely. Prefers
+ * domain.orderEstimate(product, areaM2, pattern) when that helper exists;
+ * otherwise falls back to the same rule the advisor FAQ teaches: +10% reserve,
+ * +15% for herringbone/diagonal cuts.
  */
 function orderEstimateFor(product, surf, entry) {
-  const areaM2 = round2((surf.realSizeM[0] || 0) * (surf.realSizeM[1] || 0));
+  const areaM2 = round2(areaFor(surf.id));
   const pattern = entry ? entry.pattern : "grid";
   let reservePct = (pattern === "herringbone" || pattern === "diagonal") ? 15 : 10;
   let totalM2 = round2(areaM2 * (1 + reservePct / 100));
@@ -1470,13 +1786,12 @@ function quoteBody() {
 }
 
 // ---------------------------------------------------------------------------
-// control sync + rendering
+// control sync
 // ---------------------------------------------------------------------------
 
 function syncControls() {
   const a = current();
-  S.el.chip.textContent = surfaceLabel(S.selected);
-  S.canvas.setAttribute("aria-label", canvasLabel());
+  syncChip();
 
   for (const b of S.el.surfaces.querySelectorAll("[data-surface]")) {
     b.setAttribute("aria-pressed", String(b.dataset.surface === S.selected));
@@ -1518,120 +1833,55 @@ function syncControls() {
   const parts = [`${T("diz.products", "Pločice")} — ${surfaceLabel(S.selected)}`];
   if (mine) parts.push(fmtM2(mine.billedM2), formatEur(mine.subtotal));
   S.el.surfK.textContent = parts.join(" · ");
+
+  S.el.status.textContent = statusLine();
+}
+
+/**
+ * The HUD line. It names the surface the controls are pointed at — unless the
+ * user has just grabbed a piece of furniture, in which case it names that and
+ * says what can be done with it, because that is what the next gesture affects.
+ */
+function syncChip() {
+  if (!S || !S.el) return;
+  if (S.fixture && S.fixture.model) {
+    S.el.chip.textContent =
+      `${fixtureLabel(S.fixture.model)} · ${T("diz.fixtureHudHint", "povucite · R zakret")}`;
+    return;
+  }
+  S.el.chip.textContent = surfaceLabel(S.selected);
 }
 
 function comboMatches(comboId) {
   const combo = (COMBOS[S.sceneId] || []).find((c) => c.id === comboId);
   if (!combo) return false;
+  const want = comboAssignments(combo);
   const a = assignments();
-  return scene().surfaces.every((s) => {
-    const want = combo.surfaces[s.id];
+  const list = sceneSurfaces(scene());
+  if (!list.length) return false;
+  return list.every((s) => {
+    const w = want[s.id];
     const have = a[s.id];
-    if (!want || !have) return !want && !have;
-    return want.productId === have.productId && want.pattern === have.pattern &&
-      want.groutColorId === have.groutColorId && Number(want.groutWidthMm) === Number(have.groutWidthMm) &&
-      normRotation(want.rotationDeg) === normRotation(have.rotationDeg) &&
-      normOffset(want.offsetPct, want.pattern) === normOffset(have.offsetPct, have.pattern);
+    if (!w || !have) return !w && !have;
+    return w.productId === have.productId && w.pattern === have.pattern &&
+      w.groutColorId === have.groutColorId && Number(w.groutWidthMm) === Number(have.groutWidthMm) &&
+      normRotation(w.rotationDeg) === normRotation(have.rotationDeg) &&
+      normOffset(w.offsetPct, w.pattern) === normOffset(have.offsetPct, have.pattern);
   });
 }
 
-function canvasLabel() {
+/**
+ * The screen-reader summary. js/scene3d.js maintains its own aria-label on the
+ * canvas (room size, which surfaces are tiled, which keys do what) and this
+ * does not fight it — it adds the part the engine has no business knowing:
+ * which PRODUCT is on which surface.
+ */
+function statusLine() {
   const list = orderedSurfaces().map((s) => {
     const e = assignments()[s.id];
     const p = productById(e && e.productId);
     return `${surfaceLabel(s.id)} — ${p ? p.name : T("diz.noTile", "bez pločica")}`;
   });
-  return `${T("diz.canvasAlt", "Ilustracija prostorije")}: ${sceneLabel(scene())}. ${list.join("; ")}. ` +
-    `${T("diz.selected", "Odabrana površina")}: ${surfaceLabel(S.selected)}. ` +
-    `${T("diz.canvasKeys", "Strelicama mijenjate površinu.")}`;
-}
-
-function fitCanvas() {
-  sizeToElement(S.canvas);
-  sizeToElement(S.overlay);
-  if (S.el && S.el.bare) sizeToElement(S.el.bare);
-}
-
-function fitCompare() {
-  sizeToElement(S.cvA);
-  sizeToElement(S.cvB);
-}
-
-function sizeToElement(canvas) {
-  const r = canvas.getBoundingClientRect();
-  if (!r.width) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.round(r.width * dpr);
-  const h = Math.round((r.width * DESIGN_H / DESIGN_W) * dpr);
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-}
-
-function scheduleRender() {
-  if (!S || S.rafId) return;
-  S.rafId = requestAnimationFrame(() => {
-    if (!S) return;
-    S.rafId = 0;
-    paint();
-  });
-}
-
-function paint() {
-  renderScene(S.canvas, scene(), assignments(), S.products);
-  renderBare();
-  paintSelection();
-  if (S.comparing && S.snapA) {
-    const scA = sceneById(S.snapA.sceneId) || scene();
-    renderScene(S.cvA, scA, S.snapA.assignments, S.products);
-    renderScene(S.cvB, scene(), assignments(), S.products);
-  }
-}
-
-/** Selection highlight — own overlay canvas, so it never re-renders the scene. */
-function paintSelection() {
-  if (!S || !S.overlay || !S.overlay.width) return;
-  const ctx = S.overlay.getContext("2d");
-  if (!ctx) return;
-  const sx = S.overlay.width / DESIGN_W, sy = S.overlay.height / DESIGN_H;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, S.overlay.width, S.overlay.height);
-  const surf = scene().surfaces.find((s) => s.id === S.selected);
-  if (!surf) return;
-
-  let grow = 0;
-  if (S.pulseUntil) {
-    const k = 0.5 - 0.5 * Math.cos((performance.now() / 340) * Math.PI * 2);
-    grow = k * 4;
-  }
-
-  ctx.setTransform(sx, 0, 0, sy, 0, 0);
-  ctx.beginPath();
-  ctx.moveTo(surf.quad[0][0], surf.quad[0][1]);
-  for (let i = 1; i < 4; i++) ctx.lineTo(surf.quad[i][0], surf.quad[i][1]);
-  ctx.closePath();
-  ctx.save();
-  ctx.clip();
-  // --teal-600 wash over the selected surface (decorative, not the indicator).
-  ctx.fillStyle = `rgba(19,158,177,${0.09 + grow * 0.014})`;
-  ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
-  ctx.restore();
-  ctx.lineJoin = "round";
-  // The indicator is a PAIR, and the pair is what carries WCAG 1.4.11 (3:1 for
-  // non-text UI) against a backdrop the user chooses: --paper #F2F2F2 and
-  // --dark #1B120B measure 16.48:1 against each other, and if two colours were
-  // BOTH under 3:1 against the same backdrop they could be at most 9:1 apart —
-  // so at least one of these two always clears 3:1, whatever tile is beneath.
-  // A --paper + --teal-600 pair is only 2.86:1 apart and does NOT hold: it was
-  // measured failing against light stone, mid grey, amber and the teal tile
-  // itself, which is why the sampled iris is the thin top hairline here and
-  // not the identifying stroke.
-  ctx.strokeStyle = "rgba(242,242,242,0.95)";
-  ctx.lineWidth = 8 + grow;
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(27,18,11,0.95)";
-  ctx.lineWidth = 4 + grow;
-  ctx.stroke();
-  ctx.strokeStyle = "#139EB1";
-  ctx.lineWidth = 1.5 + grow * 0.5;
-  ctx.stroke();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return `${sceneLabel(scene())}. ${list.join("; ")}. ` +
+    `${T("diz.selected", "Odabrana površina")}: ${surfaceLabel(S.selected)}.`;
 }

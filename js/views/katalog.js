@@ -403,7 +403,10 @@ const CATALOG_CSS = `
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 .akv-resume-a{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:inherit;text-decoration:none;padding:14px}
-.akv-resume-c{flex:0 0 auto;width:100%;max-width:320px;aspect-ratio:1000/700;border-radius:var(--akv-r-sm);background:var(--akv-brown-mid);display:block;box-shadow:0 2px 10px rgba(93,79,79,.34)}
+/* 4:3, not the old 1000/700 design space: js/scene3d.js frames every locked
+   camera on 4:3 (its REF_ASPECT) and only widens the fov for something
+   NARROWER, so a 4:3 thumbnail is the composition the scene was framed for. */
+.akv-resume-c{flex:0 0 auto;width:100%;max-width:320px;aspect-ratio:4/3;border-radius:var(--akv-r-sm);background:var(--akv-brown-mid);display:block;box-shadow:0 2px 10px rgba(93,79,79,.34)}
 .akv-resume-b{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .akv-resume-e{color:var(--akv-amber)}                       /* 4.83:1 on brown-800 */
 .akv-resume-t{font-family:var(--akv-fam-text);font-weight:700;font-size:1.125rem;line-height:1.3;color:#fff}
@@ -516,6 +519,28 @@ const CATALOG_CSS = `
 .akv-dactions{display:flex;gap:8px;flex-wrap:wrap}
 .akv-btn-danger{background:var(--akv-danger);border-color:var(--akv-danger);color:#fff}  /* 6.10:1 */
 
+/* ---- scene thumbnails (resume card + saved designs) ---------------------- */
+/* Every thumbnail is a still from js/scene3d.js: the same room shell, the same
+   vendored CC0 models and the same texture pipeline the live Dizajner uses.
+   Nothing here draws a fixture.
+   A canvas starts fully transparent, so its own background-color IS the
+   placeholder and the sweep below is simply the "still rendering" state laid
+   over it — no extra element, no layout shift when the picture arrives.
+   .akv-thumb-load must stay AFTER .akv-resume-c / .akv-dthumb: those two set
+   "background" as a shorthand, which resets background-image to none at the
+   same (0,1,0) specificity, and only source order lets the sweep win. */
+.akv-dthumb{
+  flex:0 0 auto;width:128px;max-width:34vw;aspect-ratio:4/3;display:block;
+  border-radius:var(--akv-r-sm);background:var(--akv-placeholder);
+  box-shadow:inset 0 0 0 1px var(--akv-hairline);
+}
+.akv-thumb-load{
+  background-image:linear-gradient(100deg,transparent 32%,rgba(255,255,255,.22) 50%,transparent 68%);
+  background-repeat:no-repeat;background-size:230% 100%;
+  animation:akv-thumb-sweep 1400ms linear infinite;
+}
+@keyframes akv-thumb-sweep{from{background-position:130% 0}to{background-position:-130% 0}}
+
 /* =========================== DEGRADATIONS =================================
    FIVE paths, matching the DEGRADATION PATHS block at css/styles.css:1516
    one for one, all landing on the same opaque --akv-solid #F4FAFB. Every tier
@@ -592,9 +617,11 @@ html[data-transparency="reduced"] .akv-cat-card::after{display:none}
   .akv-chip[aria-pressed="true"] .n{color:HighlightText}
 }
 /* 5. Motion. Blur radius is never animated anywhere above; this only stills
-      the transform/colour transitions. */
+      the transform/colour transitions — and the thumbnail sweep, which is the
+      one looping animation in this file. Stilling it leaves the flat
+      placeholder colour, which is what the sweep is painted over anyway. */
 @media (prefers-reduced-motion:reduce){
-  .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after{
+  .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after,.akv-thumb-load{
     transition-duration:1ms !important;animation:none !important;
   }
   .akv-pcard:hover,.akv-pcard:focus-within,.akv-cat-card:hover,.akv-cat-card:focus-visible{transform:none}
@@ -725,11 +752,68 @@ export function wireFavButtons(root, favSet, onChange) {
   });
 }
 
+// ---- scene thumbnails (shared with views/dizajni.js) ---------------------------
+// A thumbnail is a one-shot still from js/scene3d.js — the SAME engine, the same
+// vendored CC0 .glb models and the same physical-scale texture pipeline as the
+// live Dizajner and the 3D room. It replaced js/scene2d.js's hand-drawn canvas
+// illustration — an invented window, an invented worktop — which was the thing
+// the operator rejected; that module has been DELETED from the tree, and
+// nothing in this file draws a fixture.
+//
+// js/scene3d.js is imported dynamically and memoised: it pulls in three.js and
+// the model set, and a cold catalogue boot with no draft and no saved design
+// must not pay for either.
+let scene3dModule = null;
+const loadScene3d = () => (scene3dModule || (scene3dModule = import("../scene3d.js")));
+
+// renderSceneThumbnail deliberately SWALLOWS its own failures — a decorative
+// still may never take a list view down — so its promise resolving is not
+// evidence that anything was painted. This is: the engine clears to an opaque
+// --paper background across the whole frame, so one opaque pixel proves the
+// still landed, and a canvas that was never touched is transparent everywhere.
+function canvasPainted(canvas) {
+  try {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    const x = Math.max(0, (canvas.width / 2) | 0);
+    const y = Math.max(0, (canvas.height / 2) | 0);
+    return ctx.getImageData(x, y, 1, 1).data[3] > 0;
+  } catch { return false; }
+}
+
+/**
+ * Paint one scene still into `canvas`, showing the sweep placeholder while it
+ * renders. `sceneId` is a scene id from data/scenes.js — or a scene OBJECT,
+ * which is how views/dizajni.js shows a saved 3D room.
+ * Resolves TRUE only when pixels actually landed; false means offline shell
+ * miss, no WebGL, or an unknown scene. The caller decides what a card with no
+ * picture looks like — this never substitutes one.
+ */
+export async function paintSceneThumb(canvas, sceneId, assignments, products) {
+  if (!canvas || !canvas.isConnected || !canvas.width || !canvas.height) return false;
+  const ctx = canvas.getContext("2d");
+  if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);   // makes the probe above sound
+  canvas.classList.add("akv-thumb-load");
+  canvas.setAttribute("aria-busy", "true");
+  let ok = false;
+  try {
+    const { renderSceneThumbnail } = await loadScene3d();
+    await renderSceneThumbnail(canvas, sceneId, assignments || {}, products || []);
+    ok = canvasPainted(canvas);
+  } catch {
+    ok = false;
+  }
+  canvas.classList.remove("akv-thumb-load");
+  canvas.removeAttribute("aria-busy");
+  return ok;
+}
+
 // ---- "Nastavite gdje ste stali" -------------------------------------------------
-// The 2D designer persists its working state as akv:diz-draft
+// The designer persists its working state as akv:diz-draft
 // ({sceneId, perScene, savedAt}); when one exists the home screen offers a warm
-// re-entry with a real thumbnail of the draft. data/scenes.js + js/scene2d.js
-// are imported dynamically so the cold catalog boot never pays for them.
+// re-entry with a real still of the draft. data/scenes.js is imported
+// dynamically (for the scene's Croatian label) so the cold catalog boot never
+// pays for it.
 const DRAFT_KEY = "akv:diz-draft";
 const SCENE_FB = { "kupaonica": "Kupaonica", "kuhinja": "Kuhinja", "dnevni-boravak": "Dnevni boravak" };
 
@@ -762,7 +846,7 @@ function resumeMarkup(draft) {
   return `
   <section class="akv-resume" id="akvResume">
     <a class="akv-resume-a" href="#/dizajner/${encodeURIComponent(draft.sceneId)}">
-      <canvas class="akv-resume-c" id="akvResumeC" width="640" height="448" role="img"
+      <canvas class="akv-resume-c" id="akvResumeC" width="640" height="480" role="img"
         aria-label="${esc(tf("kat.resumeAlt", "Pregled vašeg nedovršenog dizajna"))}"></canvas>
       <div class="akv-resume-b">
         <span class="t-meta akv-meta akv-resume-e">${esc(tf("kat.resumeEyebrow", "Vaš dizajn"))}</span>
@@ -777,21 +861,32 @@ function resumeMarkup(draft) {
 async function hydrateResume(container, draft, products) {
   const host = container.querySelector("#akvResume");
   if (!host) return;
+  let scene;
   try {
-    const [scenesMod, scene2d] = await Promise.all([
-      import("../../data/scenes.js"),
-      import("../scene2d.js"),
-    ]);
-    const scene = (scenesMod.SCENES || []).find((s) => s.id === draft.sceneId);
-    if (!scene || !host.isConnected) { host.remove(); return; }
-    scene2d.renderScene(host.querySelector("#akvResumeC"), scene, draft.assignments, products);
-    const name = tf(scene.i18nKey, SCENE_FB[scene.id] || scene.id);
-    const when = draftWhen(draft.savedAt);
-    const sub = host.querySelector("#akvResumeSub");
-    if (sub) sub.textContent = when ? `${name} · ${tf("kat.resumeSaved", "spremljeno")} ${when}` : name;
+    const scenesMod = await import("../../data/scenes.js");
+    scene = (scenesMod.SCENES || []).find((s) => s.id === draft.sceneId);
   } catch {
-    host.remove();          // scenes unavailable (offline shell miss) — no dead card
+    scene = null;           // offline shell miss
   }
+  // A card that cannot even name its scene is a dead card — that rule predates
+  // the 3D swap and still holds.
+  if (!scene || !host.isConnected) { host.remove(); return; }
+
+  // Caption first, picture second. The still is a WebGL render now, not a
+  // synchronous canvas draw, so the card must read correctly the whole time it
+  // is arriving rather than only once it has.
+  const name = tf(scene.i18nKey, SCENE_FB[scene.id] || scene.id);
+  const when = draftWhen(draft.savedAt);
+  const sub = host.querySelector("#akvResumeSub");
+  if (sub) sub.textContent = when ? `${name} · ${tf("kat.resumeSaved", "spremljeno")} ${when}` : name;
+
+  const canvas = host.querySelector("#akvResumeC");
+  const ok = await paintSceneThumb(canvas, draft.sceneId, draft.assignments, products);
+  // No still (no WebGL, or scene3d.js missing from the offline shell): drop the
+  // canvas rather than leave an empty brown rectangle claiming to be a preview.
+  // The card itself still names the scene and still resumes the draft, so it
+  // keeps its job — only the picture is gone.
+  if (!ok && canvas) canvas.remove();
 }
 
 // ---- view ---------------------------------------------------------------------
