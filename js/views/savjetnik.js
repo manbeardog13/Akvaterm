@@ -15,6 +15,13 @@
 //
 // i18n: every label goes through t(key); because t() returns the key when the
 // dictionary misses it, tr(key, fallback) keeps the UI Croatian either way.
+//
+// Visually this view is on the "Iris" design system (docs/DESIGN_SYSTEM.md):
+// sampled teal/amber palette, Anton + Figtree from vendor/fonts/, and a single
+// liquid-glass surface — the chat dock. The STYLES block near the bottom of
+// this file carries the measured contrast ratio for every colour pair it
+// introduces, plus the four mandatory degradation paths. Read the comment
+// block above STYLES before changing any colour here.
 // ============================================================================
 
 import {
@@ -417,6 +424,7 @@ function renderOffline() {
         'Aplikacija radi u demo načinu bez poslužitelja, pa AI savjetnica nije dostupna. Katalog i dizajner rade normalno. U međuvremenu — odgovori na najčešća pitanja:'))}</p>
     </div>
     <div class="sv-log" id="svLog" aria-live="polite"></div>
+    <p class="sv-label">${esc(tr('sv.faqLabel', 'Česta pitanja'))}</p>
     <div class="sv-chips" id="svFaq">
       ${FAQ.map((f, i) => `<button type="button" class="sv-chip" data-faq="${i}">${esc(f.q)}</button>`).join('')}
     </div>
@@ -438,50 +446,342 @@ function renderOffline() {
 // ---- view -------------------------------------------------------------------
 
 // Scoped styles ride with the view so the chat dock renders correctly even
-// before the shared stylesheet learns about it; everything keys off the
-// css/styles.css tokens (--accent, --brand-red) with safe fallbacks.
+// before the shared stylesheet learns about it.
+//
+// ============================ IRIS + LIQUID GLASS ===========================
+// Palette: docs/DESIGN_SYSTEM.md ("Iris"), every base value pixel-sampled from
+// the operator's reference. Type: Anton (display) + Figtree (text), vendored
+// under vendor/fonts/ — see vendor/fonts/PROVENANCE.md.
+//
+// EVERY colour pair below was measured, not eyeballed. Method: WCAG 2.x
+// relative luminance, sRGB alpha compositing (which is what the browser does),
+// and — for the glass — the WORST-CASE backdrop, i.e. pure black behind the
+// panel. That is the darkest composite the panel can ever produce, so a pair
+// that passes there passes over anything.
+//
+// ANTON METRIC HAZARD — re-measured in the browser against the vendored face
+// (canvas actualBoundingBox at 400px, then scaled; strut-probe for the
+// baseline). The numbers are worse than the 1.100em figure this work started
+// from, and the conclusion changes because of it:
+//
+//   Anton, plain caps "TERMA"      ink ascent 0.8594em, descent 0
+//   Anton, Croatian "ČŠŽĆĐ"        ink ascent 1.1094em, descent 0.0156em
+//                                  -> total ink 1.1250em
+//
+// The declared ascender is smaller than the caron ink, so the ink pokes out of
+// the TOP of the line box at EVERY plausible line-height: measured overshoot at
+// font-size 28px is 5.46px at line-height 1.05, still 1.46px at 1.30, and it
+// only reaches zero somewhere around 1.44. Line-height alone therefore CANNOT
+// fix this — it is not that kind of bug.
+//
+// So the rule is enforced twice over:
+//   1. line-height >= 1.05 on every Anton rule. This is what stops the carons
+//      of line 2 colliding with line 1 when a heading wraps — a real, separate
+//      problem that line-height does solve.
+//   2. overflow:visible plus padding-top:.18em (> the 0.16em overshoot measured
+//      at line-height 1.12) on every Anton heading, so the ink sits inside the
+//      element's own padding box and survives even if some future ancestor
+//      starts clipping.
+// Verified in-browser: the hero h1 has zero clipping ancestors, and .sv-log —
+// the only overflow container in this view — contains no Anton at all.
+// Figtree's caron ink is 0.70em ascent / 0.02em descent: no hazard.
+//
+// GLASS BUDGET: exactly ONE backdrop-filter surface in this view (.sv-log).
+// With the standing nav + tab bar that is 3 on screen, the documented ceiling.
+// Cards, chips, consent and contact panels are deliberately opaque.
+//
+// SAFARI: -webkit-backdrop-filter silently drops the whole declaration when it
+// contains var(). Those lines are written with LITERAL values; the unprefixed
+// property carries the token. Keep them in sync by hand.
+// ============================================================================
 const STYLES = `
-  .sv-wrap{display:flex;flex-direction:column;gap:12px;max-width:720px;margin:0 auto;padding:12px;min-height:0}
-  .sv-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .sv-head h1{font-size:1.25rem;margin:0;color:var(--accent,#00008C)}
-  .sv-log{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:200px;max-height:52vh;padding:4px}
+  .sv-wrap{
+    /* --- Iris tokens from css/styles.css. Every fallback literal is the value
+       that sheet actually ships today, so the view renders identically if the
+       cascade is ever missing — it never silently invents a shade. --------- */
+    --sv-teal:var(--teal-600,#139EB1);         /* sampled */
+    --sv-teal-hi:var(--teal-300,#09AFBD);      /* sampled */
+    --sv-amber:var(--amber-500,#EAA651);       /* sampled */
+    --sv-brown:var(--brown-800,#68340F);       /* sampled */
+    --sv-ink:var(--ink,#313131);               /* sampled */
+    --sv-teal-ink:var(--teal-700,#0D707D);     /* derived: 5.78:1 on #FFF | 5.17:1 on --paper | 5.26:1 on the bot bubble | #FFF on it 5.78:1 */
+    --sv-teal-deep:var(--teal-800,#0B5A65);    /* derived: #FFF on it 7.88:1 */
+    --sv-amber-ink:var(--amber-ink,#935616);   /* derived: 5.86:1 on #FFF | 5.23:1 on --paper | 4.76:1 on the amber wash */
+    --sv-muted:var(--mauve-600,#756168);       /* derived: 5.73:1 on #FFF | 5.12:1 on --paper | 5.21:1 on the bot bubble */
+
+    /* --- surfaces (opaque, so their contrast is deterministic) ------------- */
+    --sv-surface:var(--surface,#FFFFFF);
+    --sv-wash-teal:#DCEAEC;   /* = --teal-600 @ .10 over --paper. ink 10.55:1, teal-ink 4.69:1 */
+    --sv-wash-amber:#F1E6D8;  /* = --amber-500 @ .16 over --paper. ink 10.56:1, amber-ink 4.76:1 */
+    --sv-line:var(--line,rgba(104,52,15,.12));            /* warm hairline — never neutral grey */
+    --sv-line-teal:rgba(19,158,177,.30);
+    --sv-shadow:0 10px 30px -18px rgba(93,79,79,.55);     /* --shadow-warm, per DESIGN_SYSTEM */
+
+    /* --- glass ------------------------------------------------------------
+       Tint hsl(187 44% 97%) = #F4FAFB — cool, teal-leaning, per DESIGN_SYSTEM
+       rule 4 (never a grey glass). Alpha comes from --glass-alpha-text (.78).
+
+       Floor, computed rather than assumed: over a PURE-BLACK backdrop — the
+       darkest composite this panel can ever produce — that tint needs alpha
+       >= 0.62 for --ink to reach 4.5:1 (0.62 gives 4.64:1). The shipped .78
+       lands on worst-case composite #BEC3C4, where --ink measures 7.31:1, and
+       clears the 0.58 light-glass floor from the glass research with room to
+       spare.
+
+       CONSEQUENCE, a rule and not a preference: only --sv-ink may sit DIRECTLY
+       on this glass. --sv-teal-ink measures 3.25:1 there and --sv-amber-ink
+       3.29:1. Every coloured string in this view therefore sits on an opaque
+       child surface, never on the panel itself. */
+    --sv-glass-bg:var(--glass-bg-text,hsl(187 44% 97% / .78));
+    --sv-glass-fx:var(--glass-fx-md,blur(18px) saturate(180%) brightness(1.06));
+    --sv-glass-solid:#F4FAFB;            /* the same tint, opaque — all glass fallbacks land here */
+
+    --sv-font-display:var(--font-display,'Anton','Haettenschweiler','Arial Narrow',system-ui,sans-serif);
+    --sv-font-text:var(--font-text,'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
+
+    display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto;padding:12px;min-height:0;
+    font-family:var(--sv-font-text);color:var(--sv-ink);
+  }
+
+  /* ---------------------------------------------------------------- hero */
+  /* flex-wrap, not a media query: on a 400px viewport "Novi razgovor" cannot
+     share a row with the wordmark, and wrapping is the only behaviour that
+     keeps the 44px tap target intact. Measured at 400px CSS width. */
+  .sv-head{
+    display:flex;align-items:center;flex-wrap:wrap;gap:12px 14px;
+    background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:20px;
+    padding:14px 16px 17px;box-shadow:var(--sv-shadow);position:relative;overflow:visible;
+  }
+  .sv-head #svReset{flex:0 0 auto;margin-left:auto}
+  /* teal -> heat rule: the brand's own meaning (voda -> toplina). Decorative. */
+  .sv-head::after{
+    content:"";position:absolute;left:16px;right:16px;bottom:0;height:3px;border-radius:3px;
+    background:linear-gradient(90deg,var(--sv-teal-hi),var(--sv-teal) 42%,var(--sv-amber));
+  }
+  /* Water -> heat, in one 52px mark. Sampled every 0.5% along the gradient and
+     took the minimum: white text measures 5.78:1 at its WORST point (the
+     teal-700 end). Endpoints: teal-700 5.78:1, teal-800 7.88:1, amber-ink
+     5.86:1. The glyph is Anton but caron-free, so line-height 1.06 suffices. */
+  .sv-avatar{
+    flex:0 0 auto;width:52px;height:52px;border-radius:16px;display:grid;place-items:center;
+    background:linear-gradient(150deg,var(--sv-teal-ink) 0%,var(--sv-teal-deep) 45%,var(--sv-amber-ink) 100%);
+    color:#fff;font-family:var(--sv-font-display);font-size:26px;line-height:1.06;
+    letter-spacing:.01em;box-shadow:inset 0 1px 0 rgba(255,255,255,.34);
+  }
+  .sv-head-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 8rem}
+  .sv-head h1{
+    margin:0;font-family:var(--sv-font-display);font-weight:400;
+    font-size:clamp(1.75rem,5.4vw,2.25rem);letter-spacing:-.015em;
+    text-transform:uppercase;color:var(--sv-teal-ink);      /* 5.78:1 on #FFF */
+    /* Anton caron guard — see the metric note above STYLES. */
+    line-height:1.12;padding-top:.18em;overflow:visible;
+  }
+  .sv-kicker{
+    margin:0;font-weight:500;font-size:.75rem;letter-spacing:.08em;line-height:1.4;
+    text-transform:uppercase;color:var(--sv-muted);          /* 5.73:1 on #FFF */
+  }
+  .sv-body{display:flex;flex-direction:column;gap:14px;min-height:0}
+  /* the reference's credit-line gesture, reused as a section label */
+  .sv-label{
+    margin:0;font-weight:500;font-size:.75rem;letter-spacing:.08em;line-height:1.4;
+    text-transform:uppercase;color:var(--sv-muted);          /* 5.12:1 on --paper */
+  }
+
+  /* --------------------------------------------------------- glass chat dock */
+  .sv-log{
+    display:flex;flex-direction:column;gap:10px;overflow-y:auto;
+    min-height:200px;max-height:52vh;padding:14px;border-radius:22px;
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 46%),
+      var(--sv-glass-bg);
+    /* Order matters. Chrome treats -webkit-backdrop-filter as an ALIAS of the
+       standard property, so whichever comes last wins there; putting the
+       prefixed one FIRST means every engine that understands the standard
+       property uses the token, and the literal only ever serves the older
+       WebKit builds that have no unprefixed property at all.
+       The literal must stay equal to --glass-fx-md in css/styles.css. */
+    -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);   /* LITERAL — Safari drops the whole line if it contains var() */
+    backdrop-filter:var(--sv-glass-fx);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.62),               /* rim light */
+      inset 0 0 0 1px var(--sv-line-teal),
+      var(--sv-shadow);
+    transition:box-shadow 220ms cubic-bezier(.25,1,.5,1);
+  }
   .sv-log:empty{display:none}
-  .sv-msg{max-width:85%;padding:10px 14px;border-radius:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
-  .sv-msg.is-me{align-self:flex-end;background:var(--accent,#00008C);color:#fff;border-bottom-right-radius:4px}
-  .sv-msg.is-bot{align-self:flex-start;background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-bottom-left-radius:4px}
-  .sv-msg.is-thinking{opacity:.65;font-style:italic}
-  .sv-photo img,.sv-staged img{max-width:100%;border-radius:10px;display:block}
-  .sv-badge{display:inline-block;background:var(--brand-red,#d6252e);color:#fff;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:6px}
-  .sv-disclaimer{font-size:.78rem;opacity:.75;margin:6px 0 0}
-  .sv-colors{display:flex;gap:6px;align-self:flex-start;padding:2px 6px}
-  .sv-dot{width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,0,0,.15)}
-  .sv-cards{display:flex;flex-direction:column;gap:8px;align-self:stretch}
-  .sv-card{display:flex;align-items:center;gap:10px;background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:8px 10px;text-decoration:none;color:inherit}
-  .sv-card-swatch{width:52px;height:52px;border-radius:8px;flex:0 0 auto;background:#eee;object-fit:cover}
-  .sv-card-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
-  .sv-card-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .sv-card-meta{font-size:.8rem;opacity:.75}
-  .sv-card-price{font-size:.9rem;color:var(--accent,#00008C);font-weight:700}
-  .sv-card-stage{flex:0 0 auto;min-height:44px;border:1px solid var(--accent,#00008C);color:var(--accent,#00008C);background:transparent;border-radius:10px;padding:0 10px;cursor:pointer;font:inherit;font-size:.8rem}
-  .sv-chips{display:flex;flex-wrap:wrap;gap:8px}
-  .sv-chip{min-height:44px;border:1px solid var(--line,#ccc);background:var(--card-bg,#fff);border-radius:99px;padding:8px 14px;cursor:pointer;font:inherit;font-size:.85rem;text-align:left}
-  .sv-inputrow{display:flex;gap:8px}
-  .sv-inputrow input{flex:1;min-height:44px;border:1px solid var(--line,#ccc);border-radius:10px;padding:0 12px;font:inherit}
-  .sv-btn{min-height:44px;border:1px solid var(--line,#ccc);background:var(--card-bg,#fff);border-radius:10px;padding:0 16px;cursor:pointer;font:inherit}
-  .sv-btn-primary{background:var(--accent,#00008C);border-color:var(--accent,#00008C);color:#fff}
-  .sv-toolrow{display:flex;gap:8px;flex-wrap:wrap}
-  .sv-consent{align-self:stretch;background:var(--card-bg,#fff);border:1px solid var(--brand-red,#d6252e);border-radius:12px;padding:12px;font-size:.9rem}
-  .sv-consent-actions{display:flex;gap:8px;margin-top:10px}
-  .sv-offline{background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:16px}
-  .sv-offline h2{margin:0 0 8px;color:var(--accent,#00008C)}
-  .sv-contact{background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:16px}
-  .sv-contact h3{margin:0 0 6px;font-size:1rem;color:var(--accent,#00008C)}
-  .sv-contact p{margin:0 0 10px;font-size:.9rem}
-  .sv-contact-actions{display:flex;flex-wrap:wrap;gap:8px}
-  .sv-contact-actions .sv-btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
+  /* Warm amber rim light on interaction — box-shadow only. blur() is NEVER
+     animated (compositor re-samples the backdrop every frame). */
+  .sv-log:hover,.sv-log:focus-within{
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.70),
+      inset 0 0 0 1px rgba(185,108,28,.34),   /* --amber-600 #B96C1C @ .34 — a 1px rim, carries no text */
+      var(--sv-shadow);
+  }
+
+  /* ------------------------------------------------------------- messages */
+  .sv-msg{
+    max-width:86%;padding:11px 15px;border-radius:16px;font-size:.9375rem;line-height:1.6;
+    white-space:pre-wrap;word-break:break-word;
+  }
+  /* User turn: solid teal-ink fill, white text = 5.78:1 */
+  .sv-msg.is-me{
+    align-self:flex-end;background:var(--sv-teal-ink);color:#fff;
+    border-bottom-right-radius:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.20);
+  }
+  /* Terma's turn: an opaque-enough white plate ON the glass. rgba(255,255,255,.82)
+     over the worst-case dock composite #BEC3C4 resolves to #F3F4F4, where
+     --sv-ink measures 11.81:1 and --sv-muted 5.20:1. */
+  .sv-msg.is-bot{
+    align-self:flex-start;background:rgba(255,255,255,.82);color:var(--sv-ink);
+    border:1px solid var(--sv-line);border-bottom-left-radius:5px;
+  }
+  /* colour, not opacity: opacity would drag this below AA on a light surface */
+  .sv-msg.is-thinking{color:var(--sv-muted);font-style:italic}   /* 5.20:1 on the bot bubble */
+  .sv-photo img,.sv-staged img{max-width:100%;border-radius:12px;display:block}
+
+  /* AI-impresija badge — amber-500 fill, brown-800 text = 4.83:1 */
+  .sv-badge{
+    display:inline-block;background:var(--sv-amber);color:var(--sv-brown);
+    font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 10px;border-radius:99px;margin-bottom:8px;
+  }
+  .sv-disclaimer{font-size:.78rem;line-height:1.5;color:var(--sv-muted);margin:8px 0 0}  /* 5.20:1 on the bot bubble */
+  .sv-colors{display:flex;gap:7px;align-self:flex-start;padding:2px 6px}
+  .sv-dot{width:22px;height:22px;border-radius:50%;border:1px solid rgba(93,79,79,.28)}
+
+  /* --------------------------------------------------------- product cards */
+  .sv-cards{display:flex;flex-direction:column;gap:9px;align-self:stretch}
+  .sv-card{
+    display:flex;align-items:center;gap:11px;background:var(--sv-surface);
+    border:1px solid var(--sv-line);border-radius:16px;padding:9px 11px;
+    text-decoration:none;color:var(--sv-ink);
+    transition:border-color 180ms cubic-bezier(.25,1,.5,1),transform 180ms cubic-bezier(.25,1,.5,1);
+  }
+  .sv-card:hover{border-color:var(--sv-line-teal)}
+  .sv-card:active{transform:scale(.99)}
+  .sv-card-swatch{width:54px;height:54px;border-radius:12px;flex:0 0 auto;background:var(--sv-wash-teal);object-fit:cover}
+  .sv-card-body{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+  /* Figtree — safe to clip. Anton would lose its carons here. */
+  .sv-card-name{font-weight:600;font-size:1.0625rem;letter-spacing:-.005em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sv-card-meta{font-size:.75rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--sv-muted)}  /* 5.73:1 on #FFF */
+  .sv-card-price{font-size:.9375rem;font-weight:700;color:var(--sv-teal-ink);font-variant-numeric:tabular-nums}        /* 5.78:1 on #FFF */
+  .sv-card-stage{
+    flex:0 0 auto;min-height:44px;border:1px solid var(--sv-teal-ink);color:var(--sv-teal-ink);   /* 5.78:1 on #FFF */
+    background:transparent;border-radius:12px;padding:0 12px;cursor:pointer;
+    font-family:inherit;font-size:.8rem;font-weight:600;letter-spacing:.02em;
+    transition:background-color 180ms cubic-bezier(.25,1,.5,1);
+  }
+  .sv-card-stage:hover{background:var(--sv-wash-teal)}   /* teal-ink on #DCEAEC = 4.69:1 — the tightest pair in this view */
+
+  /* ----------------------------------------------------- chips / controls */
+  .sv-chips{display:flex;flex-wrap:wrap;gap:9px}
+  .sv-chip{
+    min-height:44px;border:1px solid var(--sv-line);background:var(--sv-surface);
+    border-radius:99px;padding:9px 16px;cursor:pointer;color:var(--sv-ink);
+    font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.4;text-align:left;
+    transition:background-color 180ms cubic-bezier(.25,1,.5,1),border-color 180ms cubic-bezier(.25,1,.5,1);
+  }
+  .sv-chip:hover{background:var(--sv-wash-teal);border-color:var(--sv-line-teal)}  /* ink on #DCEAEC = 10.55:1 */
+  .sv-inputrow{display:flex;gap:9px}
+  .sv-inputrow input{
+    flex:1;min-height:44px;border:1px solid var(--sv-line);border-radius:14px;padding:0 14px;
+    background:var(--sv-surface);color:var(--sv-ink);font-family:inherit;font-size:.9375rem;
+  }
+  .sv-inputrow input::placeholder{color:var(--sv-muted)}   /* 5.73:1 on #FFF */
+  .sv-inputrow input:focus-visible{outline:2.5px solid var(--sv-teal-ink);outline-offset:2px}
+  .sv-btn{
+    min-height:44px;border:1px solid var(--sv-line);background:var(--sv-surface);color:var(--sv-ink);
+    border-radius:14px;padding:0 18px;cursor:pointer;
+    font-family:inherit;font-size:.875rem;font-weight:600;letter-spacing:.02em;
+    transition:background-color 180ms cubic-bezier(.25,1,.5,1),transform 180ms cubic-bezier(.34,1.4,.5,1);
+  }
+  .sv-btn:hover{background:var(--sv-wash-teal)}
+  .sv-btn:active{transform:scale(.97)}
+  .sv-btn-primary{background:var(--sv-teal-ink);border-color:var(--sv-teal-ink);color:#fff}  /* 5.78:1 */
+  .sv-btn-primary:hover{background:var(--sv-teal-deep);border-color:var(--sv-teal-deep)}     /* #FFF on --teal-800 = 7.88:1 */
+  .sv-toolrow{display:flex;gap:9px;flex-wrap:wrap}
+
+  /* ----------------------------------------------- consent / staging cards */
+  /* Amber = heat = "this costs something / read me". Opaque, never glass. */
+  .sv-consent{
+    align-self:stretch;background:var(--sv-wash-amber);border:1px solid var(--sv-amber-ink);
+    border-radius:16px;padding:14px;font-size:.9rem;line-height:1.55;color:var(--sv-ink);  /* 10.56:1 */
+  }
+  .sv-consent strong{color:var(--sv-amber-ink)}   /* 4.76:1 on #F1E6D8 */
+  .sv-consent-actions{display:flex;gap:9px;margin-top:12px;flex-wrap:wrap}
+
+  /* -------------------------------------------------- offline / contact */
+  .sv-offline{background:var(--sv-wash-amber);border:1px solid var(--sv-line);border-radius:20px;padding:18px;box-shadow:var(--sv-shadow)}
+  .sv-offline h2{
+    margin:0 0 10px;font-family:var(--sv-font-display);font-weight:400;
+    font-size:clamp(1.4rem,3.6vw,1.85rem);letter-spacing:-.01em;
+    text-transform:uppercase;color:var(--sv-amber-ink);      /* 4.76:1 on #F1E6D8 */
+    line-height:1.12;padding-top:.18em;overflow:visible;     /* Anton caron guard — "TRENUTAČNO" */
+  }
+  .sv-offline p{margin:0;font-size:.9375rem;line-height:1.6;color:var(--sv-ink)}   /* 10.56:1 */
+  .sv-contact{background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:20px;padding:18px;box-shadow:var(--sv-shadow)}
+  .sv-contact h3{
+    margin:0 0 8px;font-family:var(--sv-font-display);font-weight:400;
+    font-size:clamp(1.2rem,3vw,1.5rem);letter-spacing:-.005em;
+    text-transform:uppercase;color:var(--sv-teal-ink);       /* 5.78:1 on #FFF */
+    line-height:1.12;padding-top:.18em;overflow:visible;     /* Anton caron guard — "NAŠLI" */
+  }
+  .sv-contact p{margin:0 0 12px;font-size:.9375rem;line-height:1.6}
+  .sv-contact-actions{display:flex;flex-wrap:wrap;gap:9px}
+  .sv-contact-actions .sv-btn{display:inline-flex;align-items:center;text-decoration:none}
   .sv-contact-actions .sv-btn-primary{color:#fff}
-  .sv-contact .sv-contact-meta{margin:10px 0 0;font-size:.82rem;opacity:.75}
-  @media (prefers-reduced-motion:no-preference){.sv-msg{animation:svIn .18s ease-out}@keyframes svIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}}
+  .sv-contact .sv-contact-meta{margin:12px 0 0;font-size:.75rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--sv-muted)}
+
+  /* ====================== the four degradation paths ======================
+     1. no backdrop-filter   2. reduced transparency
+     3. increased contrast / forced colors   4. reduced motion
+     All three "no glass" paths land on the SAME opaque tint, so the layout
+     never shifts — only the translucency goes. */
+
+  /* 1 — engine cannot blur (older Firefox, blur disabled, low-power modes). */
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+    .sv-wrap .sv-log{background:var(--sv-glass-solid);box-shadow:inset 0 0 0 1px var(--sv-line-teal),var(--sv-shadow)}
+  }
+  /* 2 — the OS says translucency hurts this user. */
+  @media (prefers-reduced-transparency:reduce){
+    .sv-wrap .sv-log{
+      background:var(--sv-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none;
+      box-shadow:inset 0 0 0 1px var(--sv-line-teal),var(--sv-shadow);
+    }
+    .sv-wrap .sv-msg.is-bot{background:#fff}
+  }
+  /* 3a — the OS asks for more contrast: drop the glass, harden the hairlines. */
+  @media (prefers-contrast:more){
+    .sv-wrap .sv-log{
+      background:var(--sv-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none;
+      box-shadow:none;border:2px solid var(--sv-teal-ink);
+    }
+    .sv-wrap .sv-msg.is-bot{background:#fff;border-color:var(--sv-teal-ink)}
+    .sv-wrap .sv-card,.sv-wrap .sv-chip,.sv-wrap .sv-btn,.sv-wrap .sv-inputrow input{border-color:var(--sv-ink)}
+    .sv-wrap .sv-card-meta,.sv-wrap .sv-disclaimer,.sv-wrap .sv-contact-meta,
+    .sv-wrap .sv-kicker,.sv-wrap .sv-msg.is-thinking{color:var(--sv-ink)}
+  }
+  /* 3b — Windows High Contrast: hand every colour back to the OS. */
+  @media (forced-colors:active){
+    .sv-wrap .sv-log,.sv-wrap .sv-msg,.sv-wrap .sv-card,.sv-wrap .sv-chip,.sv-wrap .sv-btn,
+    .sv-wrap .sv-consent,.sv-wrap .sv-offline,.sv-wrap .sv-contact,.sv-wrap .sv-head{
+      background:Canvas;color:CanvasText;border:1px solid CanvasText;
+      backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
+    }
+    .sv-wrap .sv-avatar,.sv-wrap .sv-badge{background:Canvas;color:CanvasText;border:1px solid CanvasText}
+    .sv-wrap .sv-head::after{background:CanvasText}
+    .sv-wrap .sv-btn-primary{background:Highlight;color:HighlightText;border-color:Highlight}
+    .sv-wrap .sv-msg.is-me{background:Canvas;color:CanvasText}
+    .sv-wrap .sv-dot{forced-color-adjust:none}   /* the swatches ARE the information */
+  }
+  /* 4 — motion. Entrance is opt-in; everything else is turned off explicitly. */
+  @media (prefers-reduced-motion:no-preference){
+    .sv-msg{animation:svIn .18s cubic-bezier(.25,1,.5,1)}
+    @keyframes svIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .sv-wrap *,.sv-wrap *::before,.sv-wrap *::after{animation:none!important;transition:none!important}
+  }
 `;
 
 const CHIPS = [
@@ -493,13 +793,21 @@ const CHIPS = [
 export async function render(container, params) { // params unused — route carries none
   els = { root: null, log: null, file: null };
 
+  // The hero is the "premium" gesture: Anton wordmark + the wide-tracked
+  // uppercase kicker that is the signature of the Iris type system, over a
+  // teal→amber rule (voda → toplina). sv.title stays the accessible name of
+  // the section so the existing translation is not orphaned.
   container.innerHTML = `
     <style>${STYLES}</style>
-    <section class="sv-wrap" id="svRoot">
-      <div class="sv-head">
-        <h1>${esc(tr('sv.title', 'Terma — savjetnica'))}</h1>
+    <section class="sv-wrap" id="svRoot" aria-label="${esc(tr('sv.title', 'Terma — savjetnica'))}">
+      <header class="sv-head">
+        <span class="sv-avatar" aria-hidden="true">T</span>
+        <span class="sv-head-txt">
+          <h1>${esc(tr('sv.brand', 'Terma'))}</h1>
+          <p class="sv-kicker">${esc(tr('sv.kicker', 'Akvatermova savjetnica'))}</p>
+        </span>
         <button type="button" class="sv-btn" id="svReset" title="${esc(tr('sv.newChat', 'Novi razgovor'))}">↺ ${esc(tr('sv.newChatShort', 'Novi razgovor'))}</button>
-      </div>
+      </header>
       <div class="sv-body" id="svBody"></div>
     </section>`;
   els.root = container.querySelector('#svBody');
@@ -517,6 +825,7 @@ export async function render(container, params) { // params unused — route car
 
   els.root.innerHTML = `
     <div class="sv-log" id="svLog" aria-live="polite"></div>
+    <p class="sv-label">${esc(tr('sv.chipsLabel', 'Predloženo'))}</p>
     <div class="sv-chips" id="svChips">
       ${CHIPS.map(([key, fallback], i) => `<button type="button" class="sv-chip" data-chip="${i}">${esc(tr(key, fallback))}</button>`).join('')}
     </div>

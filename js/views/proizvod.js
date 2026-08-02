@@ -14,6 +14,15 @@ import { getProduct, listFavorites, toggleFavorite } from "../db.js";
 import { buildPatternCell } from "../texture.js";
 import { esc, tf, ensureStyles, pickParam, priceLabel, formatLabel, catLabel, swatchAttrs, hydrateSwatches } from "./katalog.js";
 
+// Iris skin note — this view carries the catalogue's ONE extra backdrop-filter
+// surface: .akv-rail, the pattern switcher floating over the tile preview. Nav +
+// tab bar are the standing pair, so a product page shows three glass surfaces at
+// most, which is the top of the budget. Everything else here (spec panel, swatch
+// frame, inquiry box) is opaque or a plain translucent tint. Rail text is --ink
+// only: over a pure-black tile the 0.64 tint composites to #A3A3A3, where
+// #313131 measures 5.17:1, while --teal-700 would be 2.12:1. The active chip is
+// therefore an OPAQUE --teal-700 fill with white (5.33:1), not tinted glass.
+
 const PATTERN_FALLBACK = { grid: "Ravno", runningBond: "Pomaknuto", herringbone: "Riblja kost", diagonal: "Dijagonalno" };
 const KIND_LABELS = {
   marble: "Mramor-look gres", travertine: "Travertin-look gres", ceramic: "Keramika",
@@ -71,8 +80,11 @@ export async function render(container, params) {
   const p = await getProduct(id);
   if (!p) {
     container.innerHTML = `
-      <div class="banner banner-danger" style="margin:12px 0">${esc(tf("prod.notFound", "Proizvod nije pronađen."))}</div>
-      <a class="btn" href="#/">← ${esc(tf("kat.back", "Katalog"))}</a>`;
+      <div class="akv-empty">
+        <div class="ico" aria-hidden="true">🔎</div>
+        <h2 class="t-h2 akv-display-2">${esc(tf("prod.notFound", "Proizvod nije pronađen."))}</h2>
+        <a class="akv-btn akv-btn-primary t-button" href="#/">← ${esc(tf("kat.back", "Katalog"))}</a>
+      </div>`;
     return;
   }
 
@@ -99,27 +111,29 @@ export async function render(container, params) {
   }
 
   container.innerHTML = `
-    <a class="btn btn-ghost" href="#/katalog/${esc(p.category)}" style="margin-bottom:10px">← ${esc(tf("kat.back", "Katalog"))}</a>
+    <a class="akv-back t-button" href="#/katalog/${esc(p.category)}">← ${esc(tf("kat.back", "Katalog"))}</a>
     <div class="akv-prod">
       <div>
         ${isTile
-          ? `<canvas class="akv-prev card" id="prodPrev" width="960" height="720" role="img"
-               aria-label="${esc(tf("prod.previewAlt", "Pregled uzorka"))}"></canvas>
-             <div class="akv-chiprow" role="group" aria-label="${esc(tf("prod.pattern", "Uzorak polaganja"))}" style="margin-top:10px">
-               <span class="lab">${esc(tf("prod.pattern", "Uzorak"))}</span>
-               ${PATTERNS.map((pt) => `<button type="button" class="akv-chip" data-pattern="${esc(pt.id)}" aria-pressed="false">${esc(tf(pt.i18nKey, PATTERN_FALLBACK[pt.id] || pt.id))}</button>`).join("")}
+          ? `<div class="akv-prevwrap">
+               <canvas class="akv-prev" id="prodPrev" width="960" height="720" role="img"
+                 aria-label="${esc(tf("prod.previewAlt", "Pregled uzorka"))}"></canvas>
+               <div class="akv-rail akv-chiprow" role="group" aria-label="${esc(tf("prod.pattern", "Uzorak polaganja"))}">
+                 <span class="lab t-meta akv-meta">${esc(tf("prod.patternShort", "Uzorak"))}</span>
+                 ${PATTERNS.map((pt) => `<button type="button" class="akv-chip" data-pattern="${esc(pt.id)}" aria-pressed="false">${esc(tf(pt.i18nKey, PATTERN_FALLBACK[pt.id] || pt.id))}</button>`).join("")}
+               </div>
              </div>`
-          : `<div class="akv-sw-wrap card" style="overflow:hidden;border-radius:12px">
+          : `<div class="akv-sw-wrap akv-eqwrap">
                <img class="akv-prev" ${swatchAttrs(p, 512)} alt="" style="aspect-ratio:4/3">
-               <span class="akv-eq-ico" style="font-size:72px">${esc(catIcon)}</span>
+               <span class="akv-eq-ico" aria-hidden="true" style="font-size:76px">${esc(catIcon)}</span>
              </div>`}
       </div>
-      <div class="card" style="padding:18px">
-        <div class="muted" style="font-size:13px">${esc(p.brand)} · ${esc(catLabel(cat) || p.category)}</div>
-        <h1 style="margin:4px 0 2px">${esc(p.name)}</h1>
-        <div class="akv-bigprice">${esc(priceLabel(p))}</div>
-        ${hasArea ? `<p class="akv-order muted" id="prodOrder"></p>` : ""}
-        <p class="muted" style="margin:0 0 6px">${esc(p.desc)}</p>
+      <div class="akv-panel">
+        <span class="t-meta akv-meta">${esc(p.brand)} · ${esc(catLabel(cat) || p.category)}</span>
+        <h1 class="t-h2 akv-display-2">${esc(p.name)}</h1>
+        <div class="akv-bigprice t-numeric akv-num">${esc(priceLabel(p))}</div>
+        ${hasArea ? `<p class="akv-order" id="prodOrder"></p>` : ""}
+        <p class="t-body akv-lead" style="margin:0">${esc(p.desc)}</p>
         <table class="akv-specs">
           <tbody>
             ${specRows.map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}
@@ -127,20 +141,20 @@ export async function render(container, params) {
         </table>
         <div class="akv-actions">
           ${isTile
-            ? `<button type="button" class="btn btn-primary" id="applyBtn">${esc(tf("prod.apply", "Primijeni u dizajneru"))}</button>`
-            : `<button type="button" class="btn btn-primary" id="inquiryBtn" aria-expanded="false" aria-controls="inquiryBox">${esc(tf("prod.inquiry", "Pripremi upit"))}</button>`}
-          <button type="button" class="btn" id="favBtn" aria-pressed="${fav}">${fav ? "♥" : "♡"} ${esc(tf("prod.fav", "Favorit"))}</button>
+            ? `<button type="button" class="akv-btn akv-btn-primary t-button" id="applyBtn">${esc(tf("prod.apply", "Primijeni u dizajneru"))}</button>`
+            : `<button type="button" class="akv-btn akv-btn-primary t-button" id="inquiryBtn" aria-expanded="false" aria-controls="inquiryBox">${esc(tf("prod.inquiry", "Pripremi upit"))}</button>`}
+          <button type="button" class="akv-btn t-button" id="favBtn" aria-pressed="${fav}">${fav ? "♥" : "♡"} ${esc(tf("prod.fav", "Favorit"))}</button>
         </div>
         ${isTile ? "" : `
-        <p class="muted" style="font-size:12px;margin:10px 0 0">${esc(tf("prod.noDesigner", "Dizajner i 3D soba oblažu površine pločicama, pa se ova oprema u njima ne postavlja."))}</p>
+        <p class="akv-fine">${esc(tf("prod.noDesigner", "Dizajner i 3D soba oblažu površine pločicama, pa se ova oprema u njima ne postavlja."))}</p>
         <div class="akv-inq" id="inquiryBox" hidden>
-          <p class="muted" style="font-size:12px;margin:0">${esc(tf("prod.inqHelp", "Demo verzija ne šalje upite. Kopirajte pripremljeni tekst i pošaljite ga Akvatermu e-poštom ili porukom."))}</p>
+          <p class="akv-fine" style="margin:0">${esc(tf("prod.inqHelp", "Demo verzija ne šalje upite. Kopirajte pripremljeni tekst i pošaljite ga Akvatermu e-poštom ili porukom."))}</p>
           <textarea id="inquiryText" readonly rows="10" aria-label="${esc(tf("prod.inqAria", "Pripremljeni tekst upita"))}"></textarea>
-          <div class="akv-actions" style="margin-top:8px">
-            <button type="button" class="btn btn-primary" id="inquiryCopy">${esc(tf("prod.inqCopy", "Kopiraj tekst"))}</button>
+          <div class="akv-actions" style="margin-top:10px">
+            <button type="button" class="akv-btn akv-btn-warm t-button" id="inquiryCopy">${esc(tf("prod.inqCopy", "Kopiraj tekst"))}</button>
           </div>
         </div>`}
-        <p class="muted" style="font-size:12px;margin:12px 0 0">${esc(tf("prod.demoNote", "Ogledni demo proizvod — cijena i specifikacije nisu stvarna ponuda."))}</p>
+        <p class="akv-fine">${esc(tf("prod.demoNote", "Ogledni demo proizvod — cijena i specifikacije nisu stvarna ponuda."))}</p>
       </div>
     </div>`;
 

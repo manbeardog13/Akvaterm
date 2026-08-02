@@ -4,14 +4,22 @@
    offline. Live data always comes from Supabase online; the seed catalog under
    data/ is precached so the demo runs fully offline.
 
-   Three things are worth knowing before editing this file:
+   Four things are worth knowing before editing this file:
    1. VERSION is read from the registration query (?v=…) when the page supplies
       one, so the cache name has a single source of truth. See "Versioning".
    2. Precaching is best-effort but no longer silent: a SHELL entry that fails
       is reported. See "Install".
-   3. vendor/three/ is deliberately NOT in SHELL — it is lazily fetched on the
-      first 3D open and pre-warmed in the background once the network goes
-      quiet. See "vendor/three pre-warm". */
+   3. The four vendored woff2 faces ARE in SHELL. They are ~79 KB total and
+      render-blocking-ish (a missing display face is a visible reflow), so they
+      are treated as shell, not as an optional extra. See "Fonts in SHELL".
+   4. vendor/three/ and vendor/models/ are deliberately NOT in SHELL — they are
+      fetched lazily on the first 3D open and pre-warmed in the background in
+      two ordered stages once the network goes quiet. See "3D pre-warm".
+
+   There is NO cross-origin dependency left. Fonts are vendored under
+   vendor/fonts/ and supabase-js under vendor/supabase/, so the worker only
+   ever handles same-origin traffic plus the live Supabase API (which it never
+   touches). See "Fetch". */
 
 /* ============================== Versioning ================================
    The cache name and APP_V in js/app.js used to be two literals kept in step
@@ -29,20 +37,15 @@
 
    A page may also postMessage {type:"akv:version"} to read this worker's
    version back (optionally passing its own as `v` for a logged comparison). */
-const FALLBACK_VERSION = "v1";           // used when the registration carries no ?v=
+const FALLBACK_VERSION = "v2";           // used when the registration carries no ?v=
 const VERSION = new URL(self.location.href).searchParams.get("v") || FALLBACK_VERSION;
 const CACHE = `akv-${VERSION}`;          // never write this name out by hand
 
-// Cross-origin dependencies the app benefits from offline (fonts; supabase-js
-// ESM if the operator configures it). Runtime-cached network-first so an
-// offline cold boot doesn't die on them. All other cross-origin traffic
-// (Supabase API) stays live-only.
-const CDN_HOSTS = ["cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com"];
-
-/* Every shipped runtime file except vendor/three (see below). service-worker.js
-   itself is intentionally absent — the browser's update machinery fetches it,
-   and a cached copy of the worker fights that. Verified entry-by-entry over
-   HTTP against the served tree; keep it that way when adding a file. */
+/* Every shipped runtime file except vendor/three and vendor/models (see below).
+   service-worker.js itself is intentionally absent — the browser's update
+   machinery fetches it, and a cached copy of the worker fights that. Verified
+   entry-by-entry over HTTP against the served tree; keep it that way when
+   adding a file. */
 const SHELL = [
   "./",
   "./index.html",
@@ -63,6 +66,37 @@ const SHELL = [
   "./js/terma.js",
   "./js/qrshare.js",
   "./vendor/qr/qrcode.mjs",   // 58 KB — small enough to precache; keeps offline sharing working
+
+  /* ============================ Fonts in SHELL ==========================
+     The Iris type pairing (docs/DESIGN_SYSTEM.md) is Anton for display and
+     Figtree for text, both vendored — vendor/fonts/PROVENANCE.md records the
+     URLs, byte counts and SHA-256 of every file, and both are SIL OFL 1.1.
+
+     These five entries are in SHELL, not runtime-cached, for two reasons:
+       • they are render-blocking-ish. font-display:swap means a cold, offline
+         start without them paints the fallback stack and then reflows when the
+         real faces arrive — with Anton (a heavy condensed face) against Arial
+         Narrow that reflow is large and obvious.
+       • they are small: 80404 bytes of woff2 across the four faces, about 0.6%
+         of what vendor/three costs. There is nothing to save by deferring them.
+
+     Exactly the four faces vendor/fonts/fonts.css @font-face-references are
+     listed. The eight static Figtree instances in that directory are NOT
+     referenced by fonts.css (it uses the two variable-axis files), so
+     precaching them would be dead weight — and the eight OFL/PROVENANCE text
+     files are a redistribution obligation satisfied by shipping them in the
+     tree, not something the app fetches.
+
+     The `latin-ext` slices are NOT optional: č ć ž š đ Č Ć Ž Š Đ live in Latin
+     Extended-A and the `latin` slice alone renders every Croatian diacritic as
+     tofu (proven by cmap parsing — see PROVENANCE.md). Never drop them to save
+     41 KB. */
+  "./vendor/fonts/fonts.css",
+  "./vendor/fonts/anton-latin-400-normal.woff2",           // 18612 B
+  "./vendor/fonts/anton-latin-ext-400-normal.woff2",       // 31356 B — carries Č Š Ž
+  "./vendor/fonts/figtree-latin-wght-normal.woff2",        // 20156 B
+  "./vendor/fonts/figtree-latin-ext-wght-normal.woff2",    // 10280 B — carries č š ž ć đ
+
   "./js/views/katalog.js",
   "./js/views/proizvod.js",
   "./js/views/dizajner.js",
@@ -72,40 +106,113 @@ const SHELL = [
   "./js/views/dizajni.js",
 ];
 
-/* ============================== vendor/three pre-warm =====================
+/* ============================== 3D pre-warm ===============================
    DELIBERATE DEVIATION from "SHELL lists every shipped file"
-   (docs/BUILD_CONTRACTS.md). three.js is ~2.1 MB raw across these four files —
-   15x the entire rest of the app (measured boot: 12 files, ~143 KB). Putting
-   it in SHELL would make every install, including the many users who never
-   open the 3D tab, pay 2.1 MB before the worker is ready.
+   (docs/BUILD_CONTRACTS.md), covering two directories.
 
-   The cost of leaving it out is real though: an installed-PWA user who never
-   opened 3D online has no 3D offline. So instead of choosing one, we converge:
-   SHELL stays small and fast, and these files are fetched in the background
-   once the network has been quiet for PREWARM_IDLE_MS — i.e. after the app has
-   finished booting, not during it. By the time the user first taps "3D soba",
-   the module is usually already in the cache.
+   ── Stage 1: vendor/three (2302788 B / 2.2 MB across seven files) ────────
+   That is roughly 3x the whole precached shell (SHELL measured 773717 B over
+   HTTP, fonts included — that figure moves as the app's own modules change;
+   the 2.2 MB does not, because three.js is pinned). Putting it in SHELL would
+   make every install, including the many users who never open the 3D tab, pay
+   2.2 MB before the worker is ready.
 
-   Skipped entirely on Save-Data or a 2G-class connection: a background 2.1 MB
+   ── Stage 2: vendor/models (823008 B / 804 KiB across 25 .glb files) ──────
+   The CC0 fixture library — baths, WCs, basins, kitchen modules, doors,
+   windows, an AC outdoor unit (vendor/models/PROVENANCE.md). The decision, and
+   the reasoning, so nobody has to re-derive it:
+
+     • NOT in SHELL. 804 KB is 5.6x the whole booting app. Install must not
+       block on it, and a first-time visitor who only wants the catalogue would
+       pay for a 3D library they may never open. Worse, SHELL is a hard
+       dependency in spirit: 25 more entries is 25 more ways for one bad deploy
+       to log a precache failure.
+     • NOT deferred to first use only either. The models are what makes the 3D
+       room feel furnished; fetching 804 KB at the moment the user taps "3D
+       soba" puts that whole download in front of the thing they asked for, on
+       top of three.js.
+     • So: pre-warmed on idle, in a SECOND stage that runs only after stage 1
+       has completed. The ordering is the point — a .glb is useless without a
+       loader, so spending a user's bandwidth on models before three.js is in
+       the cache would be strictly worse than not pre-warming at all.
+     • Fetched in batches of PREWARM_BATCH rather than all 25 at once, so the
+       background fill cannot saturate a connection the app might still want.
+     • First-3D-open still works without any of this: the generic same-origin
+       fetch handler below is network-first and caches clean 200s, so opening
+       the 3D tab populates the cache as a side effect either way. The pre-warm
+       only moves that cost earlier, into a quiet moment.
+
+   ── Common to both stages ────────────────────────────────────────────────
+   Fetched once the network has been quiet for PREWARM_IDLE_MS — i.e. after the
+   app has finished booting, not during it.
+
+   Skipped entirely on Save-Data or a 2G-class connection: a background 2.9 MB
    download is exactly what those signals ask us not to do. Those users still
    get 3D on demand, they just pay for it when they ask for it.
 
    A page can trigger the same work explicitly with
    postMessage({type:"akv:prewarm"}) — e.g. from requestIdleCallback after
    load, which is more precise than this worker's network-idle heuristic. */
+/* Exactly what js/room3d.js imports, plus GLTFLoader's own two dependencies —
+   it does `import { toTrianglesDrawMode } from '../utils/BufferGeometryUtils.js'`
+   and `import { clone } from '../utils/SkeletonUtils.js'`, so caching the
+   loader without them would still fail offline. Byte counts from the served
+   tree; total 2302788 B / 2249 KiB. */
 const THREE_ASSETS = [
-  "./vendor/three/three.module.js",
-  "./vendor/three/three.core.js",
-  "./vendor/three/addons/controls/OrbitControls.js",
-  "./vendor/three/addons/environments/RoomEnvironment.js",
+  "./vendor/three/three.module.js",                          //  650153 B
+  "./vendor/three/three.core.js",                            // 1443056 B
+  "./vendor/three/addons/controls/OrbitControls.js",         //   40504 B
+  "./vendor/three/addons/environments/RoomEnvironment.js",   //    4960 B
+  "./vendor/three/addons/loaders/GLTFLoader.js",             //  114959 B
+  "./vendor/three/addons/utils/BufferGeometryUtils.js",      //   37621 B — GLTFLoader dep
+  "./vendor/three/addons/utils/SkeletonUtils.js",            //   11535 B — GLTFLoader dep
 ];
+
+/* The whole vendor/models directory, byte counts from the served tree. Keep in
+   step with vendor/models/PROVENANCE.md — every file there is CC0 1.0 and
+   loadable by plain GLTFLoader (no Draco, no KTX2, no meshopt, no sidecars). */
+const MODEL_ASSETS = [
+  "./vendor/models/ac-outdoor-unit.glb",              // 38900 B
+  "./vendor/models/bathroom-cabinet-tall.glb",        // 11664 B
+  "./vendor/models/bathroom-mirror.glb",              // 14780 B
+  "./vendor/models/bathtub-freestanding.glb",         // 42848 B
+  "./vendor/models/bathtub.glb",                      // 73680 B
+  "./vendor/models/door-leaf.glb",                    // 24320 B
+  "./vendor/models/door.glb",                         // 16560 B
+  "./vendor/models/kitchen-cabinet-base.glb",         // 17840 B
+  "./vendor/models/kitchen-cabinet-corner.glb",       // 11092 B
+  "./vendor/models/kitchen-cabinet-drawer.glb",       // 23804 B
+  "./vendor/models/kitchen-cabinet-upper.glb",        // 12452 B
+  "./vendor/models/kitchen-fridge.glb",               // 26260 B
+  "./vendor/models/kitchen-hood.glb",                 //  9208 B
+  "./vendor/models/kitchen-sink-unit.glb",            // 44620 B
+  "./vendor/models/kitchen-stove.glb",                // 97952 B
+  "./vendor/models/shower-enclosure.glb",             // 84228 B
+  "./vendor/models/toilet-modern.glb",                // 35092 B
+  "./vendor/models/toilet-square.glb",                // 30296 B
+  "./vendor/models/toilet.glb",                       // 32888 B
+  "./vendor/models/towel-rail.glb",                   // 31228 B
+  "./vendor/models/washbasin-pedestal.glb",           // 40504 B
+  "./vendor/models/washbasin-vanity-wall.glb",        // 19224 B
+  "./vendor/models/washbasin-vanity.glb",             // 54396 B
+  "./vendor/models/window-large.glb",                 // 20180 B
+  "./vendor/models/window-small.glb",                 //  8992 B
+];                                                    // total 823008 B
+
+/* Ordered. A later stage never starts before the one in front of it is fully
+   cached, because a later stage is useless without it. */
+const PREWARM_STAGES = [
+  { name: "three", urls: THREE_ASSETS },
+  { name: "models", urls: MODEL_ASSETS },
+];
+
 const PREWARM_IDLE_MS = 6000;        // quiet network for this long = boot is over
 const MAX_PREWARM_ATTEMPTS = 2;      // never retry a broken deploy forever
+const PREWARM_BATCH = 4;             // keep the background fill off the app's throat
 
 let prewarmTimer = 0;
-let prewarmAttempts = 0;
-let prewarmDone = false;
 let prewarmRunning = false;
+const prewarmState = PREWARM_STAGES.map(() => ({ attempts: 0, done: false }));
 
 function dataSaverOn() {
   // WorkerNavigator.connection is Chromium-only; absent elsewhere, which is
@@ -115,47 +222,79 @@ function dataSaverOn() {
   return c.saveData === true || c.effectiveType === "2g" || c.effectiveType === "slow-2g";
 }
 
+/** Index of the stage that should run next, or -1 when there is nothing left
+ *  to do — either every stage is cached, or the first unfinished one has spent
+ *  its attempts. Returning -1 in the second case is what stops a broken deploy
+ *  from re-arming the idle timer forever. */
+function nextPrewarmStage() {
+  for (let i = 0; i < PREWARM_STAGES.length; i++) {
+    if (prewarmState[i].done) continue;
+    return prewarmState[i].attempts < MAX_PREWARM_ATTEMPTS ? i : -1;
+  }
+  return -1;
+}
+
 /** (Re)start the idle countdown. Every same-origin request pushes it back, so
  *  the pre-warm can only fire once the app has stopped asking for things. */
 function schedulePrewarm() {
-  if (prewarmDone || prewarmRunning) return;
-  if (prewarmAttempts >= MAX_PREWARM_ATTEMPTS) return;
+  if (prewarmRunning || nextPrewarmStage() < 0) return;
   if (dataSaverOn()) return;
   clearTimeout(prewarmTimer);
-  prewarmTimer = setTimeout(prewarmThree, PREWARM_IDLE_MS);
+  prewarmTimer = setTimeout(prewarmLazyAssets, PREWARM_IDLE_MS);
 }
 
-/** Best-effort background fill of the 3D module. Only fetches what is missing,
- *  never rejects, never touches the response path.
+/** Cache whatever of `urls` is missing, PREWARM_BATCH at a time. Resolves with
+ *  the list that could not be fetched; never rejects. */
+async function fillCache(cache, urls) {
+  const missing = [];
+  for (const url of urls) {
+    if (!(await cache.match(url))) missing.push(url);
+  }
+  const failed = [];
+  for (let i = 0; i < missing.length; i += PREWARM_BATCH) {
+    const batch = missing.slice(i, i + PREWARM_BATCH);
+    const results = await Promise.allSettled(
+      batch.map((u) => cache.add(new Request(u, { cache: "no-cache" })))
+    );
+    for (let j = 0; j < batch.length; j++) {
+      if (results[j].status === "rejected") failed.push(batch[j]);
+    }
+  }
+  return failed;
+}
+
+/** Best-effort background fill of the lazy 3D assets, stage by stage. Only
+ *  fetches what is missing, never rejects, never touches the response path.
  *
  *  The attempt cap lives HERE, not only in schedulePrewarm(), because the
  *  postMessage path calls this directly — a page that posts "akv:prewarm" in a
  *  loop must not be able to retry a broken deploy forever. */
-async function prewarmThree() {
-  if (prewarmDone || prewarmRunning) return;
-  if (prewarmAttempts >= MAX_PREWARM_ATTEMPTS) return;
+async function prewarmLazyAssets() {
+  if (prewarmRunning) return;
   prewarmRunning = true;
-  prewarmAttempts++;
   try {
     const c = await caches.open(CACHE);
-    const missing = [];
-    for (const url of THREE_ASSETS) {
-      if (!(await c.match(url))) missing.push(url);
-    }
-    if (!missing.length) { prewarmDone = true; return; }
-
-    const results = await Promise.allSettled(
-      missing.map((u) => c.add(new Request(u, { cache: "no-cache" })))
-    );
-    const failed = missing.filter((_, i) => results[i].status === "rejected");
-    if (failed.length) {
-      // Offline or a genuinely missing file — one more attempt later, then stop.
-      console.warn(`[akv-sw ${VERSION}] 3D pre-warm incomplete (${failed.length}/${missing.length}):`, failed);
-    } else {
-      prewarmDone = true;
+    for (;;) {
+      const i = nextPrewarmStage();
+      if (i < 0) return;
+      const stage = PREWARM_STAGES[i];
+      const state = prewarmState[i];
+      state.attempts++;
+      const failed = await fillCache(c, stage.urls);
+      if (failed.length) {
+        // Offline, or a genuinely missing file. Stop here rather than spending
+        // the user's bandwidth on a stage whose prerequisite is incomplete;
+        // the next idle window retries, once.
+        console.warn(
+          `[akv-sw ${VERSION}] pre-warm "${stage.name}" incomplete ` +
+          `(${failed.length}/${stage.urls.length}):`, failed
+        );
+        return;
+      }
+      state.done = true;
     }
   } catch (err) {
-    console.warn(`[akv-sw ${VERSION}] 3D pre-warm failed:`, err);
+    console.warn(`[akv-sw ${VERSION}] pre-warm failed:`, err);
   } finally {
     prewarmRunning = false;
   }
@@ -236,7 +375,7 @@ self.addEventListener("message", (e) => {
   if (msg.type === "akv:prewarm") {
     // Explicit "the page is idle now" — more precise than our own heuristic.
     clearTimeout(prewarmTimer);
-    e.waitUntil(prewarmThree());
+    e.waitUntil(prewarmLazyAssets());
     return;
   }
 
@@ -254,26 +393,21 @@ function cacheable(res) {
   return res && res.ok && res.type === "basic" && !res.redirected;
 }
 
+/* ============================== Fetch ====================================
+   Cross-origin traffic is never intercepted. This used to carry a CDN
+   allowlist (fonts.googleapis.com / fonts.gstatic.com / cdn.jsdelivr.net) so
+   an offline cold boot could still find its webfont and, transitionally,
+   supabase-js. Both dependencies are now vendored — the Iris faces live under
+   vendor/fonts/ (SHELL, above) and supabase-js under vendor/supabase/ — so the
+   allowlist described a path that no longer exists and has been removed rather
+   than left to rot. The only cross-origin traffic left is the Supabase API,
+   which must stay live-only: a cached POST response to the Terma function
+   would be worse than an error. */
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-
-  // Boot-relevant CDN files (fonts, optional supabase-js ESM graph):
-  // network-first, cache clean 200s so an offline cold boot still works.
-  // Never touch other cross-origin traffic (Supabase API stays live-only).
-  if (url.origin !== self.location.origin) {
-    if (!CDN_HOSTS.includes(url.hostname)) return;
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res && res.ok && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {}); }
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-    return;
-  }
+  if (url.origin !== self.location.origin) return;
 
   // Any same-origin request means the app is still busy — push the 3D pre-warm
   // further out so it can never compete with the boot burst. (Worker-initiated

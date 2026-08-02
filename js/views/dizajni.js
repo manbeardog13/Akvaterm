@@ -6,7 +6,7 @@
 // ============================================================================
 import { listDesigns, deleteDesign, listProducts } from "../db.js";
 import { swatchDataUrl } from "../texture.js";
-import { ensureStyles, tf, esc } from "./katalog.js";
+import { ensureStyles, pageHead, tf, esc } from "./katalog.js";
 
 const armTimers = new Set();
 
@@ -35,21 +35,19 @@ export async function render(container) {
 
   if (!rows.length) {
     container.innerHTML = `
-      <header style="margin:4px 0 12px"><h1 style="margin:0">${esc(tf("diz.title", "Moji dizajni"))}</h1></header>
-      <div class="akv-empty card">
+      ${pageHead(tf("diz.eyebrow", "Spremljeno"), tf("diz.title", "Moji dizajni"), "")}
+      <div class="akv-empty">
         <div class="ico" aria-hidden="true">🎨</div>
-        <h2>${esc(tf("diz.emptyTitle", "Još nema spremljenih dizajna"))}</h2>
-        <p class="muted">${esc(tf("diz.emptyBody", "Otvorite dizajner, odaberite prostoriju i pločice, pa spremite svoj prvi dizajn."))}</p>
-        <a class="btn btn-primary" href="#/dizajner" style="margin-top:10px">${esc(tf("diz.goDesigner", "Otvori dizajner"))}</a>
+        <h2 class="t-h2 akv-display-2">${esc(tf("diz.emptyTitle", "Još nema spremljenih dizajna"))}</h2>
+        <p class="t-body akv-lead">${esc(tf("diz.emptyBody", "Otvorite dizajner, odaberite prostoriju i pločice, pa spremite svoj prvi dizajn."))}</p>
+        <a class="akv-btn akv-btn-primary t-button" href="#/dizajner">${esc(tf("diz.goDesigner", "Otvori dizajner"))}</a>
       </div>`;
     return;
   }
 
   container.innerHTML = `
-    <header style="margin:4px 0 12px">
-      <h1 style="margin:0 0 2px">${esc(tf("diz.title", "Moji dizajni"))}</h1>
-      <p class="muted" style="margin:0">${rows.length} ${esc(tf("diz.countShort", "dizajna"))}</p>
-    </header>
+    ${pageHead(tf("diz.eyebrow", "Spremljeno"), tf("diz.title", "Moji dizajni"), "")}
+    <p class="t-meta akv-meta" style="margin:-12px 0 16px">${rows.length} ${esc(tf("diz.countShort", "dizajna"))}</p>
     <div id="dizList">
       ${rows.map((d) => {
         const assignments = d.assignments || {};
@@ -57,22 +55,22 @@ export async function render(container) {
         const swatches = usedIds.slice(0, 4).map((pid) => byId.get(pid)).filter(Boolean);
         const kindLabel = d.kind === "room3d" ? tf("diz.kind3d", "3D soba") : tf("diz.kindScene", "2D scena");
         return `
-        <section class="card akv-dcard" data-did="${esc(d.id)}">
+        <section class="akv-dcard" data-did="${esc(d.id)}">
           <div class="akv-dsw" aria-hidden="true">
             ${swatches.length
-              ? swatches.map((p) => `<img src="${swatchDataUrl(p, 64)}" alt="" width="36" height="36">`).join("")
-              : `<span style="font-size:28px">🎨</span>`}
+              ? swatches.map((p) => `<img src="${swatchDataUrl(p, 64)}" alt="" width="40" height="40">`).join("")
+              : `<span style="font-size:30px">🎨</span>`}
           </div>
           <div class="akv-dbody">
-            <div style="font-weight:700">${esc(d.name || tf("diz.unnamed", "Dizajn bez naziva"))}</div>
-            <div class="muted" style="font-size:12px">
-              <span class="chip">${esc(kindLabel)}</span>
-              ${esc(surfacesLabel(Object.keys(assignments).length))}${d.savedAt ? ` · ${esc(fmtDate(d.savedAt))}` : ""}
+            <div class="akv-dname">${esc(d.name || tf("diz.unnamed", "Dizajn bez naziva"))}</div>
+            <div class="akv-drow">
+              <span class="akv-kind">${esc(kindLabel)}</span>
+              <span class="t-meta akv-meta">${esc(surfacesLabel(Object.keys(assignments).length))}${d.savedAt ? ` · ${esc(fmtDate(d.savedAt))}` : ""}</span>
             </div>
           </div>
           <div class="akv-dactions">
-            <a class="btn btn-primary" href="${openHash(d)}">${esc(tf("diz.open", "Otvori"))}</a>
-            <button type="button" class="btn" data-del="${esc(d.id)}">${esc(tf("diz.delete", "Obriši"))}</button>
+            <a class="akv-btn akv-btn-primary t-button" href="${openHash(d)}">${esc(tf("diz.open", "Otvori"))}</a>
+            <button type="button" class="akv-btn t-button" data-del="${esc(d.id)}">${esc(tf("diz.delete", "Obriši"))}</button>
           </div>
         </section>`;
       }).join("")}
@@ -84,12 +82,14 @@ export async function render(container) {
     btn.addEventListener("click", async () => {
       if (btn.dataset.armed !== "1") {
         btn.dataset.armed = "1";
-        btn.classList.add("btn-danger");
+        // --brown-700 fill, white label: 7.50:1. The Iris palette has no red,
+        // so the destructive cue is the darkest warm ground, not a hue swap.
+        btn.classList.add("akv-btn-danger");
         btn.textContent = tf("diz.confirmDelete", "Potvrdi brisanje");
         const timer = setTimeout(() => {
           armTimers.delete(timer);
           btn.dataset.armed = "";
-          btn.classList.remove("btn-danger");
+          btn.classList.remove("akv-btn-danger");
           btn.textContent = tf("diz.delete", "Obriši");
         }, 2500);
         armTimers.add(timer);

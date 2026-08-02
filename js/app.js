@@ -9,6 +9,56 @@
 // branded splash back to index.html's bootstrap (window.akvHideSplash) so it
 // fades on its own schedule rather than being removed mid-animation.
 // Business rules live in domain.js; data access in db.js; chrome text in i18n.
+//
+// ---------------------------------------------------------------------------
+// Iris re-skin — what this file contributes to the liquid-glass chrome
+// ---------------------------------------------------------------------------
+// The top bar and the floating bottom tab bar are the app's TWO STANDING glass
+// surfaces; the performance budget allows 2–3 backdrop-filter surfaces at once,
+// so a modal (the QR share sheet, a bottom sheet) REPLACES a glass panel rather
+// than adding a third. Nothing else in the chrome is glass.
+//
+// Both bars follow the same structure, and it is not cosmetic:
+//
+//     <header class="topbar">            <- the FIXED/STICKY wrapper, TRANSPARENT
+//       <span class="topbar__surface">   <- ABSOLUTELY POSITIONED child, the glass
+//       <div  class="topbar__inner">     <- the content row, env() safe-area padding
+//
+// Safari 26 samples background-color + backdrop-filter off position:fixed
+// elements near the viewport edge in order to tint its own browser chrome. If
+// the fixed wrapper itself carries the glass, Safari samples the PANEL instead
+// of the page and the bar tints wrong. Keeping the wrapper transparent and
+// moving the glass onto an absolutely positioned child fixes it. Do not
+// "simplify" the surface span away.
+//
+// No colour literal appears in this file. The wordmark is plain
+// `.wordmark > .akva/.term` markup and css/styles.css decides that AKVA is
+// --teal-600 and TERM is --amber-600 in the display face.
+//
+// CSS CONTRACT — the class names this file emits, which css/styles.css must
+// style. Changing a name here without changing it there yields an unstyled bar,
+// so they are listed rather than left to be discovered:
+//
+//   .topbar                 transparent fixed/sticky wrapper
+//   .topbar__surface        absolute inset:0, the glass (background + blur)
+//   .topbar__inner          flex row, padding from env(safe-area-inset-left/right)
+//   .tabbar                 transparent fixed wrapper (the floating pill)
+//   .tabbar__surface        absolute inset:0, border-radius:inherit, the glass
+//   .tabbar__item           one tab; also on the "Više" button
+//   [aria-current="page"]   set alongside .active on the active tab
+//   .brand.wordmark > .akva / .term      the two-colour display wordmark
+//   .menu-pop .menu-item                 a row in the "Više" popover
+//   .menu-pop .menu-sep                  separator above the switch
+//   .menu-toggle / .menu-toggle-text / .menu-item-label / .menu-item-hint /
+//   .menu-switch > i                     the "Smanji prozirnost" switch
+//   html[data-transparency="reduced"]    solid-surface override (see below)
+//
+// TYPE HAZARD, measured from the font, not assumed: Anton's Croatian carons
+// (Č Š Ž) reach 1.100em, so any Anton heading needs line-height >= 1.05 and must
+// never sit in a clipped or overflow:hidden box. "AKVATERM" carries no
+// diacritic, but .topbar__inner must still not clip its children — a nav label
+// or a view heading landing in the same row would lose its caron. Figtree is
+// safe at any line-height.
 // ============================================================================
 
 import { t, LANG } from "./i18n.js";
@@ -44,6 +94,89 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
 // A dictionary miss must never leak a raw key into the UI or, worse, into an
 // aria-label where a screen reader would read it aloud.
 const T = (key, fb) => { const v = t(key); return v === key ? fb : v; };
+
+// ---- Transparency preference ("Smanji prozirnost") --------------------------
+// Every glass surface ships four automatic degradation paths in css/styles.css
+// (@supports not backdrop-filter, prefers-reduced-transparency, prefers-contrast
+// / forced-colors, prefers-reduced-motion). This fifth path is MANUAL, and it is
+// not redundant: **Safari never reports prefers-reduced-transparency**, and iOS
+// Safari is the bulk of this audience. Without a switch the entire iOS install
+// base has no way to turn the blur off — so the switch is an accessibility
+// requirement, not a preference panel nicety.
+//
+// State lives on <html> as data-transparency="reduced" and persists under
+// "akv:transparency". Three stored states, deliberately:
+//   "reduced" — user asked for solid surfaces
+//   "full"    — user explicitly asked to keep the glass
+//   (absent)  — AUTO: follow the OS. Never overrides a user who has chosen.
+// Auto tracks the media query live, so turning the OS setting on mid-session
+// takes effect without a reload.
+const TRANSPARENCY_KEY = "akv:transparency";
+const REDUCED = "reduced";
+const FULL = "full";
+const TRANSPARENCY_TOGGLE_ATTR = "data-akv-transparency";
+
+const reducedTransparencyMQ =
+  typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-transparency: reduce)")
+    : null;
+
+/** The explicitly stored choice, or null when the user has never chosen.
+ *  localStorage throws in Safari private mode / with storage blocked, so every
+ *  access is guarded: a blocked store degrades to "follow the OS", never to a
+ *  broken chrome. */
+function storedTransparency() {
+  try {
+    const v = localStorage.getItem(TRANSPARENCY_KEY);
+    return v === REDUCED || v === FULL ? v : null;
+  } catch { return null; }
+}
+
+function transparencyIsReduced() {
+  const stored = storedTransparency();
+  if (stored) return stored === REDUCED;
+  return !!reducedTransparencyMQ?.matches;
+}
+
+/** Write the state onto <html> and re-sync any mounted toggle.
+ *
+ *  All THREE states are expressed, not just the reduced one, because
+ *  css/styles.css distinguishes them:
+ *
+ *    data-transparency="reduced"  -> an unconditional solid-surface rule
+ *    data-transparency="full"     -> the OS reduced-transparency block is
+ *                                    written `html:not([data-transparency="full"])`,
+ *                                    so this attribute is the ONLY way a user
+ *                                    who wants the glass can override an OS
+ *                                    that asked for solid surfaces
+ *    (absent)                     -> auto; the media query decides alone
+ *
+ *  Writing only "reduced" (as this first did) silently dropped the explicit
+ *  "keep the glass" choice: the value was stored, the attribute was not, and
+ *  the stylesheet went on forcing solid surfaces.
+ */
+function applyTransparency() {
+  const html = document.documentElement;
+  const stored = storedTransparency();
+  const reduced = transparencyIsReduced();
+  if (stored) html.dataset.transparency = stored;          // explicit: reduced | full
+  else if (reduced) html.dataset.transparency = REDUCED;    // auto, OS asked for it
+  else delete html.dataset.transparency;                    // auto, nothing to say
+  document.querySelectorAll(`[${TRANSPARENCY_TOGGLE_ATTR}]`)
+    .forEach((el) => el.setAttribute("aria-checked", String(reduced)));
+  return reduced;
+}
+
+function setTransparencyReduced(reduced) {
+  try { localStorage.setItem(TRANSPARENCY_KEY, reduced ? REDUCED : FULL); } catch { /* storage blocked — the attribute below still applies for this session */ }
+  return applyTransparency();
+}
+
+applyTransparency();
+// Only auto-mode follows the OS; an explicit choice must survive an OS change.
+reducedTransparencyMQ?.addEventListener?.("change", () => {
+  if (!storedTransparency()) applyTransparency();
+});
 
 // ---- Routes (each view exports `async render(container, params)` + optional
 // `teardown()`); params is the array of regex capture groups. -----------------
@@ -88,26 +221,35 @@ const NAV = [
 ];
 
 // ---- App frame (built once) -------------------------------------------------
-// Wordmark colors ride on the contract tokens (--accent navy, --brand-red) so
-// the identity holds even before styles.css refines the classes.
+// The wordmark carries NO colour of its own: `.wordmark > .akva/.term` is the
+// same markup index.html's splash already uses, and css/styles.css is the one
+// place that decides AKVA is --teal-600, TERM is --amber-600 and both are set
+// in the display face. That is what lets a palette change be a one-file change.
+//
+// `.topbar__surface` / `.tabbar__surface` are the absolutely positioned glass
+// panes described in the file header — empty, aria-hidden, purely presentational.
 function mountFrame() {
   if (document.getElementById("main")) return;
-  const link = (n) =>
-    `<a href="#${n.route}" data-route="${n.route}"><span class="ic">${ICONS[n.icon]}</span><span class="lbl">${esc(T(n.key, n.fb))}</span></a>`;
+  const link = (n, cls) =>
+    `<a href="#${n.route}" data-route="${n.route}"${cls ? ` class="${cls}"` : ""}><span class="ic">${ICONS[n.icon]}</span><span class="lbl">${esc(T(n.key, n.fb))}</span></a>`;
   const moreLabel = esc(T("nav.vise", "Više"));
+  const moreBtn = (cls) =>
+    `<button type="button" class="${cls}" aria-haspopup="menu" aria-expanded="false"><span class="ic">${ICONS.vise}</span><span class="lbl">${moreLabel}</span></button>`;
   root.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="#/" aria-label="Akvaterm">
-        <span class="brand-akva" style="color:var(--accent, #00008C);font-style:italic;font-weight:700">AKVA</span><span class="brand-term" style="color:var(--brand-red, #d6252e);font-style:italic;font-weight:700">TERM</span>
-      </a>
-      <nav class="topbar-nav" aria-label="${esc(T("a11y.primaryNav", "Glavna navigacija"))}">${NAV.map(link).join("")}</nav>
-      <span class="spacer"></span>
-      <button type="button" class="btn btn-ghost more-btn" aria-haspopup="menu" aria-expanded="false"><span class="ic">${ICONS.vise}</span><span class="lbl">${moreLabel}</span></button>
+      <span class="topbar__surface" aria-hidden="true"></span>
+      <div class="topbar__inner">
+        <a class="brand wordmark" href="#/" aria-label="Akvaterm"><span class="akva">AKVA</span><span class="term">TERM</span></a>
+        <nav class="topbar-nav" aria-label="${esc(T("a11y.primaryNav", "Glavna navigacija"))}">${NAV.map((n) => link(n)).join("")}</nav>
+        <span class="spacer"></span>
+        ${moreBtn("btn btn-ghost more-btn")}
+      </div>
     </header>
     <main id="main"></main>
     <nav class="tabbar" aria-label="${esc(T("a11y.sections", "Odjeljci"))}">
-      ${NAV.map(link).join("")}
-      <button type="button" class="more-btn tab-more" aria-haspopup="menu" aria-expanded="false"><span class="ic">${ICONS.vise}</span><span class="lbl">${moreLabel}</span></button>
+      <span class="tabbar__surface" aria-hidden="true"></span>
+      ${NAV.map((n) => link(n, "tabbar__item")).join("")}
+      ${moreBtn("more-btn tab-more tabbar__item")}
     </nav>
     <div id="toasts" class="toasts" aria-live="polite"></div>`;
 }
@@ -125,13 +267,19 @@ function swapMain() {
   return fresh;
 }
 
+// `.active` drives the visual state; `aria-current="page"` is the part assistive
+// tech actually announces, and the glass tab bar's pressed-pill rule keys off it
+// too — so the two must be set together, never one or the other.
 function setActiveNav(path) {
   const seg = path.split("/")[1] || "";
   let base = "/" + seg;
   if (seg === "" || seg === "katalog" || seg === "proizvod") base = "/";
   const onMore = seg === "favoriti" || seg === "dizajni";
   document.querySelectorAll("[data-route]").forEach((a) => {
-    a.classList.toggle("active", !onMore && a.dataset.route === base);
+    const on = !onMore && a.dataset.route === base;
+    a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".more-btn").forEach((b) => b.classList.toggle("active", onMore));
 }
@@ -162,10 +310,16 @@ window.AKV = { toast };
 let moreCleanup = null;
 function closeMore() {
   const pop = document.getElementById("morePop");
-  if (!pop) return;
   document.querySelectorAll(".more-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
+  // Release the document-level listeners UNCONDITIONALLY — not only when the
+  // popover element is still there. Returning early on a missing #morePop (as
+  // this did) strands onDocClick with a closure over the detached popover, and
+  // a stranded onDocClick then closes the NEXT popover on its first click
+  // INSIDE it, because the element it tests containment against is the old one.
+  // Harmless while every menu row navigated away on click; the "Smanji
+  // prozirnost" switch is the first row that must survive being clicked.
   if (moreCleanup) { moreCleanup(); moreCleanup = null; }
-  pop.remove();
+  pop?.remove();
 }
 function openMore(anchor) {
   if (document.getElementById("morePop")) { closeMore(); return; }
@@ -174,10 +328,33 @@ function openMore(anchor) {
   pop.id = "morePop";
   pop.className = "card menu-pop";
   pop.setAttribute("role", "menu");
-  pop.style.cssText = "position:fixed;z-index:50;min-width:200px;padding:6px;box-shadow:var(--shadow-pop, 0 8px 24px rgba(0,0,0,.18))";
+  // Only the two declarations that are inseparable from the runtime coordinates
+  // computed below stay inline; everything cosmetic (width, padding, radius,
+  // elevation, the separator and switch) belongs to .menu-pop in styles.css.
+  // z-index 64 sits ABOVE the glass bars (60) — a menu anchored to the tab bar
+  // that paints under it is unusable — and below the sheet backdrop (70).
+  pop.style.position = "fixed";
+  pop.style.zIndex = "64";
   const item = (route, label) =>
-    `<a href="#${route}" role="menuitem" class="btn btn-ghost" style="justify-content:flex-start;width:100%">${label}</a>`;
-  pop.innerHTML = item("/favoriti", esc(T("nav.favoriti", "Favoriti"))) + item("/dizajni", esc(T("nav.dizajni", "Moji dizajni")));
+    `<a href="#${route}" role="menuitem" class="btn btn-ghost menu-item">${label}</a>`;
+  // role="menuitemcheckbox" + aria-checked is what makes a screen reader read
+  // this as a switch inside the menu rather than as a plain command. The hint
+  // line is not decoration: "Smanji prozirnost" alone does not tell a user what
+  // is about to change on screen.
+  const transparencyItem = `
+      <div class="menu-sep" role="separator"></div>
+      <button type="button" role="menuitemcheckbox" aria-checked="${transparencyIsReduced()}"
+              class="btn btn-ghost menu-item menu-toggle" ${TRANSPARENCY_TOGGLE_ATTR}>
+        <span class="menu-toggle-text">
+          <span class="menu-item-label">${esc(T("nav.transparency", "Smanji prozirnost"))}</span>
+          <span class="menu-item-hint">${esc(T("nav.transparencyHint", "Zamućeno staklo zamjenjuje puna boja — tekst je čitljiviji."))}</span>
+        </span>
+        <span class="menu-switch" aria-hidden="true"><i></i></span>
+      </button>`;
+  pop.innerHTML =
+    item("/favoriti", esc(T("nav.favoriti", "Favoriti"))) +
+    item("/dizajni", esc(T("nav.dizajni", "Moji dizajni"))) +
+    transparencyItem;
   document.body.appendChild(pop);
 
   // Position near the pressed button: above a bottom-tab anchor, below a
@@ -203,7 +380,18 @@ function openMore(anchor) {
     window.removeEventListener("hashchange", onHash);
     document.removeEventListener("keydown", onKey);
   };
-  pop.addEventListener("click", (e) => { if (e.target.closest("a[role=menuitem]")) closeMore(); });
+  pop.addEventListener("click", (e) => {
+    if (e.target.closest("a[role=menuitem]")) { closeMore(); return; }
+    const toggle = e.target.closest?.(`[${TRANSPARENCY_TOGGLE_ATTR}]`);
+    if (!toggle) return;
+    // Deliberately does NOT close the menu: the whole point of the switch is
+    // that the two bars behind the popover change under the user's finger, and
+    // a menu that vanishes on tap hides the very thing being demonstrated.
+    const reduced = setTransparencyReduced(toggle.getAttribute("aria-checked") !== "true");
+    toast(reduced
+      ? T("nav.transparencyOn", "Prozirnost je smanjena.")
+      : T("nav.transparencyOff", "Prozirnost je uključena."));
+  });
 }
 document.addEventListener("click", (e) => {
   const btn = e.target.closest?.(".more-btn");

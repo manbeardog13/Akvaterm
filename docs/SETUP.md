@@ -23,9 +23,15 @@ chat). Do the steps below when you want the live advisor.
 > broken — it is not built. Share a design across devices with the **QR / share
 > link** instead; the link carries the whole design.
 
-You'll do five things: **(A)** create and seed the database, **(B)** get a
+You'll do six things: **(A)** create and seed the database, **(B)** get a
 Gemini key (read the key warning — it matters), **(C)** deploy the Terma
-function, **(D)** connect the app, **(E)** run it.
+function, **(D)** connect the app, **(E)** run it, **(F)** deploy it.
+
+> **Nothing here installs fonts, 3D libraries or 3D models.** They are already
+> in the repo under `/vendor/` and are served from your own origin. The app
+> makes **no** request to any third-party host at runtime — no
+> `fonts.googleapis.com`, no `cdn.jsdelivr.net`. The only outbound call is to
+> your Supabase project, and only once step D is filled in.
 
 ---
 
@@ -234,6 +240,15 @@ refresh — the same workflow the ASC reference project uses. Python's
 
 Smoke-test checklist:
 
+0. **Type and identity.** The header wordmark reads AKVA in teal (`--accent`, i.e. `--teal-700`)
+   and TERM in burnt amber (`--brand-warm`, i.e. `--amber-ink`) — the exact hexes live once in
+   the `:root` block of `css/styles.css` and nowhere else. Headings are set in Anton (a heavy
+   condensed face) and body text in Figtree.
+   If headings look like Arial Narrow, `vendor/fonts/fonts.css` is not linked from `index.html`,
+   or the `woff2` files did not deploy. Then open a Croatian heading — "3D SOBA", "SAVJETNIK",
+   anything with `Č Š Ž Đ` — and confirm the diacritics are drawn and **not clipped at the top**.
+   Tofu boxes mean the `latin-ext` files are missing; a shaved caron means something upstream
+   gained an `overflow: hidden`.
 1. **Katalog** loads with the demo products (works even with empty config).
 2. **Savjetnik** — ask "Koje pločice imate do 30 €/m²?" — Terma should stream
    an answer and show product cards. The cards come from the `search_products`
@@ -247,11 +262,42 @@ Smoke-test checklist:
 5. **Offline check** — set `js/config.js` back to empty strings and reload.
    Savjetnik must still render: explainer, six FAQ chips, and an Akvaterm
    contact card. Catalog, designer and 3D room must all still work.
+6. **3D room** — open **3D soba**, add a fixture, and drag it across the floor.
+   On a touch screen this is deliberately two steps: one tap selects, the next
+   gesture drags, so a vertical swipe that starts on the room still scrolls the
+   page. `R` rotates the selection; fixtures snap to a wall near it and cannot
+   leave the room.
 
-For a public deployment, any static host works (GitHub Pages pattern inherited
-from ASC): serve the repo root, update `appUrl` in `config.js`, add that origin
-to `ALLOWED_ORIGINS`, and keep the Supabase values as they are — the anon key is
+---
+
+## F. Deploying
+
+Any static host works (the GitHub Pages pattern inherited from ASC): serve the
+repo root, update `appUrl` in `config.js`, add that origin to
+`ALLOWED_ORIGINS`, and keep the Supabase values as they are — the anon key is
 designed to be public.
+
+Four things about this repo that a deploy must get right:
+
+1. **Upload `/vendor/` whole.** Nothing is fetched from a CDN at runtime — not
+   fonts, not three.js, not supabase-js. A host that skips binary files, or a
+   `.gitignore`-style filter on `*.woff2` / `*.glb`, produces an app that boots
+   and then silently loses its typeface or its 3D fixtures.
+2. **The two `vendor/fonts/OFL-*.txt` files must ship.** The SIL Open Font
+   License permits bundling and redistribution — including commercially — on
+   the condition that the licence text travels with the fonts. Deleting those
+   two files to save 9 KB breaks the licence. `vendor/models/` is CC0, so its
+   `PROVENANCE.md` is a courtesy record rather than an obligation, but keep it:
+   it is where every measured bounding box and scale vector lives.
+3. **Bump the cache version on every ship.** `APP_V` in `js/app.js` and
+   `FALLBACK_VERSION` in `service-worker.js` must move together, or returning
+   visitors keep the old shell. The worker logs a console warning on drift.
+4. **First load is bigger than it looks, on purpose.** The precached shell is
+   ~600 KB including the four webfont files. three.js (2.2 MB) and the 3D model
+   library (804 KB) are *not* in it: they are fetched in the background once the
+   network goes quiet, in that order, and skipped entirely for visitors on
+   `Save-Data` or a 2G-class connection. Those visitors still get the 3D room —
+   they just pay for it when they open it.
 
 ---
 
@@ -288,6 +334,20 @@ designed to be public.
   September 2026 and you set the project up with a standard key despite step B:
   that's the cutoff. Create a service-account auth key and re-run
   `supabase secrets set GEMINI_API_KEY=...`.
+- **Headings render in a plain narrow sans, or Croatian letters show as boxes**
+  — the vendored fonts are not reaching the browser. Check that
+  `vendor/fonts/fonts.css` is linked from `index.html` and that all four
+  `woff2` files return 200. Boxes specifically (tofu) mean the two
+  `*-latin-ext-*.woff2` files are missing: `č ć ž š đ` live only in those.
+- **A caron looks shaved off the top of a heading** — some ancestor gained an
+  `overflow: hidden`. Anton's Croatian diacritics are taller than the font's
+  own declared ascender, so their ink sits outside the line box by design; no
+  line-height can pull it back in. Remove the clipping, don't shrink the type.
+- **The 3D room shows pale blue blocks instead of baths and cabinets** — the
+  `.glb` files under `vendor/models/` did not deploy. Those blocks are the
+  deliberate fallback (`--sky-200`): correctly sized, still draggable and
+  rotatable, just not modelled. Nothing is logged, because a missing model is
+  not an error path the user can act on.
 - **Nothing saves across devices** — correct, and not a misconfiguration. This
   version has no sign-in, favorites/designs are owner-only under RLS, and so
   the mirrored writes in `js/db.js` are filtered to zero rows (you'll see a

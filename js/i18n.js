@@ -40,6 +40,17 @@ const DICT = {
   "nav.vise": "Više",
   "nav.pocetna": "Početna",
 
+  /* ---- "Smanji prozirnost" switch in the "Više" menu (js/app.js openMore) ----
+     This is the MANUAL degradation path for the liquid-glass chrome. Safari
+     never reports prefers-reduced-transparency and iOS is the bulk of this
+     audience, so without this switch a large share of users cannot turn the
+     blur off at all. The hint line is required, not optional: the label alone
+     does not tell anyone what is about to change on screen. */
+  "nav.transparency": "Smanji prozirnost",
+  "nav.transparencyHint": "Zamućeno staklo zamjenjuje puna boja — tekst je čitljiviji.",
+  "nav.transparencyOn": "Prozirnost je smanjena.",
+  "nav.transparencyOff": "Prozirnost je uključena.",
+
   /* ---- Accessible names for the app chrome (js/app.js mountFrame) ----
      These are read aloud by screen readers, so a missing key here is not a
      cosmetic bug — it makes assistive tech announce "a11y.primaryNav". */
@@ -166,17 +177,99 @@ const DICT = {
   "soba3d.hint": "Povucite za okretanje, uštipnite za zumiranje.",
   "soba3d.unsupported": "Vaš preglednik ne podržava 3D prikaz.",
 
-  /* 3D room surfaces + fixtures (ids from js/views/soba3d.js tables) */
+  /* 3D room surfaces (ids from js/views/soba3d.js tables) */
   "soba3d.surface.floor": "Pod",
   "soba3d.surface.wallN": "Sjeverni zid",
   "soba3d.surface.wallE": "Istočni zid",
   "soba3d.surface.wallS": "Južni zid",
   "soba3d.surface.wallW": "Zapadni zid",
+
+  /* ---- Fixture placement controls (3D room) ----
+     Croatian imperative, formal register, matching the rest of the app. */
+  "soba3d.place": "Postavi",
+  "soba3d.move": "Pomakni",
+  "soba3d.rotate": "Zakreni",
+  "soba3d.rotateLeft": "Zakreni ulijevo",
+  "soba3d.rotateRight": "Zakreni udesno",
+  "soba3d.rotateStep": "Zakreni za 90°",
+  "soba3d.reset": "Vrati na početno",
+  "soba3d.resetFixture": "Vrati opremu na početno mjesto",
+  "soba3d.resetAll": "Vrati cijeli raspored",
+  "soba3d.resetConfirm": "Vratiti raspored opreme na početno stanje?",
+  "soba3d.resetDone": "Raspored je vraćen na početno.",
+  "soba3d.moveHint": "Povucite opremu po podu da je premjestite.",
+  "soba3d.rotateHint": "Zakreće se u koracima od 90°.",
+  "soba3d.moved": "Oprema je premještena.",
+  "soba3d.rotated": "Oprema je zakrenuta.",
+  "soba3d.selected": "Odabrano: {name}",
+  "soba3d.deselect": "Poništi odabir",
+  "soba3d.duplicate": "Dupliciraj",
+  "soba3d.snapWall": "Priljubi uza zid",
+  "soba3d.snapped": "Priljubljeno uza zid.",
+  "soba3d.addFixture": "Dodaj opremu",
+  "soba3d.removeFixture": "Ukloni opremu",
+  "soba3d.position": "Položaj",
+  "soba3d.rotation": "Zakret",
+  "soba3d.noFixtures": "Još niste dodali opremu.",
+  "soba3d.fixtureLoading": "Učitavanje modela…",
+  "soba3d.fixtureFailed": "Model se nije učitao — prikazujemo pojednostavljeni oblik.",
+
+  /* ---- Fixture model names ----
+     ONE key family, `soba3d.fixture.<id>`, holding EVERY id spelling a caller
+     might use: the original Croatian ids from js/views/soba3d.js, their
+     kebab-case twins, and the vendored GLB basenames under assets/fixtures/.
+     This mirrors the scene precedent above ("scene.dnevniBoravak" and
+     "scene.dnevni-boravak" both resolve) and exists so neither a fixture-type
+     lookup nor a model-file-derived lookup can fall through to the raw key.
+     Do not split it into a second `fixture.*` family — grep before adding. */
+  "soba3d.fixture.wc": "WC školjka",
+  "soba3d.fixture.toilet": "WC školjka",
+  "soba3d.fixture.toilet-square": "WC školjka (kvadratna)",
+  "soba3d.fixture.toilet-modern": "WC školjka (moderna)",
   "soba3d.fixture.kada": "Kada",
-  "soba3d.fixture.wc": "WC",
+  "soba3d.fixture.bathtub": "Kada",
+  "soba3d.fixture.bathtub-freestanding": "Samostojeća kada",
   "soba3d.fixture.umivaonik": "Umivaonik s ormarićem",
+  "soba3d.fixture.washbasin-vanity": "Umivaonik s ormarićem",
+  "soba3d.fixture.washbasin-vanity-wall": "Viseći umivaonik s ormarićem",
+  "soba3d.fixture.washbasin-pedestal": "Umivaonik na stupu",
+  "soba3d.fixture.tus": "Tuš kabina",
+  "soba3d.fixture.tus-kabina": "Tuš kabina",
+  "soba3d.fixture.tusKabina": "Tuš kabina",
+  "soba3d.fixture.shower-enclosure": "Tuš kabina",
   "soba3d.fixture.radijator": "Radijator",
-  "soba3d.fixture.klima": "Klima",
+  "soba3d.fixture.radiator": "Radijator",
+  "soba3d.fixture.klima": "Klima uređaj",
+  "soba3d.fixture.ac": "Klima uređaj",
+  "soba3d.fixture.ac-outdoor-unit": "Klima uređaj — vanjska jedinica",
+  "soba3d.fixture.kuhinjski-element": "Kuhinjski element",
+  "soba3d.fixture.kuhinjskiElement": "Kuhinjski element",
+  "soba3d.fixture.kitchen-cabinet-base": "Kuhinjski element",
+  "soba3d.fixture.kitchen-cabinet-drawer": "Kuhinjski element s ladicama",
+  "soba3d.fixture.kitchen-cabinet-corner": "Kutni kuhinjski element",
+  "soba3d.fixture.kitchen-cabinet-upper": "Gornji kuhinjski element",
+  "soba3d.fixture.sudoper": "Sudoper",
+  "soba3d.fixture.kitchen-sink-unit": "Sudoper",
+  "soba3d.fixture.stednjak": "Štednjak",
+  "soba3d.fixture.kitchen-stove": "Štednjak",
+  "soba3d.fixture.hladnjak": "Hladnjak",
+  "soba3d.fixture.kitchen-fridge": "Hladnjak",
+  "soba3d.fixture.napa": "Napa",
+  "soba3d.fixture.kitchen-hood": "Napa",
+  "soba3d.fixture.ogledalo": "Ogledalo",
+  "soba3d.fixture.bathroom-mirror": "Ogledalo",
+  "soba3d.fixture.ormaric": "Kupaonski ormarić",
+  "soba3d.fixture.bathroom-cabinet-tall": "Visoki kupaonski ormarić",
+  "soba3d.fixture.drzac-rucnika": "Držač ručnika",
+  "soba3d.fixture.drzacRucnika": "Držač ručnika",
+  "soba3d.fixture.towel-rail": "Držač ručnika",
+  "soba3d.fixture.vrata": "Vrata",
+  "soba3d.fixture.door": "Vrata",
+  "soba3d.fixture.door-leaf": "Vrata s krilom",
+  "soba3d.fixture.prozor": "Prozor",
+  "soba3d.fixture.window-large": "Prozor (veliki)",
+  "soba3d.fixture.window-small": "Prozor (mali)",
+  "soba3d.fixture.unknown": "Oprema",
 
   /* ---- Savjetnik (Terma chat) ---- */
   "chat.title": "Savjetnik",
@@ -278,6 +371,14 @@ const DICT = {
   "diz.bLabel": "Trenutna verzija (B)",
   "diz.setA": "Zapamti ovu verziju (A)",
   "diz.snapSet": "Verzija A zapamćena",
+  /* Placement controls, mirroring the 3D room's soba3d.* set so the two
+     designers speak the same Croatian for the same gesture. */
+  "diz.move": "Pomakni",
+  "diz.rotate": "Zakreni",
+  "diz.reset": "Vrati na početno",
+  "diz.resetSurface": "Vrati površinu na početno",
+  "diz.resetConfirm": "Vratiti ovaj dizajn na početno stanje?",
+  "diz.resetDone": "Vraćeno na početno.",
 
   /* ---- Moji dizajni view (js/views/dizajni.js) ---- */
   "diz.emptyTitle": "Još nema spremljenih dizajna",
@@ -333,6 +434,21 @@ const DICT = {
   "sv.stagingDisclaimer": "AI impresija je ilustrativna vizualizacija, ne točan prikaz proizvoda ni ponuda.",
   "sv.stagingFail": "Generiranje impresije nije uspjelo. Pokušajte ponovno kasnije.",
   "sv.stagingOff": "AI impresija nije uključena na ovom poslužitelju (zahtijeva plaćenu razinu Gemini API-ja).",
+
+  /* ---- QR share sheet (js/qrshare.js) ----
+     These shipped as inline fallbacks only, which meant the panel's copy was
+     the one part of the UI a future EN dictionary could not reach. The literals
+     in qrshare.js stay as the broken-deployment safety net; these entries are
+     now what actually renders. */
+  "qr.title": "Podijeli dizajn",
+  "qr.lead": "Skenirajte kod mobitelom da nastavite na drugom uređaju.",
+  "qr.copy": "Kopiraj poveznicu",
+  "qr.copied": "Poveznica kopirana",
+  "qr.copyManual": "Označili smo poveznicu — kopirajte je s Ctrl+C.",
+  "qr.copyManualShort": "Kopirajte označeni tekst",
+  "qr.canvasAlt": "QR kod poveznice za dijeljenje",
+  "qr.urlLabel": "Poveznica",
+  "qr.tooLong": "Poveznica je predugačka za QR kod. Kopirajte je i pošaljite porukom.",
 
   /* ---- Common ---- */
   "common.back": "Natrag",

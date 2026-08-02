@@ -18,6 +18,9 @@
      style="" attributes by design. That is exactly why colour values coming
      from the Terma vision model must be validated as #rrggbb at the boundary —
      see js/terma.js — because CSS is the one context esc() does not neutralise.
+     It no longer allows fonts.googleapis.com, and font-src is now 'self' alone:
+     the brand faces (Anton + Figtree) are vendored under /vendor/fonts/ and
+     loaded by css/styles.css, so the app makes no font request off-origin.
      img-src 'self' data: covers the procedural swatches (canvas.toDataURL) and
      the base64 photo previews, and blocks the url() beacon a CSS injection
      would otherwise fire.
@@ -32,25 +35,38 @@
   object-src 'none';
   form-action 'none';
   script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-6G61/LDa3KMcuKr7MoxiJUAhQKSNzEtJUw3h9otBbms=' https://cdn.jsdelivr.net;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  font-src 'self' https://fonts.gstatic.com;
+  style-src 'self' 'unsafe-inline';
+  font-src 'self';
   img-src 'self' data:;
   connect-src 'self' https://*.supabase.co;
   worker-src 'self';
   manifest-src 'self'
 ">
 
+<!-- viewport-fit=cover is what lets the glass bars run under the iOS notch and
+     home indicator; every fixed surface pays for it with env(safe-area-inset-*). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Akvaterm — Katalog i dizajner</title>
 <meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
-<meta name="theme-color" content="#00008C">
+<!-- #F4F8F9 is the Iris glass tint hsl(187 44% 97%) composited at the shipped
+     --glass-alpha-text of .78 over --paper #F2F2F2 — i.e. exactly what the top
+     bar paints when the page behind it is at rest. Matching it here stops the
+     browser chrome from stepping out of the app on scroll.
+     (manifest.webmanifest still carries the retired navy — see handoff.) -->
+<meta name="theme-color" content="#F4F8F9">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 
-<!-- Open Sans (brand type) — system-ui fallback is declared in css/styles.css -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,700;1,800&display=swap">
+<!-- Brand type is VENDORED: Anton (display) + Figtree (text), SIL OFL 1.1,
+     under /vendor/fonts/ and pulled in by the @import at the top of
+     css/styles.css. There is no runtime CDN — the retired Open Sans <link> to
+     fonts.googleapis.com is gone, and the CSP above no longer permits it. -->
+
+<!-- iOS 26 samples the html/body background colour to tint its own chrome, and
+     a root with no background makes it sample whatever paints behind. Declared
+     here as well as in css/styles.css so the value exists even if the
+     stylesheet is slow or fails; both say --paper #F2F2F2. -->
+<style>html,body{background:#F2F2F2}html{color-scheme:light}</style>
 
 <link rel="stylesheet" href="css/styles.css">
 
@@ -69,7 +85,14 @@
 
 <!-- Branded splash — visible on first paint (styles.css is render-blocking).
      The inline script below owns its dismissal; js/app.js asks for it once the
-     first view has painted and never removes this element itself. -->
+     first view has painted and never removes this element itself.
+
+     The wordmark is the identity in four syllables: AKVA in teal (--accent,
+     the sampled iris darkened to 5.17:1 on --paper) and TERM in amber
+     (--brand-warm, 5.23:1) — water and heat, which is what the company name
+     already says. Set in Anton; .sp-mark carries line-height 1.1 and sits in
+     no clipped box, because Anton's Croatian carons reach 1.100em.
+     The rule beneath it sweeps teal -> amber. -->
 <div id="splash" aria-hidden="true">
   <div class="sp-core">
     <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>

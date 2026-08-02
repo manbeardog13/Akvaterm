@@ -4,7 +4,7 @@
 // Empty state points back to the catalog.
 // ============================================================================
 import { listProducts, listFavorites } from "../db.js";
-import { ensureStyles, productCard, wireFavButtons, tf, esc } from "./katalog.js";
+import { ensureStyles, productCard, wireFavButtons, pageHead, tf, esc } from "./katalog.js";
 
 export async function render(container) {
   ensureStyles();
@@ -14,21 +14,19 @@ export async function render(container) {
 
   if (!rows.length) {
     container.innerHTML = `
-      <header style="margin:4px 0 12px"><h1 style="margin:0">${esc(tf("fav.title", "Favoriti"))}</h1></header>
-      <div class="akv-empty card">
+      ${pageHead(tf("fav.eyebrow", "Vaš izbor"), tf("fav.title", "Favoriti"), "")}
+      <div class="akv-empty">
         <div class="ico" aria-hidden="true">♡</div>
-        <h2>${esc(tf("fav.emptyTitle", "Još nemate favorita"))}</h2>
-        <p class="muted">${esc(tf("fav.emptyBody", "Dodirnite ♡ na proizvodu koji vam se sviđa i pronaći ćete ga ovdje."))}</p>
-        <a class="btn btn-primary" href="#/" style="margin-top:10px">${esc(tf("fav.goCatalog", "U katalog"))}</a>
+        <h2 class="t-h2 akv-display-2">${esc(tf("fav.emptyTitle", "Još nemate favorita"))}</h2>
+        <p class="t-body akv-lead">${esc(tf("fav.emptyBody", "Dodirnite ♡ na proizvodu koji vam se sviđa i pronaći ćete ga ovdje."))}</p>
+        <a class="akv-btn akv-btn-primary t-button" href="#/">${esc(tf("fav.goCatalog", "U katalog"))}</a>
       </div>`;
     return;
   }
 
   container.innerHTML = `
-    <header style="margin:4px 0 12px">
-      <h1 style="margin:0 0 2px">${esc(tf("fav.title", "Favoriti"))}</h1>
-      <p class="muted" style="margin:0">${rows.length} ${esc(tf("kat.productsShort", "proizvoda"))}</p>
-    </header>
+    ${pageHead(tf("fav.eyebrow", "Vaš izbor"), tf("fav.title", "Favoriti"), "")}
+    <p class="t-meta akv-meta" id="favCount" style="margin:-12px 0 16px">${rows.length} ${esc(tf("kat.productsShort", "proizvoda"))}</p>
     <div class="akv-grid" id="favGrid">${rows.map((p) => productCard(p, favSet)).join("")}</div>`;
 
   wireFavButtons(container.querySelector("#favGrid"), favSet, (id, on) => {
@@ -37,7 +35,7 @@ export async function render(container) {
       const left = container.querySelectorAll("#favGrid [data-pid]").length;
       if (!left) render(container);
       else {
-        const count = container.querySelector("header .muted");
+        const count = container.querySelector("#favCount");
         if (count) count.textContent = `${left} ${tf("kat.productsShort", "proizvoda")}`;
       }
     }

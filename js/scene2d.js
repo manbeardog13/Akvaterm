@@ -11,6 +11,17 @@
 // design-space coordinates (the view converts client px -> design space).
 // Pattern cells and tiled source canvases are cached so a re-render after a
 // control change stays well under the 100ms budget.
+//
+// Per-surface laying options (assignment fields, both optional and both
+// defaulting to "no change", so an old draft or share link still loads):
+//   rotationDeg 0 | 90 — the repeat CELL is rotated, not the drawn quad. A
+//     90-degree rotation of a periodic tiling is itself a periodic tiling whose
+//     repeat unit is the rotated cell on the swapped pitch, so the seam maths
+//     stay exact; the alternative (rotating the fill) would break the physical
+//     scale mapping cellSizeMm -> realSizeM.
+//   offsetPct 0..1 — laying offset: a phase shift of the pattern origin along
+//     the surface's u axis, in fractions of one cell. It moves where the cut
+//     tiles fall at the edges, which is what a tiler actually decides on site.
 // ============================================================================
 import { buildPatternCell } from "./texture.js";
 import { GROUT_COLORS } from "./domain.js";
@@ -131,9 +142,10 @@ export function subQuad(quad, u0, v0, u1, v1) {
 /**
  * Paint a repeatable pattern cell into a perspective quad at physical scale:
  * the cell covers cellSizeMm of real surface, the quad covers realSizeM.
+ * `offsetPct` (0..1, optional) phase-shifts the pattern origin along u.
  */
-export function drawTexturedQuad(ctx, quad, cellCanvas, cellSizeMm, realSizeM) {
-  const src = tiledSource(cellCanvas, cellSizeMm, realSizeM);
+export function drawTexturedQuad(ctx, quad, cellCanvas, cellSizeMm, realSizeM, offsetPct) {
+  const src = tiledSource(cellCanvas, cellSizeMm, realSizeM, offsetPct);
   if (src) warpImageToQuad(ctx, src, quad, MESH_N);
 }
 
@@ -173,7 +185,38 @@ export function warpImageToQuad(ctx, img, quad, n = MESH_N) {
 // Internals
 // ---------------------------------------------------------------------------
 
-/** texFor(surfaceId) -> {canvas, cellSizeMm} | null, built per render. */
+/** 0 or 90, anything else (undefined, "90", 45) normalises to one of those. */
+const normRotation = (deg) => (Number(deg) === 90 ? 90 : 0);
+/** Laying offset as a fraction of one cell, clamped into [0,1). */
+function normOffset(pct) {
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return (n % 1 + 1) % 1;
+}
+
+/**
+ * Rotate a repeat cell a quarter turn. The rotated raster is itself a valid
+ * repeat unit of the rotated tiling, so cellSizeMm simply swaps axes.
+ * Returns the original cell unchanged if a 2D context is unavailable.
+ */
+function rotateCell90(cell) {
+  const src = cell.canvas;
+  const c = document.createElement("canvas");
+  c.width = src.height;
+  c.height = src.width;
+  const g = c.getContext("2d");
+  if (!g) return cell;
+  g.translate(c.width, 0);
+  g.rotate(Math.PI / 2);
+  g.drawImage(src, 0, 0);
+  return { canvas: c, cellSizeMm: [cell.cellSizeMm[1], cell.cellSizeMm[0]] };
+}
+
+/**
+ * texFor(surfaceId) -> {canvas, cellSizeMm, offsetPct} | null, built per render.
+ * The cache key carries the rotation, so each orientation is its own entry and
+ * flipping back and forth costs nothing after the first paint.
+ */
 function makeTexFor(assignments, products) {
   return (surfaceId) => {
     const a = assignments[surfaceId];
@@ -182,9 +225,11 @@ function makeTexFor(assignments, products) {
     if (!product) return null;
     const groutColorHex =
       (GROUT_COLORS.find((g) => g.id === a.groutColorId) || GROUT_COLORS[0] || { hex: "#e8e6e1" }).hex;
-    const key = [product.id, a.pattern, groutColorHex, a.groutWidthMm].join("|");
+    const rotationDeg = normRotation(a.rotationDeg);
+    const offsetPct = normOffset(a.offsetPct);
+    const key = [product.id, a.pattern, groutColorHex, a.groutWidthMm, rotationDeg].join("|");
     const hit = cellCache.get(key);
-    if (hit) return hit.cell;
+    if (hit) return { canvas: hit.cell.canvas, cellSizeMm: hit.cell.cellSizeMm, offsetPct };
     let cell;
     try {
       cell = buildPatternCell(product, {
@@ -196,20 +241,22 @@ function makeTexFor(assignments, products) {
     } catch (err) {
       return null; // texture pipeline unavailable -> scene falls back to flat fill
     }
-    if (!cell || !cell.canvas) return null;
+    if (!cell || !cell.canvas || !cell.canvas.width || !cell.canvas.height) return null;
+    if (rotationDeg === 90) cell = rotateCell90(cell);
     const record = { key, cell, bytes: 0 };
     cellCache.set(key, record);
     cellRecord.set(cell.canvas, record);
     bill(cell.canvas, rasterBytes(cell.canvas));
-    return cell;
+    return { canvas: cell.canvas, cellSizeMm: cell.cellSizeMm, offsetPct };
   };
 }
 
 /** Repeat a pattern cell across a canvas representing realSizeM meters. */
-function tiledSource(cellCanvas, cellSizeMm, realSizeM) {
+function tiledSource(cellCanvas, cellSizeMm, realSizeM, offsetPct) {
   if (!cellCanvas || !cellCanvas.width || !cellCanvas.height) return null;
   const [rw, rh] = realSizeM;
-  const key = rw.toFixed(3) + "x" + rh.toFixed(3);
+  const off = normOffset(offsetPct);
+  const key = rw.toFixed(3) + "x" + rh.toFixed(3) + "@" + off.toFixed(3);
   let perCell = tiledCache.get(cellCanvas);
   if (perCell && perCell.has(key)) return perCell.get(key);
 
@@ -224,6 +271,10 @@ function tiledSource(cellCanvas, cellSizeMm, realSizeM) {
   const m = new DOMMatrix();
   m.a = cellPxW / cellCanvas.width;
   m.d = cellPxH / cellCanvas.height;
+  // Laying offset: shift the pattern origin along u by a fraction of a cell.
+  // The pattern still repeats, so the surface stays seamless — only the phase,
+  // and therefore where the cut tiles land at the edges, changes.
+  m.e = off * cellPxW;
   pat.setTransform(m);
   g.fillStyle = pat;
   g.fillRect(0, 0, c.width, c.height);

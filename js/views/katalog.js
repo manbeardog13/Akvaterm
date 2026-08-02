@@ -77,68 +77,497 @@ const COLOR_LABELS = { bijela: "Bijela", bez: "Bež", siva: "Siva", antracit: "A
 const COLOR_ORDER = ["bijela", "bez", "siva", "antracit", "kadulja", "terakota", "smeda", "plava"];
 
 // ---- shared styles ------------------------------------------------------------
+// The catalogue surface in the "Iris" system (docs/DESIGN_SYSTEM.md). Every
+// colour below is either a sampled palette token or a shade DERIVED from one and
+// verified numerically — nothing here is eyeballed.
+//
+// -------- CONTRAST LEDGER (WCAG 2.1, sRGB source-over compositing) -----------
+// Every ratio below was computed against the values css/styles.css actually
+// ships, not against the fallbacks in this file. The composited surfaces the
+// text lands on:
+//   chip glass  --glass-bg-text (hsl(187 44% 97%) @ .62) over --paper   #F3F7F8
+//               ... same tint over --sky-200, the darkest ambient wash  #E0EDF8
+//   rail glass  same tint over a PURE BLACK tile — the true worst case  #979B9C
+//   card frame  --glass-bg-deco (@ .30) over --paper, ornament only     #F3F4F5
+//   washes      keramika #E1DEDF · sanitarije #D7E4F2 · armature #D3E6E9
+//               klima #D2E6EB · grijanje #F1E4D5
+// All 42 pairs clear 4.5:1 — nothing here leans on the 3:1 large-text
+// allowance. The tight ones (everything else is 5.7:1 or better):
+//   rail label/chips   --ink        on rail over a black tile      4.64:1
+//   chip count/empty   --mauve-600  on chip glass over --sky-200   4.81:1
+//   chip "Očisti"      --teal-700   on chip glass over --sky-200   4.86:1
+//   resume eyebrow     --amber-500  on --brown-800                 4.83:1
+//   eyebrows/counts    --mauve-600  on --paper                     5.12:1
+//   back link          --teal-700   on --paper                     5.17:1
+//   card meta / price / fav   --mauve-600 / --teal-700 / --amber-ink on
+//                             --surface        5.73 / 5.78 / 5.86:1
+//   category tiles     --ink        on the five washes        9.74-10.41:1
+//   resume title/sub/CTA  #FFF / --sky-200 / --ink   10.06 / 6.87 / 6.24:1
+//   demo banner, kind badge  --ink on --sky-200               8.89:1
+//   delete armed       #FFF         on --danger                    6.10:1
+// Two consequences of the arithmetic, kept as rules below:
+//   * --teal-700, --mauve-600 and --amber-ink all land between 3.99 and 4.28:1
+//     on the category-tile washes, so a WASH CARRIES --ink ONLY; hierarchy on a
+//     wash comes from size and tracking, never from colour.
+//   * the glass research's 0.505 alpha floor was solved for ink #14181C. Iris
+//     ink is #313131, whose floor is 0.600 — 0.58 would give only 4.28:1.
+//     css/styles.css reached the same conclusion independently and ships 0.62,
+//     which is what every text-bearing glass surface here uses. Small text on
+//     low-alpha glass is never allowed: the product card is decorative glass at
+//     alpha .30 and its text sits on an OPAQUE --surface scrim.
+//   * the chips are the one place a muted tier sits on glass, which the
+//     foundation sheet forbids on .glass. It is sound here because the backdrop
+//     is BOUNDED — a chip only ever floats over the page ground, never over
+//     arbitrary content — so the worst case is a real #E0EDF8, not black.
+//
+// -------- GLASS BUDGET -------------------------------------------------------
+// .topbar + .tabbar are the standing pair of backdrop-filter surfaces. These
+// four views add exactly ONE more, and only on the product page: the pattern
+// rail floating over the tile preview (the canonical "navigation layer over
+// content" placement). Product cards, category tiles and filter chips are
+// TRANSPARENT glass — translucent tint + rim, no backdrop-filter — because a
+// scrolling grid cannot be N blur surfaces; css/styles.css reasons the same way
+// where it keeps .card opaque. .akv-pcard therefore drops .card (it needs the
+// page visible behind its decorative tint) and pins backdrop-filter to none.
+// .akv-chip is a .glass-chip in colour and shape with the blur removed, for the
+// same budget reason. Blur radius is never animated.
+//
+// -------- ANTON METRIC HAZARD ------------------------------------------------
+// Croatian carons (Č Š Ž) reach 1.100em in Anton, so display headings run at
+// line-height 1.12 (above the 1.05 floor) and every container that could clip
+// one is forced to overflow:visible.
+const CATALOG_CSS = `
+/* ---- token bridge -------------------------------------------------------
+   Every value here resolves to a css/styles.css token. The literal after the
+   comma is a fallback of the SAME sampled/derived colour, so these views stay
+   correct and measurable if a token is ever renamed; it is not a second
+   source of truth. */
+:root{
+  --akv-ink:var(--ink,#313131);
+  --akv-paper:var(--paper,#F2F2F2);
+  --akv-scrim:var(--surface,#FFFFFF);        /* opaque text scrim (see ledger) */
+  --akv-teal:var(--teal-600,#139EB1);
+  --akv-teal-ink:var(--teal-700,#0D707D);
+  --akv-teal-mid:var(--teal-400,#40AFCA);
+  --akv-sky:var(--sky-200,#C0D8F2);
+  --akv-mauve:var(--mauve-400,#A6979C);
+  --akv-mauve-ink:var(--mauve-600,#756168);  /* = --muted, 5.12:1 on --paper  */
+  --akv-amber:var(--amber-500,#EAA651);
+  --akv-amber-ink:var(--amber-ink,#935616);
+  --akv-brown:var(--brown-800,#68340F);
+  --akv-brown-mid:var(--brown-700,#83440F);
+  --akv-danger:var(--danger,#B92C1C);
+
+  /* Glass. The tint colour is the sheet's teal-cast near-white
+     hsl(187 44% 97%) = --glass-solid #F4FAFB; .30 is ornament-only and .62 is
+     the alpha proven for --ink against a pure-black backdrop. */
+  --akv-glass-deco:var(--glass-bg-deco,rgba(244,250,251,.30));
+  --akv-glass-ui:var(--glass-bg-text,rgba(244,250,251,.62));
+  --akv-solid:var(--glass-solid,#F4FAFB);    /* every degradation lands here  */
+  --akv-placeholder:#E1DEDF;                 /* --mauve-400 at .22 over paper */
+
+  --akv-rim:var(--glass-rim-top,rgba(255,255,255,.62));
+  --akv-rim-low:var(--glass-rim-bottom,rgba(255,255,255,.26));
+  --akv-rim-warm:var(--glass-rim-warm,rgba(234,166,81,.62));
+  /* Warm hairlines and shadows: --shadow-warm #5D4F4F = rgb(93,79,79) and
+     --brown-800 #68340F = rgb(104,52,15). Never neutral black. */
+  --akv-hairline:var(--hairline,rgba(104,52,15,.07));
+  --akv-hairline-2:var(--line-strong,rgba(104,52,15,.22));
+  --akv-sh-1:var(--glass-shadow-1,0 1px 2px rgba(93,79,79,.10),0 4px 14px rgba(93,79,79,.14));
+  --akv-sh-2:var(--glass-shadow-2,0 2px 6px rgba(93,79,79,.14),0 12px 34px rgba(93,79,79,.22));
+
+  --akv-r:var(--glass-radius-md,20px);
+  --akv-r-sm:var(--glass-radius-sm,14px);
+  --akv-r-pill:var(--glass-radius-pill,999px);
+  --akv-ease:var(--glass-ease,cubic-bezier(.32,.72,0,1));
+  --akv-fam-display:var(--font-display,'Anton','Haettenschweiler','Arial Narrow',system-ui,sans-serif);
+  --akv-fam-text:var(--font-text,'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
+  --akv-track-meta:var(--track-meta,.08em);
+}
+
+/* ---- type scale (mirrors vendor/fonts/fonts.css; the t-* classes are also
+        applied in the markup, so the two agree once index.html links that sheet) */
+/* Anton caron guard. Measured in the browser at 36px: the glyph ink occupies
+   48px (1.33em) while a 1.12 line box is 40.3px, so the carons sit proud of
+   the box. That is fine — nothing clips them (verified: zero clipping
+   ancestors) — but the heading needs real headroom above it or a Č can touch
+   the eyebrow, hence the .12em top padding. line-height stays above the 1.05
+   floor the font metrics require. */
+.akv-display-1,.akv-display-2{
+  font-family:var(--akv-fam-display);font-weight:400;text-transform:uppercase;
+  color:var(--akv-ink);margin:0;
+  line-height:1.12;
+  overflow:visible;padding-block-start:.12em;
+}
+.akv-display-1{font-size:clamp(2.25rem,5.6vw,3.75rem);letter-spacing:-.015em}
+.akv-display-2{font-size:clamp(1.5rem,3vw,2.25rem);letter-spacing:-.01em}
+.akv-meta{
+  font-family:var(--akv-fam-text);font-weight:500;font-size:.75rem;
+  letter-spacing:var(--akv-track-meta);line-height:1.4;text-transform:uppercase;
+  color:var(--akv-mauve-ink);
+}
+.akv-card-title{font-family:var(--akv-fam-text);font-weight:600;font-size:1.0625rem;letter-spacing:-.005em;line-height:1.3;color:var(--akv-ink)}
+.akv-body{font-family:var(--akv-fam-text);font-weight:400;font-size:.9375rem;line-height:1.6;color:var(--akv-ink)}
+.akv-lead{font-family:var(--akv-fam-text);font-weight:400;font-size:.9375rem;line-height:1.6;color:var(--akv-mauve-ink)}
+.akv-num{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
+
+/* ---- page header --------------------------------------------------------- */
+.akv-head{margin:2px 0 18px;overflow:visible}
+.akv-head .akv-meta{display:block;margin:0 0 6px}
+.akv-head .akv-lead{margin:8px 0 0;max-width:62ch}
+.akv-back{
+  display:inline-flex;align-items:center;gap:8px;min-height:var(--tap,44px);
+  padding:0 4px 0 0;margin:0 0 6px;color:var(--akv-teal-ink);          /* 5.17:1 on --paper */
+  font-family:var(--akv-fam-text);font-weight:600;font-size:.875rem;letter-spacing:.02em;
+}
+.akv-back:hover{color:var(--akv-ink)}
+
+/* ---- demo banner --------------------------------------------------------- */
+.akv-note{
+  margin:0 0 18px;padding:12px 14px;border-radius:var(--akv-r-sm);
+  background:var(--akv-sky);color:var(--akv-ink);                       /* 8.89:1 */
+  font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.5;
+  box-shadow:inset 0 1px 0 0 var(--akv-rim);
+}
+
+/* ---- category tiles ------------------------------------------------------ */
+/* Transparent glass: a palette wash + rim, no backdrop-filter. Text is --ink
+   only — the derived -ink shades do not clear 4.5:1 on these washes. */
+.akv-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin:0 0 26px}
+.akv-cat-card{
+  position:relative;display:flex;flex-direction:column;gap:8px;align-items:flex-start;
+  min-height:132px;padding:16px;text-decoration:none;color:var(--akv-ink);
+  border-radius:var(--akv-r);background:var(--akv-placeholder);
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
+  isolation:isolate;overflow:hidden;
+  transition:transform 260ms var(--akv-ease),box-shadow 260ms var(--akv-ease);
+}
+/* Wash per category — teal/sky = voda, amber = toplina (DESIGN_SYSTEM.md).
+   Composited values and their ink ratios:
+   keramika #E1DEDF 9.74:1 · sanitarije #D7E4F2 10.08:1 · armature #D3E6E9 10.08:1
+   klima #D2E6EB 10.07:1 · grijanje #F1E4D5 10.41:1 */
+.akv-cat-card[data-cat="keramika"]{background:color-mix(in srgb,var(--akv-mauve) 22%,var(--akv-paper))}
+.akv-cat-card[data-cat="sanitarije"]{background:color-mix(in srgb,var(--akv-sky) 55%,var(--akv-paper))}
+.akv-cat-card[data-cat="armature"]{background:color-mix(in srgb,var(--akv-teal) 14%,var(--akv-paper))}
+.akv-cat-card[data-cat="klima"]{background:color-mix(in srgb,var(--akv-teal-mid) 18%,var(--akv-paper))}
+.akv-cat-card[data-cat="grijanje"]{background:color-mix(in srgb,var(--akv-amber) 18%,var(--akv-paper))}
+/* color-mix fallback for engines without it: the same five composites, literal. */
+@supports not (background:color-mix(in srgb,#000 10%,#fff)){
+  .akv-cat-card[data-cat="keramika"]{background:#E1DEDF}
+  .akv-cat-card[data-cat="sanitarije"]{background:#D7E4F2}
+  .akv-cat-card[data-cat="armature"]{background:#D3E6E9}
+  .akv-cat-card[data-cat="klima"]{background:#D2E6EB}
+  .akv-cat-card[data-cat="grijanje"]{background:#F1E4D5}
+}
+/* Hover lifts a white rim over the wash — ink stays 10.76-11.22:1. */
+.akv-cat-card::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(150deg,rgba(255,255,255,.46) 0%,rgba(255,255,255,.10) 34%,rgba(255,255,255,0) 62%);
+  opacity:.7;transition:opacity 260ms var(--akv-ease);
+}
+@media (hover:hover) and (pointer:fine){
+  .akv-cat-card:hover{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+  .akv-cat-card:hover::after{opacity:1}
+}
+.akv-cat-card:focus-visible{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+.akv-cat-card>*{position:relative;z-index:1}
+.akv-cat-ico{font-size:30px;line-height:1}
+.akv-cat-n{margin-top:auto}
+.akv-cat-c{color:var(--akv-ink);opacity:1}      /* washes carry --ink only */
+
+/* ---- product grid -------------------------------------------------------- */
+.akv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:16px}
+/* Decorative glass (alpha .28): the tile texture reads through it instead of
+   competing with it. No backdrop-filter — see the GLASS BUDGET note. */
+.akv-pcard{
+  position:relative;padding:0;overflow:hidden;border-radius:var(--akv-r);
+  background:var(--akv-glass-deco);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
+  isolation:isolate;
+  transition:transform 260ms var(--akv-ease),box-shadow 260ms var(--akv-ease);
+}
+@media (hover:hover) and (pointer:fine){
+  /* cool surface, warm edge */
+  .akv-pcard:hover{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm),inset 0 -1px 0 0 var(--akv-rim-low)}
+}
+.akv-pcard:focus-within{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+.akv-pcard-a{display:block;color:inherit;text-decoration:none}
+.akv-sw-wrap{position:relative;overflow:hidden}
+.akv-swatch{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--akv-placeholder)}
+.akv-eq-ico{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:46px;pointer-events:none;
+  text-shadow:0 2px 12px rgba(93,79,79,.30);      /* --shadow-warm, not black */
+}
+/* The opaque scrim. Every card text ratio in the ledger is measured on this. */
+.akv-pbody{position:relative;z-index:2;padding:12px 14px 14px;background:var(--akv-scrim);display:flex;flex-direction:column;gap:4px}
+.akv-pmeta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.akv-pname{display:block}
+.akv-price{margin-top:2px;font-family:var(--akv-fam-text);font-weight:700;font-size:.9375rem;letter-spacing:.01em;color:var(--akv-teal-ink)}
+.akv-fav{
+  position:absolute;top:10px;right:10px;z-index:3;
+  min-width:var(--tap,44px);min-height:var(--tap,44px);border:none;border-radius:var(--akv-r-pill);
+  background:var(--akv-scrim);color:var(--akv-amber-ink);
+  font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
+  transition:background-color 200ms var(--akv-ease),color 200ms var(--akv-ease),transform 200ms var(--akv-ease);
+}
+@media (hover:hover) and (pointer:fine){
+  .akv-fav:hover{box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+}
+.akv-fav:active{transform:scale(.94)}
+.akv-fav[aria-pressed="true"]{background:var(--akv-amber-ink);color:#fff}
+
+/* ---- filter chips -------------------------------------------------------- */
+.akv-chiprow{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 10px;align-items:center;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.akv-chiprow[hidden]{display:none}
+.akv-chiprow::-webkit-scrollbar{height:4px}
+.akv-chiprow::-webkit-scrollbar-thumb{background:rgba(93,79,79,.28);border-radius:var(--akv-r-pill)}
+.akv-chiprow .lab{
+  min-width:86px;flex:0 0 auto;position:sticky;left:0;z-index:1;
+  background:var(--akv-paper);padding-right:6px;color:var(--akv-mauve-ink);   /* 5.12:1 */
+}
+/* Transparent glass chip: a .glass-chip in colour and shape with the blur
+   removed (budget). Worst case surface is the tint over the palette's darkest
+   ambient, --sky-200 -> #E0EDF8, where --ink is 10.93:1, --mauve-600 4.81:1
+   and --teal-700 4.86:1. */
+.akv-chip{
+  flex:0 0 auto;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--akv-hairline-2);border-radius:var(--akv-r-pill);
+  background:var(--akv-glass-ui);color:var(--akv-ink);
+  padding:0 15px;min-height:var(--tap,44px);
+  font-family:var(--akv-fam-text);font-weight:600;font-size:.8125rem;letter-spacing:.02em;
+  cursor:pointer;box-shadow:inset 0 1px 0 0 var(--akv-rim);
+  transition:background-color 200ms var(--akv-ease),color 200ms var(--akv-ease),
+             border-color 200ms var(--akv-ease),transform 200ms var(--akv-ease);
+}
+/* Cool surface, warm edge — the same hover gesture .glass-chip uses. */
+@media (hover:hover) and (pointer:fine){
+  .akv-chip:hover{
+    background:var(--glass-bg-strong,rgba(244,250,251,.78));
+    box-shadow:inset 0 1px 0 0 var(--akv-rim-warm);
+  }
+}
+.akv-chip:active{transform:scale(.97)}
+.akv-chip.on,.akv-chip[aria-pressed="true"]{
+  background:var(--akv-teal-ink);border-color:var(--akv-teal-ink);color:#fff;   /* 5.78:1 */
+  box-shadow:inset 0 1px 0 0 rgba(255,255,255,.24);
+}
+/* The count is informational, so it is a COLOUR change, never an opacity dim:
+   the old opacity .6 measured 3.77:1 and opacity .42 measured 2.36:1. */
+.akv-chip .n{font-variant-numeric:tabular-nums;font-weight:500;font-size:.75rem;color:var(--akv-mauve-ink)}
+.akv-chip[aria-pressed="true"] .n{color:#fff}
+.akv-chip.is-empty{color:var(--akv-mauve-ink);border-style:dashed}   /* 4.81:1 worst case */
+/* An active chip must stay white-on-dark when hovered, so it darkens too. */
+@media (hover:hover) and (pointer:fine){
+  .akv-chip.on:hover,.akv-chip[aria-pressed="true"]:hover{
+    background:var(--teal-800,#0B5A65);border-color:var(--teal-800,#0B5A65);   /* 7.88:1 */
+    box-shadow:inset 0 1px 0 0 var(--akv-rim-warm);
+  }
+}
+.akv-chip-clear{border-style:dashed;border-color:var(--akv-teal-ink);color:var(--akv-teal-ink)}
+
+/* ---- "Nastavite gdje ste stali" ------------------------------------------ */
+/* The one warm/dark surface in the catalogue: brown-800 = toplina. */
+.akv-resume{
+  padding:0;overflow:hidden;margin:0 0 26px;border-radius:var(--akv-r);
+  background:var(--akv-brown);color:#fff;
+  box-shadow:var(--akv-sh-2),inset 0 1px 0 0 rgba(255,255,255,.20);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+.akv-resume-a{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:inherit;text-decoration:none;padding:14px}
+.akv-resume-c{flex:0 0 auto;width:100%;max-width:320px;aspect-ratio:1000/700;border-radius:var(--akv-r-sm);background:var(--akv-brown-mid);display:block;box-shadow:0 2px 10px rgba(93,79,79,.34)}
+.akv-resume-b{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.akv-resume-e{color:var(--akv-amber)}                       /* 4.83:1 on brown-800 */
+.akv-resume-t{font-family:var(--akv-fam-text);font-weight:700;font-size:1.125rem;line-height:1.3;color:#fff}
+.akv-resume-s{font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.5;color:var(--akv-sky)}
+.akv-resume-btn{
+  margin-top:8px;display:inline-flex;align-items:center;min-height:var(--tap,44px);
+  padding:0 18px;border-radius:var(--akv-r-pill);
+  background:var(--akv-amber);color:var(--akv-ink);          /* 6.24:1 */
+  font-family:var(--akv-fam-text);font-weight:600;font-size:.875rem;letter-spacing:.02em;
+}
+
+/* ---- section heading ----------------------------------------------------- */
+.akv-sec{display:flex;align-items:baseline;gap:12px;margin:0 0 14px;overflow:visible}
+
+/* ---- empty state --------------------------------------------------------- */
+.akv-empty{
+  text-align:center;padding:44px 20px;border-radius:var(--akv-r);
+  background:var(--akv-scrim);overflow:visible;                /* Anton caron guard */
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+.akv-empty .ico{font-size:42px;line-height:1}
+.akv-empty .akv-display-2{margin:14px 0 8px}
+.akv-empty .akv-lead{margin:0 auto;max-width:44ch}
+.akv-empty .akv-btn{margin-top:18px}
+
+/* ---- buttons (catalogue-local, palette-true) ----------------------------- */
+.akv-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--tap,44px);padding:0 18px;border-radius:var(--akv-r-pill);
+  border:1px solid var(--akv-hairline-2);background:var(--akv-scrim);color:var(--akv-ink);
+  font-family:var(--akv-fam-text);font-weight:600;font-size:.875rem;letter-spacing:.02em;
+  cursor:pointer;text-decoration:none;
+  transition:background-color 200ms var(--akv-ease),color 200ms var(--akv-ease),transform 200ms var(--akv-ease);
+}
+.akv-btn:active{transform:scale(.97)}
+.akv-btn-primary{background:var(--akv-teal-ink);border-color:var(--akv-teal-ink);color:#fff}  /* 5.78:1 */
+/* Hover darkens, never brightens: white on the sampled --teal-600 is only
+   3.20:1, so the hover fill is --teal-800 (white 7.88:1). */
+@media (hover:hover) and (pointer:fine){
+  .akv-btn-primary:hover{background:var(--teal-800,#0B5A65);border-color:var(--teal-800,#0B5A65)}
+}
+.akv-btn-warm{background:var(--akv-amber-ink);border-color:var(--akv-amber-ink);color:#fff}   /* 5.86:1 */
+
+/* ---- product detail ------------------------------------------------------ */
+.akv-prod{display:grid;gap:20px;grid-template-columns:1fr;margin-top:6px}
+@media (min-width:760px){.akv-prod{grid-template-columns:1.1fr .9fr;align-items:start}}
+.akv-prevwrap{position:relative;border-radius:var(--akv-r);overflow:hidden;box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim)}
+.akv-prev{width:100%;aspect-ratio:4/3;display:block;background:var(--akv-placeholder);object-fit:cover}
+/* THE one extra backdrop-filter surface in these four views (see GLASS BUDGET).
+   -webkit- line carries LITERAL values: Safari fails to resolve var() there. */
+.akv-rail{
+  position:absolute;left:10px;right:10px;bottom:10px;z-index:2;
+  display:flex;gap:8px;align-items:center;margin:0;padding:8px;
+  border-radius:var(--akv-r-sm);background:var(--akv-glass-ui);
+  -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
+  backdrop-filter:var(--glass-fx-md,blur(18px) saturate(180%) brightness(1.06));
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
+  isolation:isolate;contain:paint;                 /* bound the compositor read-back */
+}
+.akv-rail .lab{position:static;background:transparent;min-width:0;color:var(--akv-ink);padding-right:2px}
+.akv-rail .akv-chip{min-height:40px;background:var(--akv-glass-ui)}
+.akv-rail .akv-chip.on,.akv-rail .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
+.akv-eqwrap{position:relative;border-radius:var(--akv-r);overflow:hidden;background:var(--akv-glass-deco);box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim)}
+.akv-panel{
+  border-radius:var(--akv-r);padding:20px;background:var(--akv-scrim);
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);overflow:visible;
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+.akv-panel .akv-display-2{margin:6px 0 4px}
+.akv-specs{width:100%;border-collapse:collapse;font-family:var(--akv-fam-text);font-size:.875rem;margin-top:16px}
+.akv-specs th{
+  text-align:left;padding:9px 12px 9px 0;white-space:nowrap;vertical-align:top;
+  font-weight:500;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--akv-mauve-ink);                       /* 5.73:1 on --surface */
+}
+.akv-specs td{padding:9px 0;color:var(--akv-ink)}
+.akv-specs tr + tr th,.akv-specs tr + tr td{border-top:1px solid var(--akv-hairline)}
+.akv-bigprice{
+  font-family:var(--akv-fam-text);font-weight:700;font-size:1.75rem;letter-spacing:-.01em;
+  color:var(--akv-teal-ink);margin:8px 0 10px;                 /* 5.78:1 */
+}
+.akv-order{margin:0 0 10px;font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.5;color:var(--akv-amber-ink)}
+.akv-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.akv-fine{margin:12px 0 0;font-family:var(--akv-fam-text);font-size:.75rem;line-height:1.5;color:var(--akv-mauve-ink)}
+.akv-inq{margin-top:14px;padding:14px;border:1px dashed var(--akv-hairline-2);border-radius:var(--akv-r-sm);background:var(--akv-paper)}
+.akv-inq textarea{
+  width:100%;min-height:196px;font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.55;
+  padding:12px;margin-top:10px;border:1px solid var(--akv-hairline-2);border-radius:var(--akv-r-sm);
+  background:var(--akv-scrim);color:var(--akv-ink);resize:vertical;
+}
+
+/* ---- saved designs ------------------------------------------------------- */
+.akv-dcard{
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;
+  padding:14px;border-radius:var(--akv-r);background:var(--akv-scrim);
+  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+.akv-dsw{display:flex;gap:5px;flex:0 0 auto}
+.akv-dsw img{width:40px;height:40px;border-radius:10px;display:block;background:var(--akv-placeholder)}
+.akv-dbody{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:5px}
+.akv-dname{font-family:var(--akv-fam-text);font-weight:600;font-size:1rem;line-height:1.3;color:var(--akv-ink)}
+.akv-drow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.akv-kind{
+  display:inline-flex;align-items:center;padding:3px 10px;border-radius:var(--akv-r-pill);
+  background:var(--akv-sky);color:var(--akv-ink);                 /* 8.89:1 */
+  font-family:var(--akv-fam-text);font-weight:600;font-size:.6875rem;letter-spacing:.06em;text-transform:uppercase;
+}
+.akv-dactions{display:flex;gap:8px;flex-wrap:wrap}
+.akv-btn-danger{background:var(--akv-danger);border-color:var(--akv-danger);color:#fff}  /* 6.10:1 */
+
+/* =========================== DEGRADATIONS ================================= */
+/* 1. Engine cannot do backdrop-filter at all — the rail becomes opaque. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .akv-rail{background:var(--akv-solid)}
+  .akv-chip,.akv-rail .akv-chip{background:var(--akv-solid)}
+  .akv-pcard{background:var(--akv-solid)}
+  .akv-cat-card::after{display:none}
+}
+/* 2. OS transparency reduction (Chromium/Edge honour it; Safari does not
+      expose it, hence the manual [data-glass="off"] switch below). */
+@media (prefers-reduced-transparency:reduce){
+  .akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-eqwrap{
+    background:var(--akv-solid);
+    -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--akv-sh-1);
+  }
+  .akv-chip.on,.akv-chip[aria-pressed="true"],.akv-rail .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
+  .akv-cat-card::after{display:none}
+}
+[data-glass="off"] .akv-rail,[data-glass="off"] .akv-chip,[data-glass="off"] .akv-pcard,[data-glass="off"] .akv-eqwrap{
+  background:var(--akv-solid);
+  -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--akv-sh-1);
+}
+[data-glass="off"] .akv-chip.on,[data-glass="off"] .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
+[data-glass="off"] .akv-cat-card::after{display:none}
+/* 3. High contrast / forced colours. The .akv-rail .akv-chip pairs are spelled
+      out because the base rule for them is (0,2,0) and would otherwise outrank
+      a bare .akv-chip override here. */
+@media (prefers-contrast:more){
+  .akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-cat-card,.akv-empty,.akv-panel,.akv-dcard,.akv-eqwrap{
+    background:var(--akv-solid);
+    -webkit-backdrop-filter:none;backdrop-filter:none;
+    border:1px solid var(--akv-ink);box-shadow:none;
+  }
+  .akv-chip.on,.akv-chip[aria-pressed="true"],
+  .akv-rail .akv-chip.on,.akv-rail .akv-chip[aria-pressed="true"]{
+    background:var(--akv-teal-ink);border-color:var(--akv-teal-ink);color:#fff;
+  }
+  .akv-cat-card::after{display:none}
+  .akv-chip .n,.akv-chip.is-empty,.akv-lead,.akv-meta,.akv-specs th,.akv-fine{color:var(--akv-ink)}
+  .akv-chip[aria-pressed="true"] .n{color:#fff}
+}
+@media (forced-colors:active){
+  .akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-cat-card,.akv-empty,.akv-panel,.akv-dcard,.akv-fav,.akv-eqwrap{
+    background:Canvas;color:CanvasText;border:1px solid CanvasText;
+    -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;
+  }
+  .akv-cat-card::after{display:none}
+  .akv-chip[aria-pressed="true"],.akv-rail .akv-chip[aria-pressed="true"],
+  .akv-fav[aria-pressed="true"]{background:Highlight;color:HighlightText}
+  .akv-chip[aria-pressed="true"] .n{color:HighlightText}
+}
+/* 4. Motion. Blur radius is never animated anywhere above; this only stills
+      the transform/colour transitions. */
+@media (prefers-reduced-motion:reduce){
+  .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after{
+    transition-duration:1ms !important;animation:none !important;
+  }
+  .akv-pcard:hover,.akv-pcard:focus-within,.akv-cat-card:hover,.akv-cat-card:focus-visible{transform:none}
+  .akv-chip:active,.akv-fav:active,.akv-btn:active{transform:none}
+}
+`;
+
 export function ensureStyles() {
   if (document.getElementById("akv-catalog-css")) return;
   const style = document.createElement("style");
   style.id = "akv-catalog-css";
-  style.textContent = `
-.akv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:14px; }
-.akv-pcard { position:relative; padding:0; overflow:hidden; }
-.akv-pcard-a { display:block; color:inherit; text-decoration:none; }
-.akv-sw-wrap { position:relative; }
-.akv-swatch { display:block; width:100%; aspect-ratio:1; object-fit:cover; background:#eceae6; }
-.akv-eq-ico { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:44px; text-shadow:0 2px 10px rgba(0,0,0,.18); pointer-events:none; }
-.akv-pbody { padding:10px 12px 12px; }
-.akv-pname { font-weight:700; font-size:14px; line-height:1.25; }
-.akv-pmeta { font-size:12px; margin-top:2px; }
-.akv-price { margin-top:6px; font-weight:700; font-size:14px; color:var(--accent,#00008C); font-variant-numeric:tabular-nums; }
-.akv-fav { position:absolute; top:8px; right:8px; z-index:1; min-width:44px; min-height:44px; border:none; border-radius:999px; background:rgba(255,255,255,.9); font-size:20px; line-height:1; cursor:pointer; color:var(--brand-red,#d6252e); display:flex; align-items:center; justify-content:center; }
-.akv-fav[aria-pressed="true"] { background:var(--brand-red,#d6252e); color:#fff; }
-.akv-cats { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:14px 0 22px; }
-.akv-cat-card { display:flex; flex-direction:column; gap:6px; align-items:flex-start; padding:14px; text-decoration:none; color:inherit; }
-.akv-cat-ico { font-size:26px; }
-.akv-cat-n { font-weight:700; }
-.akv-cat-c { font-size:12px; }
-.akv-chiprow { display:flex; flex-wrap:nowrap; gap:8px; margin:6px 0 4px; align-items:center; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
-.akv-chiprow[hidden] { display:none; }
-.akv-chiprow::-webkit-scrollbar { height:4px; }
-.akv-chiprow::-webkit-scrollbar-thumb { background:rgba(0,0,0,.18); border-radius:999px; }
-.akv-chiprow .lab { font-size:12px; font-weight:700; opacity:.7; min-width:78px; flex:0 0 auto; position:sticky; left:0; background:var(--bg,#fff); padding-right:2px; z-index:1; }
-.akv-chip { flex:0 0 auto; white-space:nowrap; border:1px solid rgba(0,0,0,.18); background:transparent; color:inherit; border-radius:999px; padding:10px 14px; min-height:44px; font-size:13px; cursor:pointer; }
-.akv-chip.on, .akv-chip[aria-pressed="true"] { background:var(--accent,#00008C); border-color:var(--accent,#00008C); color:#fff; }
-.akv-chip .n { opacity:.6; font-variant-numeric:tabular-nums; margin-left:4px; font-size:12px; }
-.akv-chip[aria-pressed="true"] .n { opacity:.85; }
-.akv-chip.is-empty { opacity:.42; }
-.akv-chip-clear { border-style:dashed; font-weight:700; }
-.akv-resume { padding:0; overflow:hidden; margin:14px 0 4px; }
-.akv-resume-a { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color:inherit; text-decoration:none; padding:12px; }
-.akv-resume-c { flex:0 0 auto; width:100%; max-width:320px; aspect-ratio:1000/700; border-radius:10px; background:#eceae6; display:block; }
-.akv-resume-b { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
-.akv-resume-t { font-weight:800; font-size:16px; }
-.akv-resume-btn { margin-top:6px; }
-.akv-sec-t { font-size:16px; font-weight:800; margin:22px 0 10px; }
-.akv-empty { text-align:center; padding:40px 16px; }
-.akv-empty .ico { font-size:40px; }
-.akv-empty h2 { margin:10px 0 6px; }
-.akv-prod { display:grid; gap:18px; grid-template-columns:1fr; margin-top:12px; }
-@media (min-width:760px) { .akv-prod { grid-template-columns:1.1fr .9fr; align-items:start; } }
-.akv-prev { width:100%; aspect-ratio:4/3; border-radius:12px; display:block; background:#eceae6; object-fit:cover; }
-.akv-specs { width:100%; border-collapse:collapse; font-size:14px; margin-top:12px; }
-.akv-specs th { text-align:left; padding:8px 10px 8px 0; font-weight:600; opacity:.65; white-space:nowrap; vertical-align:top; }
-.akv-specs td { padding:8px 0; }
-.akv-specs tr + tr th, .akv-specs tr + tr td { border-top:1px solid rgba(0,0,0,.07); }
-.akv-bigprice { font-size:24px; font-weight:800; color:var(--accent,#00008C); margin:6px 0 8px; font-variant-numeric:tabular-nums; }
-.akv-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-.akv-dcard { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-.akv-dsw { display:flex; gap:4px; flex:0 0 auto; }
-.akv-dsw img { width:36px; height:36px; border-radius:6px; display:block; }
-.akv-dbody { flex:1 1 200px; min-width:0; }
-.akv-dactions { display:flex; gap:8px; }
-.akv-order { margin:0 0 8px; font-size:13px; }
-.akv-inq { margin-top:12px; padding:12px; border:1px dashed rgba(0,0,0,.22); border-radius:12px; }
-.akv-inq textarea { width:100%; min-height:196px; font:inherit; font-size:13px; line-height:1.5; padding:10px; margin-top:8px; border:1px solid rgba(0,0,0,.18); border-radius:8px; background:#fff; color:inherit; resize:vertical; }
-`;
+  style.textContent = CATALOG_CSS;
   document.head.appendChild(style);
+}
+
+/** Page header: uppercase tracked eyebrow + Anton title + optional lead. */
+export function pageHead(eyebrow, title, lead) {
+  return `
+  <header class="akv-head">
+    ${eyebrow ? `<span class="t-meta akv-meta">${esc(eyebrow)}</span>` : ""}
+    <h1 class="t-h1 akv-display-1">${esc(title)}</h1>
+    ${lead ? `<p class="t-body akv-lead">${esc(lead)}</p>` : ""}
+  </header>`;
 }
 
 // ---- lazy swatches --------------------------------------------------------------
@@ -208,18 +637,22 @@ const CAT_ICONS = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.icon]));
 export function productCard(p, favSet) {
   const fav = favSet.has(p.id);
   const isTile = Array.isArray(p.tileSizeMm);
+  // Brand + format lead as the uppercase wide-tracked meta line (the reference's
+  // credit-line gesture), with the name underneath in the text face.
   const meta = [p.brand, formatLabel(p)].filter(Boolean).join(" · ");
+  // No .card here on purpose: .card is opaque by design in css/styles.css, and
+  // the decorative glass frame needs the page ground visible behind it.
   return `
-  <article class="akv-pcard card" data-pid="${esc(p.id)}">
+  <article class="akv-pcard" data-pid="${esc(p.id)}">
     <a class="akv-pcard-a" href="#/proizvod/${encodeURIComponent(p.id)}" aria-label="${esc(p.name)}">
       <div class="akv-sw-wrap">
         <img class="akv-swatch" ${swatchAttrs(p, 256)} alt="" width="256" height="256">
-        ${isTile ? "" : `<span class="akv-eq-ico">${esc(CAT_ICONS[p.category] || "📦")}</span>`}
+        ${isTile ? "" : `<span class="akv-eq-ico" aria-hidden="true">${esc(CAT_ICONS[p.category] || "📦")}</span>`}
       </div>
       <div class="akv-pbody">
-        <div class="akv-pname">${esc(p.name)}</div>
-        <div class="akv-pmeta muted">${esc(meta)}</div>
-        <div class="akv-price">${esc(priceLabel(p))}</div>
+        <span class="akv-pmeta t-meta akv-meta">${esc(meta)}</span>
+        <span class="akv-pname t-card-title akv-card-title">${esc(p.name)}</span>
+        <span class="akv-price t-numeric akv-num">${esc(priceLabel(p))}</span>
       </div>
     </a>
     <button class="akv-fav" type="button" data-fav="${esc(p.id)}" aria-pressed="${fav}"
@@ -273,16 +706,19 @@ function draftWhen(savedAt) {
   } catch { return ""; }
 }
 
+// The catalogue's one warm/dark surface — brown-800 is "toplina" in the Iris
+// palette, so the re-entry card reads as the fireside of the app.
 function resumeMarkup(draft) {
   return `
-  <section class="card akv-resume" id="akvResume">
+  <section class="akv-resume" id="akvResume">
     <a class="akv-resume-a" href="#/dizajner/${encodeURIComponent(draft.sceneId)}">
       <canvas class="akv-resume-c" id="akvResumeC" width="640" height="448" role="img"
         aria-label="${esc(tf("kat.resumeAlt", "Pregled vašeg nedovršenog dizajna"))}"></canvas>
       <div class="akv-resume-b">
+        <span class="t-meta akv-meta akv-resume-e">${esc(tf("kat.resumeEyebrow", "Vaš dizajn"))}</span>
         <div class="akv-resume-t">${esc(tf("kat.resumeTitle", "Nastavite gdje ste stali"))}</div>
-        <div class="muted" id="akvResumeSub" style="font-size:13px"></div>
-        <span class="btn btn-primary akv-resume-btn">${esc(tf("kat.resumeCta", "Nastavi dizajn"))}</span>
+        <div class="akv-resume-s" id="akvResumeSub"></div>
+        <span class="t-button akv-resume-btn">${esc(tf("kat.resumeCta", "Nastavi dizajn"))}</span>
       </div>
     </a>
   </section>`;
@@ -331,21 +767,24 @@ function renderHome(container, products, favSet) {
   const draft = readDesignerDraft();
 
   container.innerHTML = `
-    <header style="margin:4px 0 12px">
-      <h1 style="margin:0 0 4px">${esc(tf("kat.title", "Katalog"))}</h1>
-      <p class="muted" style="margin:0">${esc(tf("kat.sub", "Pločice i oprema za vaš dom — pregledajte, spremite favorite i primijenite u dizajneru."))}</p>
-    </header>
-    <div class="banner banner-info" style="margin-bottom:6px">${esc(tf("kat.demo", "Demo katalog — proizvodi i cijene su ogledni podaci za prezentaciju, ne stvarna ponuda."))}</div>
+    ${pageHead(
+      tf("kat.eyebrow", "Akvaterm · pločice i oprema"),
+      tf("kat.title", "Katalog"),
+      tf("kat.sub", "Pločice i oprema za vaš dom — pregledajte, spremite favorite i primijenite u dizajneru."),
+    )}
+    <p class="akv-note">${esc(tf("kat.demo", "Demo katalog — proizvodi i cijene su ogledni podaci za prezentaciju, ne stvarna ponuda."))}</p>
     <nav class="akv-cats" aria-label="${esc(tf("kat.categories", "Kategorije"))}">
       ${CATEGORIES.map((c) => `
-        <a class="akv-cat-card card" href="#/katalog/${esc(c.id)}">
+        <a class="akv-cat-card" data-cat="${esc(c.id)}" href="#/katalog/${esc(c.id)}">
           <span class="akv-cat-ico" aria-hidden="true">${esc(c.icon)}</span>
-          <span class="akv-cat-n">${esc(catLabel(c))}</span>
-          <span class="akv-cat-c muted">${countBy[c.id] || 0} ${esc(tf("kat.productsShort", "proizvoda"))}</span>
+          <span class="akv-cat-n t-card-title akv-card-title">${esc(catLabel(c))}</span>
+          <span class="akv-cat-c t-meta akv-meta">${countBy[c.id] || 0} ${esc(tf("kat.productsShort", "proizvoda"))}</span>
         </a>`).join("")}
     </nav>
     ${draft ? resumeMarkup(draft) : ""}
-    <h2 class="akv-sec-t">${esc(tf("kat.featured", "Izdvojeno"))}</h2>
+    <div class="akv-sec">
+      <h2 class="t-h2 akv-display-2">${esc(tf("kat.featured", "Izdvojeno"))}</h2>
+    </div>
     <div class="akv-grid" id="featGrid">${feat.map((p) => productCard(p, favSet)).join("")}</div>`;
 
   wireFavButtons(container.querySelector("#featGrid"), favSet);
@@ -381,7 +820,7 @@ function renderCategory(container, cat, products, favSet) {
 
   const chipRow = (group, label, opts) => opts.length < 2 ? "" : `
     <div class="akv-chiprow" role="group" aria-label="${esc(label)}">
-      <span class="lab">${esc(label)}</span>
+      <span class="lab t-meta akv-meta">${esc(label)}</span>
       ${opts.map((o) => `
         <button type="button" class="akv-chip" data-fg="${esc(group)}" data-fv="${esc(o.value)}" aria-pressed="false">
           ${esc(o.label)}<span class="n" aria-hidden="true"></span>
@@ -389,11 +828,9 @@ function renderCategory(container, cat, products, favSet) {
     </div>`;
 
   container.innerHTML = `
-    <a class="btn btn-ghost" href="#/" style="margin-bottom:10px">← ${esc(tf("kat.back", "Katalog"))}</a>
-    <header style="margin:0 0 10px">
-      <h1 style="margin:0 0 2px">${esc(catLabel(cat))}</h1>
-      <p class="muted" style="margin:0" id="catCount"></p>
-    </header>
+    <a class="akv-back t-button" href="#/">← ${esc(tf("kat.back", "Katalog"))}</a>
+    ${pageHead(tf("kat.categoryEyebrow", "Kategorija"), catLabel(cat), "")}
+    <p class="t-meta akv-meta" id="catCount" style="margin:-12px 0 16px"></p>
     ${chipRow("format", tf("kat.fFormat", "Format"), formats.map((f) => ({ value: f, label: f })))}
     ${chipRow("boja", tf("kat.fColor", "Boja"), colors.map((c) => ({ value: c, label: COLOR_LABELS[c] })))}
     ${chipRow("finish", tf("kat.fFinish", "Završna obrada"), finishes.map((f) => ({ value: f, label: f === "glossy" ? tf("kat.glossy", "Sjajna") : tf("kat.mat", "Mat") })))}
@@ -401,7 +838,7 @@ function renderCategory(container, cat, products, favSet) {
     <div class="akv-chiprow" id="catReset" hidden>
       <button type="button" class="akv-chip akv-chip-clear" id="catClear"></button>
     </div>
-    <div class="akv-grid" id="catGrid" style="margin-top:12px"></div>`;
+    <div class="akv-grid" id="catGrid" style="margin-top:6px"></div>`;
 
   const grid = container.querySelector("#catGrid");
   const countEl = container.querySelector("#catCount");
@@ -429,10 +866,10 @@ function renderCategory(container, cat, products, favSet) {
     countEl.textContent = `${list.length} ${tf("kat.productsShort", "proizvoda")}`;
     grid.innerHTML = list.length
       ? list.map((p) => productCard(p, favSet)).join("")
-      : `<div class="akv-empty card" style="grid-column:1/-1">
+      : `<div class="akv-empty" style="grid-column:1/-1">
            <div class="ico" aria-hidden="true">🔍</div>
-           <h2>${esc(tf("kat.noMatch", "Nema proizvoda za odabrane filtre"))}</h2>
-           <p class="muted">${esc(tf("kat.noMatchBody", "Pokušajte ukloniti neki od filtera."))}</p>
+           <h2 class="t-h2 akv-display-2">${esc(tf("kat.noMatch", "Nema proizvoda za odabrane filtre"))}</h2>
+           <p class="t-body akv-lead">${esc(tf("kat.noMatchBody", "Pokušajte ukloniti neki od filtera."))}</p>
          </div>`;
     wireFavButtons(grid, favSet);
     syncChips();

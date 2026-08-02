@@ -53,9 +53,11 @@ const MIN_MODULE_PX = 3;
 const MAX_MODULE_PX = 10;
 const TARGET_BACKING_PX = 720;
 
-// Pure black on pure white — 21:1. Deliberately NOT the brand tokens: scanners
-// threshold on luminance and navy-on-white costs contrast for no benefit. The
-// brand shows up in the sheet around the code, not inside it.
+// Pure black on pure white — 21.00:1, verified. Deliberately NOT the Iris
+// palette: scanners threshold on luminance, and --teal-600 #139EB1 on white is
+// 3.20:1, which is a scan failure dressed up as branding. The palette shows up
+// in the sheet AROUND the code, never inside it, and .akv-qr-frame keeps its
+// literal white for the same reason.
 const QR_DARK = "#000000";
 const QR_LIGHT = "#ffffff";
 
@@ -65,26 +67,78 @@ let openPanel = null;   // only ever one share sheet at a time
 // scoped styles
 // ---------------------------------------------------------------------------
 // css/styles.css is owned elsewhere and ships .sheet-backdrop / .sheet /
-// .sheet-actions / .btn, which this panel reuses as-is. Everything below is
-// namespaced .akv-qr* so it can only ever affect this component. The backdrop
-// and sheet fallbacks exist so a standalone call still renders a sane panel if
-// the design system is not on the page.
+// .sheet-actions / .btn / h2, which this panel reuses AS-IS. Everything below
+// is namespaced .akv-qr* so it can only ever affect this component, and every
+// colour is `var(--token, verified-literal)`: the token is what the Iris
+// palette supplies, the literal is what keeps a standalone call (or a
+// half-deployed stylesheet) legible rather than merely styled. The literals
+// are the values the shipped tokens actually resolve to, read out of the live
+// page — not guesses at what they might be.
+//
+// WHAT THIS COMPONENT DELIBERATELY DOES NOT STYLE, because css/styles.css
+// already owns it and a second copy would be a specificity fight plus a second
+// place to keep in sync:
+//   • the scrim — colour, blur, z-index 70, and ALL FOUR degradation paths
+//     (@supports not backdrop-filter / prefers-reduced-transparency /
+//     prefers-contrast + forced-colors / prefers-reduced-motion) plus the
+//     manual html[data-transparency="reduced"] switch. The backdrop element
+//     carries .sheet-backdrop as well as .akv-qr-backdrop precisely so it
+//     inherits every one of them.
+//   • the sheet's surface, border, radius, safe-area padding and entrance.
+//   • the <h2>, which takes the display face with the measured caron padding.
+// The absence is the decision, so it is written down rather than left silent.
+//
+// GLASS BUDGET: the top bar and the tab bar are the two standing
+// backdrop-filter surfaces. This scrim is the third — and styles.css makes it
+// REPLACE rather than add (`html:has(.sheet-backdrop)` drops the bars' blur
+// while a sheet is open), so the panel never pushes the count past three.
+//
+// ---------------------------------------------------------------------------
+// CONTRAST — measured against the tokens as shipped, not eyeballed. WCAG 2.x
+// relative luminance with sRGB alpha compositing; every pair was computed.
+//
+//   --ink #313131      on --surface #FFFFFF ............... 13.01:1  (body)
+//   --ink #313131      on --panel-2 #FBFAFA ............... 12.49:1  (the URL)
+//   --muted #756168    on --surface #FFFFFF ...............  5.73:1  (lead, label)
+//   --accent-ink #0D707D on --accent-tint over --surface ...  5.08:1  (the note)
+//   --accent-ink #0D707D on --accent-tint over --paper ....  4.58:1  (the note,
+//       measured against the darker surface too, so the note stays AA even if
+//       --surface is ever retuned toward the page background)
+//   #000000            on #FFFFFF ......................... 21.00:1  (the code)
+//
+// All six clear 4.5:1, so none of this component's text depends on the
+// large-text exemption.
+// ---------------------------------------------------------------------------
 
 const STYLE_ID = "akv-qr-css";
 const STYLES = `
-/* z-index 70 matches the design system's own .sheet-backdrop — this component
-   must not silently reorder the app's layers. */
-.akv-qr-backdrop{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;background:rgba(2,3,5,.42)}
-@media(min-width:720px){.akv-qr-backdrop{align-items:center}}
-.akv-qr-sheet{width:100%;max-width:440px;max-height:92vh;overflow-y:auto;background:var(--surface,#fff);color:var(--ink,#0a0c11)}
-.akv-qr-sheet h2{font-size:19px;margin:0}
-.akv-qr-lead{color:var(--muted,#63676f);margin-top:8px;font-size:14px}
+/* ---- Backdrop: layout only. See the note above for everything omitted. --- */
+.akv-qr-backdrop{padding:0 env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
+
+/* ---- Sheet ---------------------------------------------------------------
+   .sheet already supplies the surface, border, radius, shadow, safe-area
+   padding and entrance animation. This adds only the scroll behaviour a long
+   share URL needs on a short phone. Opaque, never glass: the panel carries a
+   12px monospace URL, which is the least forgiving text in the app, and glass
+   here would trade the one thing the panel exists to deliver — a readable,
+   copyable link — for an effect. */
+.akv-qr-sheet{max-height:92vh;overflow-y:auto}
+/* .sheet p (0,1,1) outranks a lone class, so the lead is qualified to win. */
+.akv-qr-sheet .akv-qr-lead{
+  margin-top:8px;font-size:14px;line-height:1.5;color:var(--muted,#756168);
+}
+
+/* ---- The code ------------------------------------------------------------ */
 .akv-qr-frame{
   /* max-width is a scanning constraint, not a taste one: a dense share URL is
      a ~93-module code, and phone cameras want roughly 3 CSS px per module.
      340px keeps it above that and still fits the 375px mobile sheet. */
   margin:18px auto 0;width:100%;max-width:340px;
-  background:${QR_LIGHT};border:1px solid var(--line,rgba(28,22,16,.09));
+  /* Literal white, NOT var(--surface): a tinted quiet zone lowers the module
+     contrast the scanner thresholds on. The one place in the app where the
+     palette is deliberately not applied — see the QR_DARK/QR_LIGHT note. */
+  background:${QR_LIGHT};
+  border:1px solid var(--line,rgba(104,52,15,.12));
   border-radius:var(--radius-sm,12px);padding:10px;
 }
 .akv-qr-frame canvas{
@@ -95,16 +149,58 @@ const STYLES = `
      what a QR wants) wins wherever it is supported. */
   image-rendering:crisp-edges;image-rendering:pixelated;
 }
-.akv-qr-note{margin-top:14px;padding:11px 14px;border-radius:var(--radius-sm,12px);background:var(--accent-2-tint,rgba(21,134,195,.12));color:var(--accent-2-ink,#0e6ba0);font-size:13.5px;font-weight:600}
+
+/* ---- The "too long for a QR" note ---------------------------------------
+   --accent-ink on --accent-tint: 5.08:1 over --surface, 4.58:1 over --paper.
+   Measured against both because a tint is transparent, so its contrast is a
+   property of whatever is behind it, not of the tint alone.
+
+   Qualified with .akv-qr-sheet for the same reason .akv-qr-lead is: the note
+   is a <p> inside .sheet, and the design system's rule
+   ".sheet p {color:var(--muted); font-size:14px}" is (0,1,1) — it outranks a
+   bare class and silently repainted this note --muted, dropping the teal the
+   notice is supposed to carry. Verified in the browser, not assumed: the
+   computed colour was rgb(117,97,104).
+   (No backticks in this comment: it lives inside the STYLES template literal,
+   and one would terminate the literal here.) */
+.akv-qr-sheet .akv-qr-note{
+  margin-top:14px;padding:11px 14px;border-radius:var(--radius-sm,12px);
+  background:var(--accent-tint,rgba(19,158,177,.12));
+  border:1px solid var(--accent-ring,rgba(19,158,177,.34));
+  color:var(--accent-ink,#0D707D);
+  font-size:13.5px;line-height:1.45;font-weight:600;
+}
+
+/* ---- The URL --------------------------------------------------------------
+   The label is the system's signature meta gesture: small, weight 600,
+   uppercase, --track-meta wide. Figtree, whose 0.88em caron clears its 0.95em
+   ascent, so every Croatian diacritic renders unclipped at this tracking. */
+.akv-qr-url-label{
+  display:block;margin:18px 0 6px;
+  font-size:11.5px;font-weight:600;letter-spacing:var(--track-meta,.08em);
+  line-height:1.4;text-transform:uppercase;color:var(--muted,#756168);
+}
 .akv-qr-url{
-  display:block;width:100%;margin-top:16px;padding:10px 12px;
-  border:1px solid var(--line,rgba(28,22,16,.09));border-radius:var(--radius-sm,12px);
-  background:var(--panel-2,#fdfdfc);color:var(--ink-2,#3a3c40);
+  display:block;width:100%;padding:10px 12px;
+  border:1px solid var(--line,rgba(104,52,15,.12));border-radius:var(--radius-sm,12px);
+  background:var(--panel-2,#FBFAFA);color:var(--ink,#313131);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;
   max-height:5.5em;overflow-y:auto;overflow-wrap:anywhere;word-break:break-all;
   -webkit-user-select:all;user-select:all;
 }
 .akv-qr-actions{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+
+/* ---- Forced colours -------------------------------------------------------
+   The ONE degradation this component must handle itself. Under forced-colors
+   the UA repaints backgrounds from the user's palette, and a repainted quiet
+   zone makes the code unscannable — so the frame opts out with
+   forced-color-adjust and keeps its literal black-on-white. Everything else
+   hands over to the system palette rather than fighting it with fixed hexes. */
+@media(forced-colors:active){
+  .akv-qr-sheet .akv-qr-note,.akv-qr-url{background:Canvas;color:CanvasText;border:1px solid CanvasText}
+  .akv-qr-sheet .akv-qr-lead,.akv-qr-url-label{color:CanvasText}
+  .akv-qr-frame{background:${QR_LIGHT};forced-color-adjust:none;border:1px solid CanvasText}
+}
 `;
 
 function ensureStyles() {
@@ -250,7 +346,8 @@ export async function openSharePanel(url, opts = {}) {
              aria-label="${esc(T("qr.canvasAlt", "QR kod poveznice za dijeljenje"))}"></canvas></div>`
         : `<p class="akv-qr-note">${esc(T("qr.tooLong",
              "Poveznica je predugačka za QR kod. Kopirajte je i pošaljite porukom."))}</p>`}
-      <code class="akv-qr-url" id="akvQrUrl">${esc(text)}</code>
+      <span class="akv-qr-url-label" id="akvQrUrlLabel">${esc(T("qr.urlLabel", "Poveznica"))}</span>
+      <code class="akv-qr-url" id="akvQrUrl" aria-labelledby="akvQrUrlLabel">${esc(text)}</code>
       <div class="sheet-actions akv-qr-actions">
         <button type="button" class="btn btn-primary btn-lg" id="akvQrCopy">${esc(copyLabel)}</button>
         <button type="button" class="btn btn-lg" id="akvQrClose">${esc(closeLabel)}</button>
