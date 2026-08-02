@@ -777,7 +777,9 @@ function markup() {
      Legibility goes UP, not down: --paper on --glass-solid-dark is 14.63:1
      against the 8.22:1 worst case of the live glass (computed). */
   /* Sibling selector, not descendant: the HUD now lives after the stage rather
-     than inside it, so `.diz-stage.is-busy .diz-hud` would never match. */
+     than inside it, so a descendant selector would never match.
+     NOTE: this whole block is inside a JS template literal — never write a
+     backtick in here, not even in a comment, or it terminates the string. */
   .diz-stage.is-busy + .diz-hud{
     backdrop-filter:none;-webkit-backdrop-filter:none;
     background-color:var(--glass-solid-dark)}
