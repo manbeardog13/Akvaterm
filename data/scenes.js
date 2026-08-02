@@ -575,7 +575,9 @@ function makeDnevniBoravak() {
     ctx.restore();
   }
 
-  return { id: "dnevni-boravak", i18nKey: "scene.dnevniBoravak", draw, surfaces };
+  // i18nKey matches the shipped dictionary entry in js/i18n.js ("scene.dnevni-boravak");
+  // the previous camelCase key missed and fell through to the view's inline fallback.
+  return { id: "dnevni-boravak", i18nKey: "scene.dnevni-boravak", draw, surfaces };
 }
 
 export const SCENES = [makeKupaonica(), makeKuhinja(), makeDnevniBoravak()];

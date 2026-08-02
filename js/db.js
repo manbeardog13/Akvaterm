@@ -10,6 +10,16 @@
 // ASC discipline ported: fail() error humanization, row-count guards on
 // mirrored writes (an RLS-filtered write "succeeds" with 0 rows), and an
 // offline outbox that replays queued mirror writes on reconnect.
+//
+// ⚠ WHAT THE MIRROR DOES AND DOES NOT DO TODAY. The rows below match
+// supabase/schema.sql exactly (column names, id types, conflict targets), but
+// `favorites` and `designs` are owner-only under RLS (`to authenticated`,
+// `user_id = auth.uid()`), and this client ships NO sign-in UI — nothing calls
+// supabase.auth. So with an anon session every mirrored write is filtered to
+// zero rows and the row-count guard logs a warning; localStorage stays the one
+// and only store. Cross-device favorites/designs become real the day an auth
+// flow lands, not the day config.js is filled in. Do not describe it as a
+// working sync feature until then (docs/SETUP.md says the same).
 // ============================================================================
 
 import { getSupabase } from "./supabaseClient.js";
@@ -104,9 +114,13 @@ export async function toggleFavorite(id) {
       (sb) => sb.from("favorites").delete().eq("product_id", id).select("product_id"),
       { table: "favorites", kind: "delete", match: { product_id: id } });
   } else {
+    // Conflict target must be the table's only unique constraint — the
+    // composite primary key (user_id, product_id). user_id is filled by the
+    // column DEFAULT auth.uid(), which Postgres evaluates before conflict
+    // resolution, so the client sends product_id alone.
     mirror("save the favorite",
-      (sb) => sb.from("favorites").upsert({ product_id: id }, { onConflict: "product_id" }).select("product_id"),
-      { table: "favorites", kind: "upsert", payload: { product_id: id }, onConflict: "product_id" });
+      (sb) => sb.from("favorites").upsert({ product_id: id }, { onConflict: "user_id,product_id" }).select("product_id"),
+      { table: "favorites", kind: "upsert", payload: { product_id: id }, onConflict: "user_id,product_id" });
   }
   return next;
 }
@@ -118,10 +132,24 @@ function readDesigns() {
   return Array.isArray(list) ? list.filter((d) => d && typeof d === "object") : [];
 }
 
-// How a design flattens into the future `designs` table (payload keeps the
-// full client shape so the schema can evolve without data loss).
+// How a design flattens into the `designs` table. Every key below is a real
+// column in supabase/schema.sql and every value satisfies its constraint:
+//   • id is TEXT there (not uuid) precisely because it is minted client-side
+//     by newId('dz') — same reasoning as products.id matching the seed file;
+//   • ref_id / name / assignments are NOT NULL, so they get defaults here
+//     (soba3d saves refId:null — fall back to the design kind);
+//   • room is nullable jsonb; user_id is left to DEFAULT auth.uid().
+// No `payload` column exists — sending one made every write fail outright.
 function designRow(d) {
-  return { id: d.id, kind: d.kind, ref_id: d.refId ?? null, name: d.name ?? null, payload: d, saved_at: d.savedAt };
+  return {
+    id: String(d.id),
+    kind: d.kind === "room3d" ? "room3d" : "scene",   // matches the CHECK constraint
+    ref_id: String(d.refId ?? d.kind ?? "design"),
+    name: String(d.name || "Moj dizajn"),
+    assignments: d.assignments && typeof d.assignments === "object" ? d.assignments : {},
+    room: d.room && typeof d.room === "object" ? d.room : null,
+    saved_at: d.savedAt,
+  };
 }
 
 export async function listDesigns() {

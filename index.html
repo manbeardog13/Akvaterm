@@ -2,6 +2,44 @@
 <html lang="hr">
 <head>
 <meta charset="utf-8">
+
+<!-- Content-Security-Policy. GitHub Pages cannot set headers, so the policy
+     ships as a meta tag; it is enforced identically apart from the header-only
+     directives (frame-ancestors / report-to), which are therefore omitted.
+
+     script-src is 'self' plus one sha256 per inline script — the import map
+     and the splash bootstrap at the bottom of this file. Adding a hash makes
+     CSP3 browsers ignore 'unsafe-inline' entirely, so any injected inline
+     script is refused: the second line of defence the hand-rolled esc()
+     helpers cannot provide on their own. Edit either inline script and you
+     MUST recompute its hash or the app will not boot.
+
+     style-src keeps 'unsafe-inline': the views build scoped <style> blocks and
+     style="" attributes by design. That is exactly why colour values coming
+     from the Terma vision model must be validated as #rrggbb at the boundary —
+     see js/terma.js — because CSS is the one context esc() does not neutralise.
+     img-src 'self' data: covers the procedural swatches (canvas.toDataURL) and
+     the base64 photo previews, and blocks the url() beacon a CSS injection
+     would otherwise fire.
+     connect-src allows Supabase (catalog mirror + the Terma Edge Function);
+     it is a wildcard because js/config.js is filled in per deployment.
+     cdn.jsdelivr.net is ONLY the transitional supabase-js fallback in
+     js/supabaseClient.js — remove it here once that library is vendored under
+     /vendor/, as docs/BUILD_CONTRACTS.md requires. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  base-uri 'none';
+  object-src 'none';
+  form-action 'none';
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-6G61/LDa3KMcuKr7MoxiJUAhQKSNzEtJUw3h9otBbms=' https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self' https://*.supabase.co;
+  worker-src 'self';
+  manifest-src 'self'
+">
+
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Akvaterm — Katalog i dizajner</title>
 <meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
@@ -29,8 +67,9 @@
 </head>
 <body>
 
-<!-- Branded splash — visible on first paint (styles.css is render-blocking),
-     dismissed by the inline script below once the app has loaded. -->
+<!-- Branded splash — visible on first paint (styles.css is render-blocking).
+     The inline script below owns its dismissal; js/app.js asks for it once the
+     first view has painted and never removes this element itself. -->
 <div id="splash" aria-hidden="true">
   <div class="sp-core">
     <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>
@@ -38,7 +77,9 @@
   </div>
 </div>
 
-<!-- App mount point — js/app.js owns everything inside. -->
+<!-- App mount point — js/app.js looks this element up by id and owns everything
+     inside it. The id must stay "app": app.js falls back to rebuilding the
+     shell (and wiping the splash with it) when it cannot find this element. -->
 <div id="app"></div>
 
 <noscript>
@@ -49,9 +90,10 @@
 </noscript>
 
 <script>
-/* Splash dismissal + service-worker registration.
-   The splash fades once the window has loaded (min 700 ms so it never blinks);
-   a 4 s watchdog guarantees it can never trap the user behind the veil. */
+/* Splash dismissal. The splash fades once the first view has painted (app.js
+   dispatches "akv:ready"), never sooner than 700 ms so it cannot blink, and a
+   4 s watchdog guarantees it can never trap the user behind the veil.
+   Service-worker registration lives in js/app.js — one registration only. */
 (function () {
   var MIN_MS = 700, WATCHDOG_MS = 4000, t0 = Date.now(), done = false;
 
@@ -67,14 +109,10 @@
     }, wait);
   }
 
-  window.addEventListener("load", hideSplash);
+  window.akvHideSplash = hideSplash;                 /* app.js calls this directly */
+  window.addEventListener("akv:ready", hideSplash);  /* …or via the event, either works */
+  window.addEventListener("load", hideSplash);       /* safety net if the app never boots */
   setTimeout(hideSplash, WATCHDOG_MS);
-
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("./service-worker.js").catch(function () {});
-    });
-  }
 })();
 </script>
 

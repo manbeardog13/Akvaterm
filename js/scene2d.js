@@ -21,11 +21,53 @@ export const DESIGN_H = 700;
 const MESH_N = 24;               // 24x24 mesh of triangle pairs per quad
 const CELL_SCALE_PX_PER_MM = 0.5; // resolution of the pattern cell we request
 const CELL_CACHE_MAX = 48;
+// Budget the cache by estimated RASTER bytes as well as by entry count: a
+// herringbone cell can be ~1200px square and each tiled source up to 1100px,
+// none of which shows up in JS-heap numbers. texture.js drops its own cell
+// cache on the app's navigation teardown event, after which the maps below
+// would hold the only remaining reference — so they clear on it too.
+const CELL_CACHE_MAX_BYTES = 48 * 1024 * 1024;
 
 // cell cache: one repeatable pattern cell per (product, pattern, grout) combo
-const cellCache = new Map();
+const cellCache = new Map();      // key -> { cell, bytes }
+const cellRecord = new WeakMap(); // cell canvas -> its cache record
 // tiled source cache: cell canvas -> Map(realSize key -> tiled canvas)
-const tiledCache = new WeakMap();
+let tiledCache = new WeakMap();
+let cellCacheBytes = 0;
+
+const rasterBytes = (canvas) => (canvas && canvas.width * canvas.height * 4) || 0;
+
+/** Drop every cached pattern cell and tiled source (wired to akv:teardown). */
+export function clearSceneCaches() {
+  cellCache.clear();
+  tiledCache = new WeakMap();
+  cellCacheBytes = 0;
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("akv:teardown", clearSceneCaches);
+}
+
+/** Bill `bytes` to the record owning `cellCanvas`, then evict FIFO if over. */
+function bill(cellCanvas, bytes) {
+  const record = cellRecord.get(cellCanvas);
+  // A record whose entry is already gone from the cache is not billed at all:
+  // its raster is unreachable bookkeeping we could never subtract again.
+  if (!record || cellCache.get(record.key) !== record) return;
+  record.bytes += bytes;
+  cellCacheBytes += bytes;
+  while (
+    cellCache.size > 1 &&
+    (cellCache.size > CELL_CACHE_MAX || cellCacheBytes > CELL_CACHE_MAX_BYTES)
+  ) {
+    const oldest = cellCache.keys().next().value;
+    const dropped = cellCache.get(oldest);
+    if (dropped && dropped.cell && dropped.cell.canvas === cellCanvas) break; // never evict what we are drawing
+    cellCacheBytes -= (dropped && dropped.bytes) || 0;
+    cellCache.delete(oldest);
+  }
+  if (cellCacheBytes < 0) cellCacheBytes = 0;
+}
 
 // ---------------------------------------------------------------------------
 // Public API — contract
@@ -141,22 +183,24 @@ function makeTexFor(assignments, products) {
     const groutColorHex =
       (GROUT_COLORS.find((g) => g.id === a.groutColorId) || GROUT_COLORS[0] || { hex: "#e8e6e1" }).hex;
     const key = [product.id, a.pattern, groutColorHex, a.groutWidthMm].join("|");
-    let cell = cellCache.get(key);
-    if (!cell) {
-      try {
-        cell = buildPatternCell(product, {
-          pattern: a.pattern,
-          groutColorHex,
-          groutWidthMm: a.groutWidthMm,
-          scalePxPerMm: CELL_SCALE_PX_PER_MM,
-        });
-      } catch (err) {
-        return null; // texture pipeline unavailable -> scene falls back to flat fill
-      }
-      if (!cell || !cell.canvas) return null;
-      cellCache.set(key, cell);
-      if (cellCache.size > CELL_CACHE_MAX) cellCache.delete(cellCache.keys().next().value);
+    const hit = cellCache.get(key);
+    if (hit) return hit.cell;
+    let cell;
+    try {
+      cell = buildPatternCell(product, {
+        pattern: a.pattern,
+        groutColorHex,
+        groutWidthMm: a.groutWidthMm,
+        scalePxPerMm: CELL_SCALE_PX_PER_MM,
+      });
+    } catch (err) {
+      return null; // texture pipeline unavailable -> scene falls back to flat fill
     }
+    if (!cell || !cell.canvas) return null;
+    const record = { key, cell, bytes: 0 };
+    cellCache.set(key, record);
+    cellRecord.set(cell.canvas, record);
+    bill(cell.canvas, rasterBytes(cell.canvas));
     return cell;
   };
 }
@@ -186,6 +230,7 @@ function tiledSource(cellCanvas, cellSizeMm, realSizeM) {
 
   if (!perCell) { perCell = new Map(); tiledCache.set(cellCanvas, perCell); }
   perCell.set(key, c);
+  bill(cellCanvas, rasterBytes(c));
   return c;
 }
 

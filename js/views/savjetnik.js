@@ -151,13 +151,35 @@ async function productCards(ids) {
   return wrap;
 }
 
+// Swatch dots for the colours the vision model read off the user's photo.
+//
+// These strings come from a model looking at an image someone may have sent
+// the user — attacker-influenceable input, and text baked into a picture is a
+// standard vision-model injection vector. Built as a string template they went
+// straight into a `style` attribute, where esc() is no defence: it escapes
+// & < > " ' and leaves `;` `(` `)` alone, so `red;background-image:url(https://
+// attacker/p)` became a real outbound request (no CSP to stop it either).
+// Two changes: the value must match #rrggbb, and it is assigned through the
+// CSSOM — style.backgroundColor drops anything invalid instead of parsing it
+// as a declaration list. The same check runs in the Edge Function and in
+// js/terma.js; this is the last one, at the DOM boundary.
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
 function colorDots(colors) {
-  if (!colors || !colors.length) return;
+  const valid = (Array.isArray(colors) ? colors : [])
+    .filter((c) => typeof c === 'string' && HEX6.test(c.trim()))
+    .map((c) => c.trim().toLowerCase())
+    .slice(0, 6);
+  if (!valid.length) return;
   const row = document.createElement('div');
   row.className = 'sv-colors';
-  row.innerHTML = colors.slice(0, 6)
-    .map((c) => `<span class="sv-dot" style="background:${esc(c)}" title="${esc(c)}"></span>`)
-    .join('');
+  for (const hex of valid) {
+    const dot = document.createElement('span');
+    dot.className = 'sv-dot';
+    dot.style.backgroundColor = hex;
+    dot.title = hex;
+    row.appendChild(dot);
+  }
   els.log.appendChild(row);
   scrollLog();
 }
@@ -358,8 +380,36 @@ async function onStageClick(productId) {
 
 // ---- offline fallback (TermaUnavailable → never a dead view) ----------------
 
+// Akvaterm d.o.o., Dubrovnik — the real contact path when the FAQ runs out.
+// Deliberately no opening hours: none are verified, and inventing them for a
+// real business is worse than omitting them.
+const CONTACT = {
+  person: 'Boris Dujmović',
+  tel: '+385 98 345 464',
+  telHref: 'tel:+38598345464',
+  email: 'akvaterm.dubrovnik@gmail.com',
+  address: 'Bokeljska 12, Dubrovnik',
+};
+
+function contactCard() {
+  return `
+    <div class="sv-contact">
+      <h3>${esc(tr('sv.contactTitle', 'Niste našli odgovor? Nazovite Akvaterm'))}</h3>
+      <p>${esc(tr('sv.contactBody',
+        'Za konkretnu ponudu, dostupnost i izlazak na teren javite se izravno — brže je nego bilo koji chat.'))}</p>
+      <div class="sv-contact-actions">
+        <a class="sv-btn sv-btn-primary" href="${esc(CONTACT.telHref)}">📞 ${esc(CONTACT.person)} · ${esc(CONTACT.tel)}</a>
+        <a class="sv-btn" href="mailto:${esc(CONTACT.email)}">✉ ${esc(CONTACT.email)}</a>
+      </div>
+      <p class="sv-contact-meta">${esc(CONTACT.address)}</p>
+    </div>`;
+}
+
 function renderOffline() {
   if (!els || !els.root) return;
+  // #svLog stays in the markup (bubble() needs it) but the STYLES hide it
+  // while it is :empty — otherwise a ~400px void sits between the explainer
+  // and the FAQ chips before the visitor has asked anything.
   els.root.innerHTML = `
     <div class="sv-offline">
       <h2>${esc(tr('sv.offlineTitle', 'Terma trenutačno nije povezana'))}</h2>
@@ -369,7 +419,8 @@ function renderOffline() {
     <div class="sv-log" id="svLog" aria-live="polite"></div>
     <div class="sv-chips" id="svFaq">
       ${FAQ.map((f, i) => `<button type="button" class="sv-chip" data-faq="${i}">${esc(f.q)}</button>`).join('')}
-    </div>`;
+    </div>
+    ${contactCard()}`;
   els.log = els.root.querySelector('#svLog');
   els.root.querySelector('#svFaq').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-faq]');
@@ -377,7 +428,10 @@ function renderOffline() {
     const f = FAQ[Number(btn.dataset.faq)];
     if (!f) return;
     bubble('me', f.q);
-    bubble('bot', f.a);
+    const answer = bubble('bot', f.a);
+    // The chips sit below the log, so without this the answer lands above the
+    // fold the visitor is looking at and the tap reads as "nothing happened".
+    try { answer.scrollIntoView({ block: 'nearest' }); } catch { /* older engines */ }
   });
 }
 
@@ -391,6 +445,7 @@ const STYLES = `
   .sv-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .sv-head h1{font-size:1.25rem;margin:0;color:var(--accent,#00008C)}
   .sv-log{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:200px;max-height:52vh;padding:4px}
+  .sv-log:empty{display:none}
   .sv-msg{max-width:85%;padding:10px 14px;border-radius:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
   .sv-msg.is-me{align-self:flex-end;background:var(--accent,#00008C);color:#fff;border-bottom-right-radius:4px}
   .sv-msg.is-bot{align-self:flex-start;background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-bottom-left-radius:4px}
@@ -419,6 +474,13 @@ const STYLES = `
   .sv-consent-actions{display:flex;gap:8px;margin-top:10px}
   .sv-offline{background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:16px}
   .sv-offline h2{margin:0 0 8px;color:var(--accent,#00008C)}
+  .sv-contact{background:var(--card-bg,#fff);border:1px solid var(--line,#ddd);border-radius:12px;padding:16px}
+  .sv-contact h3{margin:0 0 6px;font-size:1rem;color:var(--accent,#00008C)}
+  .sv-contact p{margin:0 0 10px;font-size:.9rem}
+  .sv-contact-actions{display:flex;flex-wrap:wrap;gap:8px}
+  .sv-contact-actions .sv-btn{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
+  .sv-contact-actions .sv-btn-primary{color:#fff}
+  .sv-contact .sv-contact-meta{margin:10px 0 0;font-size:.82rem;opacity:.75}
   @media (prefers-reduced-motion:no-preference){.sv-msg{animation:svIn .18s ease-out}@keyframes svIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}}
 `;
 

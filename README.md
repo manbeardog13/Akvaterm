@@ -19,15 +19,19 @@ i dnevne boravke pločicama iz kataloga, u 2D scenama i u 3D sobi, uz AI savjetn
   uzorcima kao u 2D — tekstura je fizički točnog mjerila, s fugom.
 - **Terma** — AI savjetnica (Google Gemini kroz Supabase Edge Function): pitanja o proizvodima
   s pretragom kataloga, analiza fotografije prostora, AI vizualizacija ("AI impresija" —
-  označena kao takva). Bez konfiguracije radi u demo načinu s čestim pitanjima.
+  označena kao takva; zahtijeva prijavu, koja u ovoj verziji još ne postoji). Bez konfiguracije
+  radi u demo načinu s čestim pitanjima i kontaktom Akvaterma.
 
 ## Tehnika
 
-Bez build koraka: čisti HTML/CSS/JS (ES moduli), PWA, three.js vendoriran kao ESM.
-Sve teksture pločica generiraju se proceduralno (deterministički, besšavno, u stvarnom mjerilu) —
-nema foto-ovisnosti. Podaci: Supabase (Postgres + RLS + Auth + Edge Functions) — aplikacija je
-potpuno funkcionalna i bez njega (lokalna pohrana). Dizajn sustav naslijeđen iz ASC platforme,
-prilagođen Akvaterm identitetu (navy `#00008C` / crvena `#d6252e`).
+Bez build koraka: čisti HTML/CSS/JS (ES moduli), PWA; three.js i supabase-js vendorirani kao ESM
+pod `/vendor/` — ništa se ne dohvaća s CDN-a u izvođenju. Sve teksture pločica i sve scene
+generiraju se proceduralno (deterministički, besšavno, u stvarnom mjerilu) — nema foto-ovisnosti.
+Podaci: Supabase (Postgres + RLS + Edge Functions) služi AI savjetnici; **prijava korisnika
+zasad nije izvedena**, pa se favoriti i dizajni čuvaju lokalno (localStorage), a dizajn se između
+uređaja prenosi poveznicom ili QR kodom. Aplikacija je potpuno funkcionalna i bez poslužitelja.
+Dizajn sustav naslijeđen iz ASC platforme, prilagođen Akvaterm identitetu
+(navy `#00008C` / crvena `#d6252e`).
 
 ## Pokretanje
 

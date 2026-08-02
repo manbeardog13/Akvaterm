@@ -12,7 +12,8 @@ modules, relative imports, nothing from npm at runtime except vendored files und
 - `js/i18n.js` — `export function t(key, vars?) -> string`; `export const LANG = 'hr'`.
   Missing key returns the key itself (never throws).
 - `js/supabaseClient.js` — `export function getSupabase() -> client|null` (null when CONFIG
-  empty; lazy-load @supabase/supabase-js from vendor or CDN only when configured).
+  empty; lazy-load @supabase/supabase-js from `/vendor/supabase/` — vendored only, no CDN
+  fallback, since `import()` carries no integrity check — and only when configured).
 - `js/db.js` — all async, all resolve even offline (localStorage fallback):
   `listProducts(filter?) -> Product[]` (from data/catalog.seed.json, cached),
   `getProduct(id) -> Product|null`,
@@ -50,7 +51,14 @@ modules, relative imports, nothing from npm at runtime except vendored files und
 - `js/terma.js` — `export async function* chat(messages, {signal}) -> yields {delta:string}`;
   `export async function analyzePhoto(file) -> {styleSummary, suggestedProductIds[]}`;
   both throw TermaUnavailable when CONFIG.supabaseUrl is empty → views show graceful static
-  fallback. `export class TermaUnavailable extends Error {}`.
+  fallback. `export class TermaUnavailable extends Error {}`. Conversation state is an opaque
+  handle minted by the Edge Function — never a raw provider interaction id. Errors carry
+  `.status` and a Croatian `.friendly` string.
+- `supabase/functions/terma/` — spends money, so it must always: require a bearer token, honour
+  the `ALLOWED_ORIGINS` allowlist (never `*`), consume a per-identity quota from Postgres and
+  **fail closed** if it cannot, cap body/message/image sizes, validate model output that reaches
+  the DOM (colours are `#rrggbb` or dropped), and refuse the paid `staging` action for an
+  unauthenticated caller.
 - `js/app.js` — hash router, ASC pattern: ROUTES table of `[regex, () => import('./views/x.js')]`;
   view modules export `async render(container, params)` and optional `teardown()`; app.js owns
   the frame (header w/ logo wordmark AKVA|TERM, nav tabs, main, toast), calls `t()` for chrome,
@@ -61,11 +69,14 @@ modules, relative imports, nothing from npm at runtime except vendored files und
 ## Data shapes
 
 Product: `{id, category, name, brand, textureKind, baseColorHex, accentColorHex?, tileSizeMm:[w,h]|null,
-glossy:bool, priceM2:number|null, priceUnit:number|null, unit:'m2'|'kom', desc, demo:true}`
-— tiles have tileSizeMm + priceM2; equipment (radiators, AC, faucets, WC…) has priceUnit +
-sizeCm for display. ~40+ products, Croatian names, plausible EUR prices, brands from Akvaterm's
-partner list for equipment (Viessmann, Daikin, Mitsubishi, Wilo, Grundfos…) and neutral invented
-brands for tiles (e.g. "Adria Ceramica"). All `demo:true`.
+glossy:bool, priceM2:number|null, priceUnit:number|null, unit:'m2'|'kom', desc, sizeCm?, demo:true}`
+— tiles have `tileSizeMm` + `priceM2`; equipment (radiators, AC, faucets, WC…) has `priceUnit`,
+`tileSizeMm:null` and **`sizeCm`: a display STRING in `'w×h×d'` form** (e.g. `"36×53×33"`), not an
+array and not numbers — `proizvod.js` renders it verbatim followed by the `cm` unit. It is a
+display field only: nothing computes with it, the Postgres `products` table has no column for it,
+and tiles do not carry it. ~40+ products, Croatian names, plausible EUR prices, brands from
+Akvaterm's partner list for equipment (Viessmann, Daikin, Mitsubishi, Wilo, Grundfos…) and neutral
+invented brands for tiles (e.g. "Adria Ceramica"). All `demo:true`.
 
 Design: `{id, kind:'scene'|'room3d', refId, name, assignments:{[surfaceId]:{productId,
 pattern, groutColorId, groutWidthMm}}, room?:{widthM,depthM,heightM,fixtures:[{type,x,z,rotY}]},
@@ -90,7 +101,11 @@ Savjetnik, Više.
 - localStorage keys prefixed `akv:` (favorites `akv:fav`, designs `akv:designs`, consent
   `akv:terma-consent`).
 - Canvas design space for scenes: 1000x700, letterboxed responsively.
-- Service worker SHELL must list every shipped file; CACHE name `akv-v1` tied to `APP_V` in
-  app.js.
+- Service worker SHELL must list every shipped file needed to boot and run the app. **Explicit
+  exception:** large lazily-imported bundles under `/vendor/` (three.js, supabase-js) may be left
+  out of the precache and runtime-cached on first use instead — keeping install fast matters more
+  than a first-visit-offline 3D tab. Any such omission must be stated in the service-worker header
+  comment, so the deviation is deliberate and readable rather than an oversight. CACHE name
+  `akv-v1` tied to `APP_V` in app.js.
 - No console.error left in happy paths; typed feel: helpers return null/[] not throws (except
   TermaUnavailable).

@@ -12,7 +12,7 @@ Consolidated from four parallel research tracks: the client site, the ASC refere
 
 ## 2. The ASC reference — what we reuse
 
-ASC (`C:\Users\tonij\Documents\GitHub\ASC`) is a no-build HTML/CSS/JS PWA on GitHub Pages with Supabase (Postgres + Auth + Realtime + Storage + Edge Functions). It contains **two generations**: a legacy hash-routed SPA (`js/app.js` + `css/styles.css`, 2,292 lines) and the current delivered MPA (`app/` + `app.css`, 1,032 lines, cleaner extraction).
+ASC (the operator's ASC reference repository, checked out locally alongside this one — its path is intentionally not recorded here) is a no-build HTML/CSS/JS PWA on GitHub Pages with Supabase (Postgres + Auth + Realtime + Storage + Edge Functions). It contains **two generations**: a legacy hash-routed SPA (`js/app.js` + `css/styles.css`, 2,292 lines) and the current delivered MPA (`app/` + `app.css`, 1,032 lines, cleaner extraction).
 
 **Reuse verbatim / near-verbatim:**
 - `app/app.css` as the design-system base (cleaner of the two). Accent swap: ASC's Lava `#ff4e1b` → Akvaterm navy/red. **Warning: the accent is not fully tokenized — grep every `rgba(255,78,27,…)` and `#ff8a5c`/`#d6390c` literal.**

@@ -11,18 +11,21 @@
 //                               it via ctx.createPattern, 3D via CanvasTexture
 //   swatchDataUrl(product, sizePx=256) -> string   cached catalog swatch
 //
-// Cell math: the base period comes from domain.cellMeters() (metres -> mm; an
-// internal fallback covers a missing/invalid result). grid and runningBond
-// cells are doubled to 2x2 / 2x1 base periods so neighbouring tiles can carry
-// slight per-tile tone variation without visible repetition. Herringbone lays
-// tiles as n:1 dominoes on the short pitch b = min(tileSize) + grout with n
-// snapped to the tile aspect (exact period 2nb x 2nb); diagonal uses a
-// 45°-rotated square lattice on the averaged pitch.
-// Both lattices are verified to cover the plane exactly once and repeat with
-// the claimed period. Per-tile seeds derive from the tile position modulo the
-// cell, so tiles that straddle a cell edge match their wrapped copies exactly.
+// Cell math lives in domain.js and ONLY there: patternCellMm() gives the base
+// period and herringboneUnit()/diagonalUnit() give the exact pitches this file
+// lays tiles on, so the advertised cell and the drawn layout are the same
+// numbers by construction (they used to disagree by 2x on square-format
+// herringbone). grid and runningBond cells are doubled to 2x2 / 2x1 base
+// periods so neighbouring tiles can carry slight per-tile tone variation
+// without visible repetition. Herringbone lays L-pairs and diagonal lays a
+// 45°-rotated lattice, both on the REAL tile pitch (nudged ≤1% onto a rational
+// ratio so the cell has a finite period) — a square tile is no longer drawn as
+// a domino, a 3:1 metro tile no longer as a square.
+// Both lattices cover the plane exactly once and repeat with the claimed
+// period. Per-tile seeds derive from the tile position modulo the cell, so
+// tiles that straddle a cell edge match their wrapped copies exactly.
 // ============================================================================
-import { cellMeters } from "./domain.js";
+import { patternCellMm, herringboneUnit, diagonalUnit } from "./domain.js";
 
 const TAU = Math.PI * 2;
 const SQRT2 = Math.SQRT2;
@@ -488,21 +491,13 @@ function drawTileFace(ctx, w, h, product, seed, opts) {
 }
 
 // ---- pattern layout (all in millimetres) --------------------------------------
-// Herringbone lays n:1 dominoes on the short pitch b = min(tw,th) + g with n
-// snapped to the tile's real aspect (a 20×120 plank stays a 6:1 plank). The
-// lattice m·(−b,b) + k·((n+1)b,(n−1)b) of L-pairs covers the plane exactly
-// once and repeats with period 2nb — simulation-verified for n = 2..8.
-function herringboneN(tw, th, g) {
-  const b = Math.min(tw, th) + g;
-  const n = Math.min(8, Math.max(2, Math.round((Math.max(tw, th) + g) / b)));
-  return { b, n };
-}
-
+// The pitches come from domain.js so the layout and the advertised cell are
+// the same numbers; this is only the drawing side of that contract.
 function internalPeriodMm(pattern, tw, th, g) {
-  if (pattern === "runningBond") return [tw + g, 2 * (th + g)];
-  if (pattern === "herringbone") { const { b, n } = herringboneN(tw, th, g); return [2 * n * b, 2 * n * b]; }
-  if (pattern === "diagonal") { const s = (tw + th) / 2 + g; return [s * SQRT2, s * SQRT2]; }
-  return [tw + g, th + g];
+  const mm = patternCellMm({ tileSizeMm: [tw, th] }, pattern, g);
+  return Number.isFinite(mm?.[0]) && mm[0] > 0 && Number.isFinite(mm[1]) && mm[1] > 0
+    ? [mm[0], mm[1]]
+    : [tw + g, th + g];
 }
 
 const VARIANT_MULT = { grid: [2, 2], runningBond: [2, 1], herringbone: [1, 1], diagonal: [1, 1] };
@@ -521,18 +516,20 @@ function gridPlacements(tw, th, g, W, H, bond) {
   return out;
 }
 
-// n:1 herringbone (see herringboneN above). Each lattice point carries an
-// L-pair: a horizontal a×b tile and a vertical b×a tile at its right end.
+// Herringbone on the a×b pitch (see domain.herringboneUnit). Each lattice
+// point m·(−b, b) + k·(a+b, a−b) carries an L-pair: a horizontal a×b tile and
+// a vertical b×a tile at its right end.
 function herringbonePlacements(tw, th, g, W, H) {
-  const { b, n } = herringboneN(tw, th, g);
-  const a = n * b, out = [];
-  const kMax = Math.ceil((W + H) / (2 * n * b)) + 3;
+  const { a, b } = herringboneUnit([tw, th], g);
+  const out = [];
+  // ox + oy = 2ak, so k spans [−2, (W+H+4a)/(2a)] for the padded cell.
+  const kMax = Math.ceil((W + H) / (2 * a)) + 3;
   for (let k = -kMax; k <= kMax; k++) {
-    // oy = b(m + k(n−1)) must land within [−2a, H+2a]
-    const mLo = Math.floor(-2 * a / b - k * (n - 1)) - 1;
-    const mHi = Math.ceil((H + 2 * a) / b - k * (n - 1)) + 1;
+    // oy = m·b + k(a−b) must land within [−2a, H+2a]
+    const mLo = Math.floor((-2 * a - k * (a - b)) / b) - 1;
+    const mHi = Math.ceil((H + 2 * a - k * (a - b)) / b) + 1;
     for (let m = mLo; m <= mHi; m++) {
-      const ox = b * (-m + k * (n + 1)), oy = b * (m + k * (n - 1));
+      const ox = -m * b + k * (a + b), oy = m * b + k * (a - b);
       if (ox < -2 * a || ox > W + 2 * a) continue;
       out.push({ cx: ox + a / 2, cy: oy + b / 2, w: a, h: b, rot: 0 });
       out.push({ cx: ox + a + b / 2, cy: oy + a / 2, w: b, h: a, rot: 0 });
@@ -541,15 +538,31 @@ function herringbonePlacements(tw, th, g, W, H) {
   return out;
 }
 
-// 45°-rotated squares on the averaged pitch s; centres on half-offset rows.
+// The REAL tile pitch on a 45°-rotated lattice (see domain.diagonalUnit): a
+// rectangular tile keeps its proportions instead of being averaged into a
+// square. Lattice point (a, b) sits at unrotated (u, v) = ((a+½)pw, (b+½)ph)
+// and rotates to (x, y) = ((u−v)/√2, (u+v)/√2).
 function diagonalPlacements(tw, th, g, W, H) {
-  const s = (tw + th) / 2 + g;
-  const D = s * SQRT2, out = [];
-  const rows = Math.ceil(H / (D / 2)) + 4, cols = Math.ceil(W / D) + 4;
-  for (let j = -3; j < rows; j++) {
-    const off = (((j % 2) + 2) % 2) * (D / 2);
-    for (let i = -3; i < cols; i++) {
-      out.push({ cx: i * D + off, cy: j * (D / 2), w: s, h: s, rot: Math.PI / 4 });
+  const { pw, ph } = diagonalUnit([tw, th], g);
+  const margin = Math.max(pw, ph);
+  // Invert the four corners of the padded cell to bound the lattice indices.
+  let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+  for (const x of [-margin, W + margin]) {
+    for (const y of [-margin, H + margin]) {
+      const u = (x + y) / SQRT2, v = (y - x) / SQRT2;
+      if (u < uMin) uMin = u;
+      if (u > uMax) uMax = u;
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+    }
+  }
+  const out = [];
+  const aLo = Math.floor(uMin / pw) - 1, aHi = Math.ceil(uMax / pw) + 1;
+  const bLo = Math.floor(vMin / ph) - 1, bHi = Math.ceil(vMax / ph) + 1;
+  for (let a = aLo; a <= aHi; a++) {
+    for (let b = bLo; b <= bHi; b++) {
+      const u = (a + 0.5) * pw, v = (b + 0.5) * ph;
+      out.push({ cx: (u - v) / SQRT2, cy: (u + v) / SQRT2, w: pw, h: ph, rot: Math.PI / 4 });
     }
   }
   return out;
@@ -582,7 +595,39 @@ function drawPlacedTile(ctx, pl, g, product, seed, opts) {
 }
 
 // ---- public: the pattern cell -------------------------------------------------
-const cellCache = new Map();
+// The cache is budgeted by estimated RASTER BYTES (width×height×4), not by
+// entry count: a 3D cell can be 2048×2048 (~16 MB of canvas backing store that
+// never shows up in JS-heap numbers), so 48 of them would pin ~770 MB. Entries
+// are evicted FIFO until both budgets hold, and the whole cache is dropped on
+// the app's navigation teardown event — regenerating a cell costs 4–11 ms.
+const cellCache = new Map();          // key -> { value, bytes }
+let cellCacheBytes = 0;
+const CELL_CACHE_MAX_ENTRIES = 48;
+const CELL_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+
+/** Drop every cached pattern cell (also wired to the akv:teardown event). */
+export function clearCellCache() {
+  cellCache.clear();
+  cellCacheBytes = 0;
+}
+
+function cacheCell(key, value, bytes) {
+  cellCache.set(key, { value, bytes });
+  cellCacheBytes += bytes;
+  while (
+    cellCache.size > 1 &&
+    (cellCache.size > CELL_CACHE_MAX_ENTRIES || cellCacheBytes > CELL_CACHE_MAX_BYTES)
+  ) {
+    const oldest = cellCache.keys().next().value;
+    cellCacheBytes -= cellCache.get(oldest)?.bytes || 0;
+    cellCache.delete(oldest);
+  }
+  if (cellCacheBytes < 0) cellCacheBytes = 0;
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("akv:teardown", clearCellCache);
+}
 
 export function buildPatternCell(product, opts = {}) {
   const pattern = opts.pattern || "grid";
@@ -591,28 +636,17 @@ export function buildPatternCell(product, opts = {}) {
   const scalePxPerMm = Number.isFinite(opts.scalePxPerMm) && opts.scalePxPerMm > 0 ? opts.scalePxPerMm : 0.5;
   const key = [product?.id, pattern, groutColorHex, g, scalePxPerMm].join("|");
   const hit = cellCache.get(key);
-  if (hit) return hit;
+  if (hit) return hit.value;
 
   const [tw, th] = Array.isArray(product?.tileSizeMm) ? product.tileSizeMm : DEFAULT_TILE_MM;
-  const internal = internalPeriodMm(pattern, tw, th, g);
-  // domain.js owns the physical cell math; adopt its base period when it agrees
-  // with the drawn layout (within 25% per axis — pixel-exact when identical).
-  // A herringbone/diagonal convention mismatch or an unusable value falls back
-  // to the internal period so tiles are never visibly stretched. Values beyond
-  // 100 m are assumed to be mm.
-  let base = internal;
-  try {
-    const m = cellMeters(product, pattern, g);
-    if (m && Number.isFinite(m[0]) && m[0] > 0 && Number.isFinite(m[1]) && m[1] > 0) {
-      const mm = m[0] > 100 ? [m[0], m[1]] : [m[0] * 1000, m[1] * 1000];
-      const rx = mm[0] / internal[0], ry = mm[1] / internal[1];
-      if (rx > 0.8 && rx < 1.25 && ry > 0.8 && ry < 1.25) base = mm;
-    }
-  } catch { /* offline-safe: internal math */ }
+  // One period, used for BOTH the advertised cell size and the drawn layout:
+  // domain.js computes it and the placement functions above lay tiles on the
+  // very same pitches, so there is nothing left to reconcile.
+  const base = internalPeriodMm(pattern, tw, th, g);
 
   const mult = VARIANT_MULT[pattern] || [1, 1];
   const cellSizeMm = [base[0] * mult[0], base[1] * mult[1]];
-  const layoutW = internal[0] * mult[0], layoutH = internal[1] * mult[1];
+  const layoutW = cellSizeMm[0], layoutH = cellSizeMm[1];
 
   let pxW = Math.max(2, Math.round(cellSizeMm[0] * scalePxPerMm));
   let pxH = Math.max(2, Math.round(cellSizeMm[1] * scalePxPerMm));
@@ -638,8 +672,7 @@ export function buildPatternCell(product, opts = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   const result = { canvas, cellSizeMm };
-  cellCache.set(key, result);
-  if (cellCache.size > 48) cellCache.delete(cellCache.keys().next().value);
+  cacheCell(key, result, pxW * pxH * 4);
   return result;
 }
 

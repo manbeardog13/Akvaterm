@@ -99,10 +99,23 @@ export function ensureStyles() {
 .akv-cat-ico { font-size:26px; }
 .akv-cat-n { font-weight:700; }
 .akv-cat-c { font-size:12px; }
-.akv-chiprow { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px; align-items:center; }
-.akv-chiprow .lab { font-size:12px; font-weight:700; opacity:.7; min-width:78px; }
-.akv-chip { border:1px solid rgba(0,0,0,.18); background:transparent; color:inherit; border-radius:999px; padding:10px 14px; min-height:44px; font-size:13px; cursor:pointer; }
-.akv-chip.on { background:var(--accent,#00008C); border-color:var(--accent,#00008C); color:#fff; }
+.akv-chiprow { display:flex; flex-wrap:nowrap; gap:8px; margin:6px 0 4px; align-items:center; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
+.akv-chiprow[hidden] { display:none; }
+.akv-chiprow::-webkit-scrollbar { height:4px; }
+.akv-chiprow::-webkit-scrollbar-thumb { background:rgba(0,0,0,.18); border-radius:999px; }
+.akv-chiprow .lab { font-size:12px; font-weight:700; opacity:.7; min-width:78px; flex:0 0 auto; position:sticky; left:0; background:var(--bg,#fff); padding-right:2px; z-index:1; }
+.akv-chip { flex:0 0 auto; white-space:nowrap; border:1px solid rgba(0,0,0,.18); background:transparent; color:inherit; border-radius:999px; padding:10px 14px; min-height:44px; font-size:13px; cursor:pointer; }
+.akv-chip.on, .akv-chip[aria-pressed="true"] { background:var(--accent,#00008C); border-color:var(--accent,#00008C); color:#fff; }
+.akv-chip .n { opacity:.6; font-variant-numeric:tabular-nums; margin-left:4px; font-size:12px; }
+.akv-chip[aria-pressed="true"] .n { opacity:.85; }
+.akv-chip.is-empty { opacity:.42; }
+.akv-chip-clear { border-style:dashed; font-weight:700; }
+.akv-resume { padding:0; overflow:hidden; margin:14px 0 4px; }
+.akv-resume-a { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color:inherit; text-decoration:none; padding:12px; }
+.akv-resume-c { flex:0 0 auto; width:100%; max-width:320px; aspect-ratio:1000/700; border-radius:10px; background:#eceae6; display:block; }
+.akv-resume-b { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+.akv-resume-t { font-weight:800; font-size:16px; }
+.akv-resume-btn { margin-top:6px; }
 .akv-sec-t { font-size:16px; font-weight:800; margin:22px 0 10px; }
 .akv-empty { text-align:center; padding:40px 16px; }
 .akv-empty .ico { font-size:40px; }
@@ -121,8 +134,72 @@ export function ensureStyles() {
 .akv-dsw img { width:36px; height:36px; border-radius:6px; display:block; }
 .akv-dbody { flex:1 1 200px; min-width:0; }
 .akv-dactions { display:flex; gap:8px; }
+.akv-order { margin:0 0 8px; font-size:13px; }
+.akv-inq { margin-top:12px; padding:12px; border:1px dashed rgba(0,0,0,.22); border-radius:12px; }
+.akv-inq textarea { width:100%; min-height:196px; font:inherit; font-size:13px; line-height:1.5; padding:10px; margin-top:8px; border:1px solid rgba(0,0,0,.18); border-radius:8px; background:#fff; color:inherit; resize:vertical; }
 `;
   document.head.appendChild(style);
+}
+
+// ---- lazy swatches --------------------------------------------------------------
+// Generating a 256px procedural swatch costs 3-20 ms and toDataURL on top, so
+// a 23-card category grid used to block the main thread for ~150 ms in one
+// task. Cards now render with the placeholder background and their images are
+// filled in small idle slices, visible cards first.
+const SWATCH_SLICE = 3;
+let swatchPass = 0;
+// id -> product, so a pending <img> only has to carry its id (the seed catalog
+// is 46 products, and db.js holds the same objects anyway)
+const swatchSubjects = new Map();
+
+const idle = (fn) =>
+  (typeof requestIdleCallback === "function" ? requestIdleCallback(fn, { timeout: 240 }) : setTimeout(fn, 16));
+
+const nearViewport = (el) => {
+  const r = el.getBoundingClientRect();
+  const h = window.innerHeight || 800;
+  return r.bottom > -h * 0.5 && r.top < h * 1.5;
+};
+
+/** Fill every pending [data-akv-swatch] image, a few per idle slice. */
+export function hydrateSwatches(root = document) {
+  const found = [...root.querySelectorAll("img[data-akv-swatch]")];
+  if (!found.length) return;
+  // visible (or nearly visible) cards first, the rest in document order;
+  // the rects are read once, up front, so the sort does no layout work
+  const pending = found
+    .map((img, i) => ({ img, i, near: nearViewport(img) }))
+    .sort((a, b) => Number(b.near) - Number(a.near) || a.i - b.i)
+    .map((e) => e.img);
+  let i = 0;
+  const step = () => {
+    let done = 0;
+    while (i < pending.length && done < SWATCH_SLICE) {
+      const img = pending[i++];
+      const p = swatchSubjects.get(img.dataset.akvSwatch);
+      delete img.dataset.akvSwatch;
+      if (!img.isConnected || !p) continue;
+      try { img.src = swatchDataUrl(p, Number(img.dataset.akvSize) || 256); } catch { /* keep the placeholder */ }
+      done++;
+    }
+    if (i < pending.length) idle(step);
+  };
+  idle(step);
+}
+
+// productCard() is called while a template string is being built, so the nodes
+// do not exist yet — queue one hydration pass for the next idle slot.
+function queueSwatchHydration() {
+  if (swatchPass) return;
+  swatchPass = 1;
+  idle(() => { swatchPass = 0; hydrateSwatches(); });
+}
+
+/** Register a product and return the attributes a pending swatch <img> needs. */
+export function swatchAttrs(p, sizePx = 256) {
+  swatchSubjects.set(p.id, p);
+  queueSwatchHydration();
+  return `data-akv-swatch="${esc(p.id)}" data-akv-size="${sizePx}"`;
 }
 
 // ---- product cards ------------------------------------------------------------
@@ -136,7 +213,7 @@ export function productCard(p, favSet) {
   <article class="akv-pcard card" data-pid="${esc(p.id)}">
     <a class="akv-pcard-a" href="#/proizvod/${encodeURIComponent(p.id)}" aria-label="${esc(p.name)}">
       <div class="akv-sw-wrap">
-        <img class="akv-swatch" src="${swatchDataUrl(p)}" alt="" width="256" height="256">
+        <img class="akv-swatch" ${swatchAttrs(p, 256)} alt="" width="256" height="256">
         ${isTile ? "" : `<span class="akv-eq-ico">${esc(CAT_ICONS[p.category] || "📦")}</span>`}
       </div>
       <div class="akv-pbody">
@@ -165,6 +242,72 @@ export function wireFavButtons(root, favSet, onChange) {
   });
 }
 
+// ---- "Nastavite gdje ste stali" -------------------------------------------------
+// The 2D designer persists its working state as akv:diz-draft
+// ({sceneId, perScene, savedAt}); when one exists the home screen offers a warm
+// re-entry with a real thumbnail of the draft. data/scenes.js + js/scene2d.js
+// are imported dynamically so the cold catalog boot never pays for them.
+const DRAFT_KEY = "akv:diz-draft";
+const SCENE_FB = { "kupaonica": "Kupaonica", "kuhinja": "Kuhinja", "dnevni-boravak": "Dnevni boravak" };
+
+function readDesignerDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d.sceneId !== "string" || !d.sceneId) return null;
+    const assignments = d.perScene && d.perScene[d.sceneId];
+    if (!assignments || typeof assignments !== "object" || !Object.keys(assignments).length) return null;
+    return { sceneId: d.sceneId, assignments, savedAt: d.savedAt };
+  } catch { return null; }
+}
+
+function draftWhen(savedAt) {
+  const ts = Date.parse(savedAt || "");
+  if (!Number.isFinite(ts)) return "";
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days <= 0) return tf("kat.resumeToday", "danas");
+  if (days === 1) return tf("kat.resumeYesterday", "jučer");
+  try {
+    return new Intl.DateTimeFormat("hr-HR", { day: "numeric", month: "numeric", year: "numeric" }).format(new Date(ts));
+  } catch { return ""; }
+}
+
+function resumeMarkup(draft) {
+  return `
+  <section class="card akv-resume" id="akvResume">
+    <a class="akv-resume-a" href="#/dizajner/${encodeURIComponent(draft.sceneId)}">
+      <canvas class="akv-resume-c" id="akvResumeC" width="640" height="448" role="img"
+        aria-label="${esc(tf("kat.resumeAlt", "Pregled vašeg nedovršenog dizajna"))}"></canvas>
+      <div class="akv-resume-b">
+        <div class="akv-resume-t">${esc(tf("kat.resumeTitle", "Nastavite gdje ste stali"))}</div>
+        <div class="muted" id="akvResumeSub" style="font-size:13px"></div>
+        <span class="btn btn-primary akv-resume-btn">${esc(tf("kat.resumeCta", "Nastavi dizajn"))}</span>
+      </div>
+    </a>
+  </section>`;
+}
+
+async function hydrateResume(container, draft, products) {
+  const host = container.querySelector("#akvResume");
+  if (!host) return;
+  try {
+    const [scenesMod, scene2d] = await Promise.all([
+      import("../../data/scenes.js"),
+      import("../scene2d.js"),
+    ]);
+    const scene = (scenesMod.SCENES || []).find((s) => s.id === draft.sceneId);
+    if (!scene || !host.isConnected) { host.remove(); return; }
+    scene2d.renderScene(host.querySelector("#akvResumeC"), scene, draft.assignments, products);
+    const name = tf(scene.i18nKey, SCENE_FB[scene.id] || scene.id);
+    const when = draftWhen(draft.savedAt);
+    const sub = host.querySelector("#akvResumeSub");
+    if (sub) sub.textContent = when ? `${name} · ${tf("kat.resumeSaved", "spremljeno")} ${when}` : name;
+  } catch {
+    host.remove();          // scenes unavailable (offline shell miss) — no dead card
+  }
+}
+
 // ---- view ---------------------------------------------------------------------
 const FEATURED_IDS = ["ker-01", "ker-18", "ker-15", "ker-22", "gri-05", "kli-05"];
 
@@ -185,6 +328,7 @@ function renderHome(container, products, favSet) {
   for (const p of products) countBy[p.category] = (countBy[p.category] || 0) + 1;
   const featured = FEATURED_IDS.map((id) => products.find((p) => p.id === id)).filter(Boolean);
   const feat = featured.length ? featured : products.slice(0, 6);
+  const draft = readDesignerDraft();
 
   container.innerHTML = `
     <header style="margin:4px 0 12px">
@@ -200,33 +344,48 @@ function renderHome(container, products, favSet) {
           <span class="akv-cat-c muted">${countBy[c.id] || 0} ${esc(tf("kat.productsShort", "proizvoda"))}</span>
         </a>`).join("")}
     </nav>
+    ${draft ? resumeMarkup(draft) : ""}
     <h2 class="akv-sec-t">${esc(tf("kat.featured", "Izdvojeno"))}</h2>
     <div class="akv-grid" id="featGrid">${feat.map((p) => productCard(p, favSet)).join("")}</div>`;
 
   wireFavButtons(container.querySelector("#featGrid"), favSet);
+  if (draft) hydrateResume(container, draft, products);
 }
 
 function renderCategory(container, cat, products, favSet) {
   const rows = products.filter((p) => p.category === cat.id);
   const isTileCat = rows.some((p) => Array.isArray(p.tileSizeMm));
 
-  const formats = [...new Set(rows.map(formatLabel).filter(Boolean))]
-    .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  // Formats sorted by real tile AREA — "600×1200 before 600×600, 1200×200
+  // last" (what parseInt of the label produced) reads arbitrary to a customer.
+  const byArea = new Map();
+  for (const p of rows) {
+    const label = formatLabel(p);
+    if (label && !byArea.has(label)) byArea.set(label, p.tileSizeMm[0] * p.tileSizeMm[1]);
+  }
+  const formats = [...byArea.entries()].sort((a, b) => a[1] - b[1]).map(([label]) => label);
   const colors = COLOR_ORDER.filter((cid) => rows.some((p) => colorGroup(p.baseColorHex) === cid));
   const brands = [...new Set(rows.map((p) => p.brand))].sort((a, b) => a.localeCompare(b, "hr"));
   const finishes = isTileCat ? ["glossy", "mat"] : [];
 
   const state = { format: null, boja: null, finish: null, brand: null };
-  const matches = (p) =>
-    (!state.format || formatLabel(p) === state.format) &&
-    (!state.boja || colorGroup(p.baseColorHex) === state.boja) &&
-    (!state.finish || (state.finish === "glossy") === !!p.glossy) &&
-    (!state.brand || p.brand === state.brand);
+  const matchesWith = (p, s) =>
+    (!s.format || formatLabel(p) === s.format) &&
+    (!s.boja || colorGroup(p.baseColorHex) === s.boja) &&
+    (!s.finish || (s.finish === "glossy") === !!p.glossy) &&
+    (!s.brand || p.brand === s.brand);
+  const matches = (p) => matchesWith(p, state);
+  // How many products this chip would leave if it were the value for its group.
+  const countFor = (group, value) => rows.filter((p) => matchesWith(p, { ...state, [group]: value })).length;
+  const activeCount = () => Object.values(state).filter(Boolean).length;
 
-  const chipRow = (group, label, opts) => !opts.length || opts.length < 2 ? "" : `
+  const chipRow = (group, label, opts) => opts.length < 2 ? "" : `
     <div class="akv-chiprow" role="group" aria-label="${esc(label)}">
       <span class="lab">${esc(label)}</span>
-      ${opts.map((o) => `<button type="button" class="akv-chip" data-fg="${esc(group)}" data-fv="${esc(o.value)}">${esc(o.label)}</button>`).join("")}
+      ${opts.map((o) => `
+        <button type="button" class="akv-chip" data-fg="${esc(group)}" data-fv="${esc(o.value)}" aria-pressed="false">
+          ${esc(o.label)}<span class="n" aria-hidden="true"></span>
+        </button>`).join("")}
     </div>`;
 
   container.innerHTML = `
@@ -239,10 +398,31 @@ function renderCategory(container, cat, products, favSet) {
     ${chipRow("boja", tf("kat.fColor", "Boja"), colors.map((c) => ({ value: c, label: COLOR_LABELS[c] })))}
     ${chipRow("finish", tf("kat.fFinish", "Završna obrada"), finishes.map((f) => ({ value: f, label: f === "glossy" ? tf("kat.glossy", "Sjajna") : tf("kat.mat", "Mat") })))}
     ${chipRow("brand", tf("kat.fBrand", "Marka"), brands.map((b) => ({ value: b, label: b })))}
+    <div class="akv-chiprow" id="catReset" hidden>
+      <button type="button" class="akv-chip akv-chip-clear" id="catClear"></button>
+    </div>
     <div class="akv-grid" id="catGrid" style="margin-top:12px"></div>`;
 
   const grid = container.querySelector("#catGrid");
   const countEl = container.querySelector("#catCount");
+  const resetRow = container.querySelector("#catReset");
+  const clearBtn = container.querySelector("#catClear");
+  const chips = [...container.querySelectorAll(".akv-chip[data-fg]")];
+
+  const syncChips = () => {
+    for (const chip of chips) {
+      const on = state[chip.dataset.fg] === chip.dataset.fv;
+      const n = countFor(chip.dataset.fg, chip.dataset.fv);
+      chip.classList.toggle("on", on);
+      chip.setAttribute("aria-pressed", String(on));
+      chip.classList.toggle("is-empty", n === 0 && !on);
+      const slot = chip.querySelector(".n");
+      if (slot) slot.textContent = ` ${n}`;
+    }
+    const active = activeCount();
+    resetRow.hidden = active === 0;
+    clearBtn.textContent = `${tf("kat.clearFilters", "Očisti")} (${active})`;
+  };
 
   const apply = () => {
     const list = rows.filter(matches);
@@ -255,16 +435,19 @@ function renderCategory(container, cat, products, favSet) {
            <p class="muted">${esc(tf("kat.noMatchBody", "Pokušajte ukloniti neki od filtera."))}</p>
          </div>`;
     wireFavButtons(grid, favSet);
+    syncChips();
   };
 
-  container.querySelectorAll(".akv-chip").forEach((chip) => {
+  for (const chip of chips) {
     chip.addEventListener("click", () => {
       const group = chip.dataset.fg, value = chip.dataset.fv;
       state[group] = state[group] === value ? null : value;
-      container.querySelectorAll(`.akv-chip[data-fg="${group}"]`)
-        .forEach((c) => c.classList.toggle("on", state[group] === c.dataset.fv));
       apply();
     });
+  }
+  clearBtn.addEventListener("click", () => {
+    for (const key of Object.keys(state)) state[key] = null;
+    apply();
   });
 
   apply();

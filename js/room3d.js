@@ -11,16 +11,67 @@
 // Contract: export async mountRoom(el, {room, assignments, products, onReady})
 //   -> { dispose(), setSurface(surfaceId, product, opts), setDims(w,d,h),
 //        setFixtures(list) }
+//
+// Interaction discipline (review fixes):
+//   * Intent-gated controls — until the user deliberately taps/clicks the
+//     canvas, wheel zoom is off and one-finger touch does nothing, and the
+//     canvas keeps `touch-action: pan-y` FOREVER so a vertical page swipe that
+//     starts on the room always scrolls the page instead of orbiting it.
+//   * On-demand rendering — frames are drawn on control change, resize, damping
+//     settle and content change, never as an unconditional rAF treadmill.
+//   * Accessible — the canvas carries role/aria-label (dims + tiled surfaces,
+//     kept current) and orbits with the arrow keys / +- .
 // ============================================================================
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { buildPatternCell } from "./texture.js";
-import { GROUT_COLORS } from "./domain.js";
+import { GROUT_COLORS, cellMeters } from "./domain.js";
+import { t } from "./i18n.js";
 
 const DIM_MIN = 1.5, DIM_MAX = 8;
 const SURFACE_IDS = ["floor", "wallN", "wallE", "wallS", "wallW"];
+
+// i18n with an inline Croatian fallback (t() returns the key when missing), so
+// the assistive-tech description is Croatian even before the dictionary lands.
+const tt = (key, hr) => { const s = t(key); return s === key ? hr : s; };
+
+const SURFACE_HR = {
+  floor: "pod",
+  wallN: "sjeverni zid",
+  wallE: "istočni zid",
+  wallS: "južni zid",
+  wallW: "zapadni zid",
+};
+
+// OrbitControls' `touches` switch falls through to "do nothing" for any value
+// outside THREE.TOUCH — three ships no TOUCH.NONE, so this sentinel is the
+// documented way to disable a finger count.
+const TOUCH_NONE = -1;
+
+// A 3D pattern cell is only ever seen across a whole wall, so raster past ~1k
+// buys nothing while costing 4x the GPU memory: a 2048² RGBA cell is ~16 MB and
+// a browsing session pins dozens of them. Mirrors texture.js's VARIANT_MULT so
+// the estimate matches the canvas that buildPatternCell will actually produce.
+const MAX_3D_CELL_PX = 1024;
+const MAX_3D_SCALE = 1.5;
+const CELL_MULT = { grid: [2, 2], runningBond: [2, 1], herringbone: [1, 1], diagonal: [1, 1] };
+
+function cellScaleFor(product, pattern, groutWidthMm) {
+  try {
+    const m = cellMeters(product, pattern, groutWidthMm);
+    const mult = CELL_MULT[pattern] || [2, 2];
+    const maxMm = Math.max(m[0] * mult[0], m[1] * mult[1]) * 1000;
+    if (Number.isFinite(maxMm) && maxMm > 0) {
+      return Math.min(MAX_3D_SCALE, Math.max(0.25, MAX_3D_CELL_PX / maxMm));
+    }
+  } catch { /* pure-math helper — fall through to the safe default */ }
+  return 0.5;
+}
+
+// "2,55" — Croatian decimal comma, trailing zeros trimmed.
+const fmtM = (n) => String(Math.round((Number(n) || 0) * 100) / 100).replace(".", ",");
 // Outward normals (pointing away from the room) — a wall is hidden while the
 // camera stands on its outside, so the interior always reads open.
 const OUTWARD = {
@@ -178,16 +229,24 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     depthM: clampDim(room.depthM, 2.5),
     heightM: clampDim(room.heightM, 2.6),
   };
+  let disposed = false;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // + shadow.radius = soft edges (PCFSoft is deprecated in r185)
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.display = "block";
-  renderer.domElement.style.width = "100%";
-  renderer.domElement.style.height = "100%";
-  el.appendChild(renderer.domElement);
+  const canvasEl = renderer.domElement;
+  canvasEl.style.display = "block";
+  canvasEl.style.width = "100%";
+  canvasEl.style.height = "100%";
+  // Named, focusable and keyboard-orbitable: without this the room is a silent,
+  // unreachable region for assistive tech and pointer-only for everyone else.
+  canvasEl.setAttribute("role", "img");
+  canvasEl.setAttribute("tabindex", "0");
+  canvasEl.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
+  canvasEl.style.outlineOffset = "-3px";
+  el.appendChild(canvasEl);
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
   const scene = new THREE.Scene();
@@ -210,11 +269,50 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   scene.add(sun.target);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 100);
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controls = new OrbitControls(camera, canvasEl);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.maxPolarAngle = Math.PI / 2 - 0.04; // never under the floor
   controls.minDistance = 1.2;
+  controls.enablePan = false;                  // the room stays framed
+
+  // ---- Intent gate ---------------------------------------------------------
+  // OrbitControls' constructor sets touch-action:none, which is exactly the
+  // scroll trap the review caught. We take it back to pan-y and keep it there:
+  // a vertical swipe over the room always scrolls the page, at every moment of
+  // the session. Wheel zoom and one-finger orbit only switch on after a
+  // deliberate click (mouse/pen) or tap (touch) on the canvas.
+  let armed = false;
+  controls.enableZoom = false;
+  controls.touches = { ONE: TOUCH_NONE, TWO: TOUCH_NONE };
+  canvasEl.style.touchAction = "pan-y";
+
+  function arm() {
+    if (armed || disposed) return;
+    armed = true;
+    controls.enableZoom = true;
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    // The view fades its "drag to rotate" hint on this.
+    canvasEl.dispatchEvent(new CustomEvent("akv:room-armed", { bubbles: true }));
+  }
+  function disarm() {
+    if (!armed || disposed) return;
+    armed = false;
+    controls.enableZoom = false;
+    controls.touches = { ONE: TOUCH_NONE, TWO: TOUCH_NONE };
+  }
+
+  // Capture phase so the gate opens before OrbitControls' own pointerdown
+  // handler runs and the very same mouse drag already orbits. A touch gesture
+  // is armed on pointerup instead: arming mid-gesture would let one swipe both
+  // scroll the page and spin the camera.
+  const onPointerDownCapture = (e) => { if (e.pointerType !== "touch") arm(); };
+  const onPointerUpCapture = (e) => { if (e.pointerType === "touch") arm(); };
+  // Leaving with the mouse hands the wheel back to the page.
+  const onPointerLeave = (e) => { if (e.pointerType !== "touch") disarm(); };
+  canvasEl.addEventListener("pointerdown", onPointerDownCapture, true);
+  canvasEl.addEventListener("pointerup", onPointerUpCapture, true);
+  canvasEl.addEventListener("pointerleave", onPointerLeave);
 
   // ---- Surfaces ------------------------------------------------------------
   const surfaceRecs = {};
@@ -284,6 +382,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     if (!product) {
       applied[sid] = null;
       resetSurface(sid);
+      updateAriaLabel();
       return;
     }
     const normalized = {
@@ -293,7 +392,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     };
     const { canvas, cellSizeMm } = buildPatternCell(product, {
       ...normalized,
-      scalePxPerMm: 1.5,
+      scalePxPerMm: cellScaleFor(product, normalized.pattern, normalized.groutWidthMm),
     });
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -309,6 +408,25 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     mat.roughness = product.glossy ? 0.28 : 0.8;
     mat.needsUpdate = true;
     applied[sid] = { product, opts: normalized };
+    updateAriaLabel();
+  }
+
+  // ---- Accessible name -----------------------------------------------------
+  // Kept current with dims and tiling, so a screen-reader user always hears
+  // what the sighted user is looking at.
+  function updateAriaLabel() {
+    const tiled = SURFACE_IDS
+      .filter((sid) => applied[sid])
+      .map((sid) => tt(`soba3d.surface.${sid}`, SURFACE_HR[sid]).toLocaleLowerCase("hr-HR"));
+    const parts = [
+      tt("soba3d.a11y.canvas", "3D prikaz prostorije"),
+      `${fmtM(dims.widthM)} × ${fmtM(dims.depthM)} × ${fmtM(dims.heightM)} m`,
+      tiled.length
+        ? `${tt("soba3d.a11y.tiled", "Obložene površine")}: ${tiled.join(", ")}`
+        : tt("soba3d.a11y.untiled", "Nijedna površina još nije obložena"),
+      tt("soba3d.a11y.keys", "Strelicama okrenite prikaz, tipkama + i − približite"),
+    ];
+    canvasEl.setAttribute("aria-label", parts.join(". ") + ".");
   }
 
   // ---- Fixtures ------------------------------------------------------------
@@ -352,17 +470,19 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    requestRender();
   }
-  resize();
-  const ro = new ResizeObserver(resize);
-  ro.observe(el);
 
   let raf = 0;
-  let disposed = false;
   let readyFired = false;
-  function tick() {
+
+  // On-demand rendering: a still room costs nothing. Frames are requested by
+  // the controls' 'change' event (which OrbitControls also fires from inside
+  // update() while damping settles, so the glide still animates), by resize and
+  // by every content mutation below.
+  function renderFrame() {
+    raf = 0;
     if (disposed) return;
-    raf = requestAnimationFrame(tick);
     controls.update();
     updateWallVisibility();
     renderer.render(scene, camera);
@@ -371,6 +491,52 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       if (typeof onReady === "function") onReady();
     }
   }
+  function requestRender() {
+    if (disposed || raf) return;
+    raf = requestAnimationFrame(renderFrame);
+  }
+  controls.addEventListener("change", requestRender);
+
+  resize();
+  const ro = new ResizeObserver(resize);
+  ro.observe(el);
+
+  // ---- Keyboard orbit ------------------------------------------------------
+  const _kbOffset = new THREE.Vector3();
+  const _kbSpherical = new THREE.Spherical();
+  function orbitBy(dTheta, dPhi) {
+    _kbOffset.copy(camera.position).sub(controls.target);
+    _kbSpherical.setFromVector3(_kbOffset);
+    _kbSpherical.theta += dTheta;
+    _kbSpherical.phi = Math.min(controls.maxPolarAngle, Math.max(0.08, _kbSpherical.phi + dPhi));
+    _kbOffset.setFromSpherical(_kbSpherical);
+    camera.position.copy(controls.target).add(_kbOffset);
+    camera.lookAt(controls.target);
+    requestRender();
+  }
+  function dollyBy(factor) {
+    _kbOffset.copy(camera.position).sub(controls.target);
+    const len = Math.min(controls.maxDistance, Math.max(controls.minDistance, _kbOffset.length() * factor));
+    _kbOffset.setLength(len);
+    camera.position.copy(controls.target).add(_kbOffset);
+    requestRender();
+  }
+  function onKeyDown(e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const step = e.shiftKey ? 0.22 : 0.08;
+    let handled = true;
+    switch (e.key) {
+      case "ArrowLeft":  orbitBy(-step, 0); break;
+      case "ArrowRight": orbitBy(step, 0); break;
+      case "ArrowUp":    orbitBy(0, -step); break;
+      case "ArrowDown":  orbitBy(0, step); break;
+      case "+": case "=": dollyBy(0.88); break;
+      case "-": case "_": dollyBy(1.14); break;
+      default: handled = false;
+    }
+    if (handled) { e.preventDefault(); arm(); }
+  }
+  canvasEl.addEventListener("keydown", onKeyDown);
 
   // Initial state from the caller's saved design.
   for (const [sid, a] of Object.entries(assignments || {})) {
@@ -386,11 +552,13 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   }
   fixturesState = Array.isArray(room.fixtures) ? room.fixtures.map((f) => ({ ...f })) : [];
   placeFixtures();
-  tick();
+  updateAriaLabel();
+  requestRender();
 
   return {
     setSurface(surfaceId, product, opts) {
       applySurface(surfaceId, product, opts || {});
+      requestRender();
     },
 
     setDims(w, d, h) {
@@ -402,24 +570,33 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       for (const [sid, rec] of Object.entries(applied)) {
         if (rec) applySurface(sid, rec.product, rec.opts);
       }
+      updateAriaLabel();
+      requestRender();
     },
 
     setFixtures(list) {
       fixturesState = Array.isArray(list) ? list.map((f) => ({ ...f })) : [];
       placeFixtures();
+      requestRender();
     },
 
     dispose() {
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(raf);
+      raf = 0;
       ro.disconnect();
+      controls.removeEventListener("change", requestRender);
+      canvasEl.removeEventListener("pointerdown", onPointerDownCapture, true);
+      canvasEl.removeEventListener("pointerup", onPointerUpCapture, true);
+      canvasEl.removeEventListener("pointerleave", onPointerLeave);
+      canvasEl.removeEventListener("keydown", onKeyDown);
       controls.dispose();
       disposeObject(scene);
       envRT.dispose();
       pmrem.dispose();
       renderer.dispose();
-      renderer.domElement.remove();
+      canvasEl.remove();
     },
   };
 }

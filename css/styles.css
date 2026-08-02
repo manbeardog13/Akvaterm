@@ -50,7 +50,12 @@
   --red-ink:#b31d26;
   --red-tint:rgba(214,37,46,.10);
   --red-ring:rgba(214,37,46,.30);
-  --ok-ink:#1c894a;
+  /* --ok-ink is the SMALL-TEXT green: it is measured against --ok-tint over
+     white (#e4f7ea), the background .chip.tone-ok / .badge-ok actually paint.
+     #1c894a scored 3.98:1 there (and 4.44:1 on plain white, which .conn-online
+     uses) — both below AA. #157a40 gives 4.83:1 on the tint and 5.40:1 on
+     white. Keep any future value at or above 4.5:1 on BOTH. */
+  --ok-ink:#157a40;
   --ok-tint:rgba(47,191,91,.13);
   --danger:var(--brand-red); --danger-ink:var(--red-ink); --danger-tint:var(--red-tint);
   --grad-accent:linear-gradient(140deg,var(--accent-2),var(--accent) 78%);
@@ -138,7 +143,9 @@ b,strong{font-weight:700}
 }
 
 /* ============================== App shell =============================== */
-#app{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+/* index.html ships #app; #app-root is the id js/app.js recreates when it has to
+   self-heal a stale cached shell. Both must get the shell layout. */
+#app,#app-root{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 main,#main{
   flex:1;width:100%;max-width:var(--maxw);margin:0 auto;
   padding:18px 16px calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 28px);
@@ -182,6 +189,17 @@ main,#main{
   .topbar-nav a:active{transform:scale(.96)}
   .topbar-nav a.active{background:var(--accent-tint);color:var(--accent-ink)}
 }
+/* Nav glyphs (js/app.js ICONS) — drawn on currentColor, sized here so the
+   same markup serves the compact desktop rail and the mobile tab bar. */
+.topbar-nav a .ic,.topbar .more-btn .ic{width:17px;height:17px}
+.topbar-nav a .ic svg,.topbar .more-btn .ic svg,.tabbar .ic svg{display:block;width:100%;height:100%}
+
+/* "Više" popover (js/app.js openMore) — .card supplies surface + border.
+   Compound selector on purpose: the .card block further down the sheet would
+   otherwise win the radius on source order and round the menu to 22px. */
+.card.menu-pop{padding:6px;border-radius:var(--radius-sm);animation:popIn var(--dur) var(--snap) both}
+.menu-pop .btn{min-height:var(--tap);font-size:14.5px;border-radius:var(--radius-sm)}
+@keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.98)}}
 /* Connection / status pill — green strictly means online/success */
 .conn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:700;white-space:nowrap}
 .conn-online{color:var(--ok-ink)}
@@ -200,18 +218,27 @@ main,#main{
   -webkit-backdrop-filter:saturate(1.4) blur(var(--glass-blur));
   border-top:1px solid var(--glass-line);
 }
-.tabbar a{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  color:var(--muted);font-size:10.5px;font-weight:600;letter-spacing:.1px;
+/* The tab bar carries links AND the "Više" <button>; the button gets the exact
+   same treatment (and its native chrome stripped) or it renders as a beveled
+   OS button inside the glass bar. */
+.tabbar a,.tabbar .tab-more{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--muted);font-family:inherit;font-size:10.5px;font-weight:600;letter-spacing:.1px;
   min-height:var(--tap);position:relative;-webkit-tap-highlight-color:transparent;
+  appearance:none;-webkit-appearance:none;border:none;background:transparent;
+  padding:0;margin:0;cursor:pointer;
   transition:color var(--dur) var(--smooth);
 }
-.tabbar a .ic{display:inline-flex;transition:transform var(--dur-2) var(--spring)}
-.tabbar a:active .ic{transform:scale(.86)}
-.tabbar a.active{color:var(--accent-ink)}
-.tabbar a.active .ic{transform:translateY(-2px)}
-.tabbar a.active::after{
-  content:"";position:absolute;top:8px;width:34px;height:24px;border-radius:var(--radius-pill);
+.tabbar .ic{display:inline-flex;width:23px;height:23px;transition:transform var(--dur-2) var(--spring)}
+.tabbar a:active .ic,.tabbar .tab-more:active .ic{transform:scale(.86)}
+.tabbar a.active,.tabbar .tab-more.active{color:var(--accent-ink)}
+.tabbar a.active .ic,.tabbar .tab-more.active .ic{transform:translateY(-2px)}
+/* Halo sits BEHIND the icon (z-index:-1 paints above the bar's own background
+   but under its content) and is centred explicitly rather than inheriting the
+   pseudo-element's static position. */
+.tabbar a.active::after,.tabbar .tab-more.active::after{
+  content:"";position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:-1;
+  width:38px;height:26px;border-radius:var(--radius-pill);pointer-events:none;
   background:radial-gradient(60% 100% at 50% 50%,var(--accent-tint),transparent 72%);
 }
 @media(min-width:720px){.tabbar{display:none}main,#main{padding-bottom:44px}}

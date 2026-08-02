@@ -5,8 +5,11 @@
 // never here). Three capabilities:
 //   • chat(messages, {signal})  — async generator, yields {delta} text chunks
 //     streamed over SSE. Server-side conversation state rides on Gemini's
-//     Interactions API: we remember the last interaction id and send it back
-//     as previousInteractionId on the next turn. Product suggestions arrive
+//     Interactions API, but the raw interaction id never reaches this file:
+//     the function hands out an OPAQUE conversation handle bound to the
+//     caller, and we simply echo it back on the next turn. (A raw id is a
+//     shared-namespace secret — whoever holds one can resume that
+//     conversation and have the model recite it.) Product suggestions arrive
 //     as extra {delta:'', products:[ids]} events so views can render cards.
 //   • analyzePhoto(file)        — resizes client-side to ~1024px (258 tokens
 //     per 768px tile — keep uploads small), sends base64 JPEG, gets back
@@ -29,17 +32,19 @@ export class TermaUnavailable extends Error {
   }
 }
 
-const MAX_MESSAGES = 24; // conversation window sent to the function
+const MAX_MESSAGES = 24;        // conversation turns sent to the function
+const MAX_MESSAGE_CHARS = 4000; // per turn; the function enforces the same cap
 
-// Server-side state handle (Gemini Interactions API). One per page session.
-let lastInteractionId = null;
+// Opaque conversation handle minted by the Edge Function. One per page session,
+// meaningless to anyone but that function.
+let conversationId = null;
 
 export function isConfigured() {
   return Boolean(CONFIG.supabaseUrl && String(CONFIG.supabaseUrl).trim());
 }
 
 export function resetChat() {
-  lastInteractionId = null;
+  conversationId = null;
 }
 
 // ---- plumbing ---------------------------------------------------------------
@@ -63,15 +68,33 @@ function baseHeaders() {
 }
 
 // Friendly-Croatian error with the HTTP status attached (views read .friendly).
+// The 401/403 cases are the hardened Edge Function talking: it refuses callers
+// it cannot name, and refuses to spend the paid image budget for a session
+// that isn't signed in (see supabase/functions/terma/index.ts).
 function httpError(status, code) {
   const friendly =
-    status === 429 ? 'Terma je trenutačno zauzeta. Pokušaj ponovno za nekoliko sekundi.'
-    : status === 503 ? 'Terma još nije uključena na poslužitelju (nedostaje ključ).'
+    code === 'staging_requires_account'
+      ? 'AI impresija zahtijeva prijavu — prijava još nije dostupna u ovoj verziji.'
+    : status === 429 ? 'Terma je trenutačno zauzeta. Pokušaj ponovno za nekoliko sekundi.'
+    : status === 503 ? 'Terma još nije uključena na poslužitelju (nedostaje ključ ili tablice iz schema.sql).'
+    : status === 401 ? 'Terma ne prihvaća ovaj pristup — provjeri supabaseAnonKey u js/config.js.'
+    : status === 403 ? 'Terma ne prihvaća zahtjeve s ove adrese (ALLOWED_ORIGINS na poslužitelju).'
     : 'Terma trenutačno nije dostupna. Pokušaj kasnije.';
   const err = new Error(code || `terma_http_${status}`);
   err.status = status;
   err.friendly = friendly;
   return err;
+}
+
+// Read {error} out of a non-OK JSON response so the message can be specific.
+// Never throws: a body that isn't JSON just yields no code.
+async function errorCode(res) {
+  try {
+    const data = await res.clone().json();
+    return typeof data?.error === 'string' ? data.error : '';
+  } catch {
+    return '';
+  }
 }
 
 // Minimal SSE reader: yields every parsed `data: {json}` object from a body
@@ -112,7 +135,7 @@ export async function* chat(messages, { signal } = {}) {
     .slice(-MAX_MESSAGES)
     .map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: String(m.content ?? ''),
+      content: String(m.content ?? '').slice(0, MAX_MESSAGE_CHARS),
     }));
 
   const res = await fetch(functionUrl(), {
@@ -122,13 +145,13 @@ export async function* chat(messages, { signal } = {}) {
     body: JSON.stringify({
       action: 'chat',
       messages: trimmed,
-      previousInteractionId: lastInteractionId,
+      conversationId,
     }),
   });
-  if (!res.ok || !res.body) throw httpError(res.status || 502);
+  if (!res.ok || !res.body) throw httpError(res.status || 502, await errorCode(res));
 
   for await (const evt of sseEvents(res.body)) {
-    if (evt.interactionId) lastInteractionId = String(evt.interactionId);
+    if (evt.conversationId) conversationId = String(evt.conversationId);
     if (evt.error) throw httpError(evt.status || 502, evt.error);
     if (Array.isArray(evt.products) && evt.products.length) {
       yield { delta: '', products: evt.products.map(String) };
@@ -154,6 +177,20 @@ export async function fileToResizedJpeg(file, maxPx = 1024) {
   bitmap.close();
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
   return { dataUrl, base64: dataUrl.split(',')[1] || '', width: w, height: h };
+}
+
+// Strict #rrggbb only. The vision model is *asked* for this shape but its
+// output is untrusted input, and these values end up in a style attribute
+// downstream — so the format is enforced here as well as in the Edge Function
+// and once more at the DOM boundary in js/views/savjetnik.js.
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
+function safeColors(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((c) => typeof c === 'string' && HEX6.test(c.trim()))
+    .map((c) => c.trim().toLowerCase())
+    .slice(0, 6);
 }
 
 function hexToRgb(hex) {
@@ -204,10 +241,10 @@ export async function analyzePhoto(file) {
     headers: baseHeaders(),
     body: JSON.stringify({ action: 'vision', imageBase64: base64, mimeType: 'image/jpeg' }),
   });
-  if (!res.ok) throw httpError(res.status || 502);
+  if (!res.ok) throw httpError(res.status || 502, await errorCode(res));
   const data = await res.json();
   const styleSummary = String(data.styleSummary || '');
-  const colors = Array.isArray(data.colors) ? data.colors.filter((c) => typeof c === 'string') : [];
+  const colors = safeColors(data.colors);
   const suggestedFilters = data.suggestedFilters && typeof data.suggestedFilters === 'object' ? data.suggestedFilters : {};
   const suggestedProductIds = await matchProducts(colors, suggestedFilters);
   return { styleSummary, suggestedProductIds, colors, suggestedFilters };
@@ -219,6 +256,12 @@ export async function analyzePhoto(file) {
 // the tile swatch (texture.js swatchDataUrl, prefix stripped). Returns the
 // AI-staged render. The UI MUST label the result "AI impresija" — it is a
 // prompt-based re-render, not a product-accurate texture map.
+//
+// The confirm dialog in views/savjetnik.js is a courtesy, not a control: the
+// Edge Function refuses this action outright for an anonymous session and
+// meters it against a per-user daily quota. Until a sign-in flow ships, a
+// configured deployment answers `staging_requires_account` (401) here — the
+// view surfaces that as a plain Croatian sentence.
 export async function stageRoom({ roomBase64, swatchBase64, productName, surface = 'floor' }) {
   requireConfigured();
   const res = await fetch(functionUrl(), {
@@ -232,7 +275,7 @@ export async function stageRoom({ roomBase64, swatchBase64, productName, surface
       surface: surface === 'wall' ? 'wall' : 'floor',
     }),
   });
-  if (!res.ok) throw httpError(res.status || 502);
+  if (!res.ok) throw httpError(res.status || 502, await errorCode(res));
   const data = await res.json();
   if (!data.imageBase64) throw httpError(502, 'staging_empty');
   return { imageBase64: String(data.imageBase64), mimeType: String(data.mimeType || 'image/png') };
