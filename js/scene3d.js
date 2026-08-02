@@ -282,9 +282,32 @@ function createStage(renderer, def, products) {
     toSceneZ(clampPos(posM[2], d + 1.6)));
   camera.lookAt(camTarget);
 
+  // ---- zoom on a locked camera -------------------------------------------
+  // Operator instruction, 2026-08-02: the app must not zoom, EXCEPT the
+  // designer and the 3D room. The camera here stays locked in position and
+  // orientation — this is a framed scene, not an orbit sandbox — so "zoom" is
+  // a FOV dolly rather than a moving camera: the framing tightens, the angle
+  // never changes, and nothing can be knocked out of composition.
+  //
+  // Clamped to 0.45x-1.0x of the scene's authored FOV. Zooming OUT past the
+  // authored framing is deliberately not offered: the scene was composed to
+  // fill the stage, and a wider FOV only reveals the void outside the room.
+  const ZOOM_MIN = 0.45, ZOOM_MAX = 1;
+  let zoom = 1;
+
+  function applyZoom(next) {
+    const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    if (Math.abs(z - zoom) < 1e-4) return false;
+    zoom = z;
+    setAspect(lastAspect);
+    return true;
+  }
+
+  let lastAspect = 1;
   function setAspect(aspect) {
-    camera.aspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-    camera.fov = framedFov(baseFov, camera.aspect);
+    lastAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    camera.aspect = lastAspect;
+    camera.fov = framedFov(baseFov, camera.aspect) * zoom;
     camera.updateProjectionMatrix();
     updateSurfaceVisibility();
   }
@@ -893,6 +916,55 @@ export async function mountScene(el, {
     if (handled) e.preventDefault();
   }
 
+  // ---- zoom input ----------------------------------------------------------
+  // Wheel/trackpad on desktop, two-finger pinch on touch. The page itself can
+  // no longer zoom (viewport user-scalable=no + touch-action:pan-y), so these
+  // gestures are free to mean "camera" here without fighting the browser.
+  //
+  // preventDefault on wheel is why the listener is explicitly NOT passive: the
+  // wheel would otherwise scroll the page under the stage while the camera also
+  // dollied, which is exactly the "swimming" the operator asked to remove.
+  function onWheel(e) {
+    e.preventDefault();
+    if (applyZoom(zoom * (e.deltaY > 0 ? 1.08 : 1 / 1.08))) requestRender();
+  }
+  canvasEl.addEventListener("wheel", onWheel, { passive: false });
+
+  // Pinch: tracked from raw pointer events rather than a gesture API, because
+  // touch-action:pan-y already forbids the browser's own pinch, so the two
+  // pointers arrive here intact. A pinch is only recognised while exactly two
+  // are down, and it never starts a fixture drag — onPointerDown bails out.
+  const zoomPointers = new Map();
+  let pinchBase = 0, pinchZoomBase = 1;
+  function pinchDistance() {
+    const [a, b] = [...zoomPointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  function onZoomPointerDown(e) {
+    zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (zoomPointers.size === 2) { pinchBase = pinchDistance(); pinchZoomBase = zoom; }
+  }
+  function onZoomPointerMove(e) {
+    if (!zoomPointers.has(e.pointerId)) return;
+    zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (zoomPointers.size !== 2 || pinchBase <= 0) return;
+    // A pinch never fights a fixture drag: if one finger already grabbed a
+    // model, that gesture owns the interaction until it ends.
+    if (dragId !== null) return;
+    e.preventDefault();
+    // Fingers apart -> larger distance -> smaller FOV -> closer view.
+    if (applyZoom(pinchZoomBase * (pinchBase / pinchDistance()))) requestRender();
+  }
+  function onZoomPointerUp(e) {
+    zoomPointers.delete(e.pointerId);
+    if (zoomPointers.size < 2) pinchBase = 0;
+  }
+  canvasEl.addEventListener("pointerdown", onZoomPointerDown);
+  canvasEl.addEventListener("pointermove", onZoomPointerMove);
+  canvasEl.addEventListener("pointerup", onZoomPointerUp);
+  canvasEl.addEventListener("pointercancel", onZoomPointerUp);
+  canvasEl.addEventListener("lostpointercapture", onZoomPointerUp);
+
   canvasEl.addEventListener("pointerdown", onPointerDown);
   canvasEl.addEventListener("pointermove", onPointerMove);
   canvasEl.addEventListener("pointerup", onPointerUp);
@@ -941,6 +1013,15 @@ export async function mountScene(el, {
       canvasEl.removeEventListener("pointercancel", onPointerUp);
       canvasEl.removeEventListener("lostpointercapture", onPointerUp);
       canvasEl.removeEventListener("keydown", onKeyDown);
+      // Zoom listeners — same lifetime as the drag ones, or a disposed stage
+      // keeps a wheel handler alive and leaks the whole closure with it.
+      canvasEl.removeEventListener("wheel", onWheel);
+      canvasEl.removeEventListener("pointerdown", onZoomPointerDown);
+      canvasEl.removeEventListener("pointermove", onZoomPointerMove);
+      canvasEl.removeEventListener("pointerup", onZoomPointerUp);
+      canvasEl.removeEventListener("pointercancel", onZoomPointerUp);
+      canvasEl.removeEventListener("lostpointercapture", onZoomPointerUp);
+      zoomPointers.clear();
       canvasEl.style.touchAction = "pan-y";
       selectedFixture = null;
       selectedSurface = null;

@@ -45,7 +45,7 @@
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-6G61/LDa3KMcuKr7MoxiJUAhQKSNzEtJUw3h9otBbms=' https://cdn.jsdelivr.net;
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-yQhsfNETkwxWqoUBcBCI96gyWjKZWdsQxKssS5yRlM0=' https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -56,7 +56,26 @@
 
 <!-- viewport-fit=cover is what lets the glass bars run under the iOS notch and
      home indicator; every fixed surface pays for it with env(safe-area-inset-*). -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- user-scalable=no + maximum-scale=1: the app must sit STILL. Operator
+     instruction, 2026-08-02 — "have the app still and not swimming, user
+     shouldn't be able to zoom in and out except the designer and 3D room".
+     Pinch-zoom inside those two views is a CAMERA zoom handled by three.js on
+     the canvas, not a browser zoom, so blocking page zoom does not touch it.
+     Note: Safari in a normal TAB deliberately ignores user-scalable=no; it is
+     honoured once the app is installed to the home screen, which is the target
+     experience. The gesturestart handler at the bottom of this file covers the
+     tab case. Accessibility trade-off accepted knowingly on the operator's
+     instruction; body text is 15-16px and the layout reflows to 320px. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
+<!-- Installed-app chrome. display:standalone comes from the manifest; these two
+     are the legacy iOS equivalents and still what older iOS reads. The status
+     bar area is tinted by theme-color (#F4F8F9) and the top bar paints its own
+     glass right up under the notch via env(safe-area-inset-top), so the bevel
+     area reads as part of the bar rather than as a strip of page behind it. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Akvaterm">
 <title>Akvaterm — Katalog i dizajner</title>
 <meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
 <!-- #F4F8F9 is the Iris glass tint hsl(187 44% 97%) = #F4FAFB composited at the
@@ -169,6 +188,26 @@
   window.addEventListener("akv:ready", hideSplash);  /* …or via the event, either works */
   window.addEventListener("load", hideSplash);       /* safety net if the app never boots */
   setTimeout(hideSplash, WATCHDOG_MS);
+
+  /* Keep the app still. Safari in a browser TAB ignores user-scalable=no by
+     design, so the meta tag alone only settles the installed app. These three
+     handlers close the gap without touching the two views that must zoom:
+     both canvases live inside [data-zoomable], and their pinch is handled by
+     three.js as a camera dolly, so the guard steps aside there.
+       - gesturestart/gesturechange: Safari's own pinch-zoom gesture.
+       - dblclick: double-tap-to-zoom.
+     Passive:false is required — a passive listener cannot preventDefault. */
+  function inZoomable(t) {
+    return !!(t && t.closest && t.closest("[data-zoomable],.diz-stage,.room3d-stage"));
+  }
+  ["gesturestart", "gesturechange", "gestureend"].forEach(function (type) {
+    document.addEventListener(type, function (e) {
+      if (!inZoomable(e.target)) e.preventDefault();
+    }, { passive: false });
+  });
+  document.addEventListener("dblclick", function (e) {
+    if (!inZoomable(e.target)) e.preventDefault();
+  }, { passive: false });
 })();
 </script>
 
