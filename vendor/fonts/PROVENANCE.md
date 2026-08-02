@@ -110,3 +110,55 @@ as tofu.** Both slices of both families must be deployed together.
 
 The `unicode-range` values in `fonts.css` are copied verbatim from the Google Fonts
 CSS API response for these exact files, so the browser requests the right slice.
+
+---
+
+## Sora + Inter — added 2026-08-02 (the house pairing)
+
+Operator instruction: the ASC platform's font collection becomes the standard
+for this and every future project. See `docs/HOUSE_STANDARD.md`.
+
+Fetched the same way as the families above: `https://fonts.googleapis.com/css2`
+with a current Chrome user agent (which is what makes the API emit `woff2`),
+then the `fonts.gstatic.com` URLs out of the returned CSS. Every file was
+verified to begin with the ASCII signature `wOF2`.
+
+Both families are served as **variable** fonts. Requesting weights 600;700
+(Sora) and 400;500;600;700 (Inter) returns twelve `@font-face` blocks but only
+FOUR distinct files — the per-weight URLs are byte-identical, confirmed by
+SHA-256. They are vendored once each under a `-wght-` name, matching the
+existing Figtree variable files, and declared with a weight RANGE.
+
+| Family | Licence | Upstream |
+| --- | --- | --- |
+| Sora | SIL Open Font License 1.1 | <https://github.com/lafgroup/Sora> |
+| Inter | SIL Open Font License 1.1 | <https://github.com/rsms/inter> |
+
+Google Fonts version tags: Sora `v17`, Inter `v20`.
+
+| File | Subset | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| `sora-latin-wght-normal.woff2` | latin | 25284 | `811e11966d29f3a01fcb19b087b61ac067d380665a55aebb7fcdf2cda95e4a93` |
+| `sora-latin-ext-wght-normal.woff2` | latin-ext | 12156 | `08e1ba85bcb55277782f56766af09467dfe18cbeea49704203100c5797ac4cc5` |
+| `inter-latin-wght-normal.woff2` | latin | 48256 | `3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62` |
+| `inter-latin-ext-wght-normal.woff2` | latin-ext | 85068 | `34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956` |
+
+The OFL requires the licence to travel with the fonts, so both texts are
+vendored here and must ship with the app:
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `OFL-Sora.txt` | 4385 | `ba0b9729c9428ba79a0459ab8ec575791b51509dbec213e383d0316d37fec299` |
+| `OFL-Inter.txt` | 4377 | `5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57` |
+
+Copyright lines from the upstream `OFL.txt` files:
+
+- `Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)`
+- `Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)`
+
+### Anton and Figtree are still here on purpose
+
+They are no longer the app's faces. Figtree remains because the **wordmark** is
+exempt from the palette and the type change and is pinned to it through
+`--font-wordmark`; removing the files would silently re-face the logo. Anton is
+retained only so the change is revertible in one commit.

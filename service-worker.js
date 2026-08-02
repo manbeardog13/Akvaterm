@@ -91,30 +91,32 @@ const SHELL = [
      Figtree for text, both vendored — vendor/fonts/PROVENANCE.md records the
      URLs, byte counts and SHA-256 of every file, and both are SIL OFL 1.1.
 
-     These five entries are in SHELL, not runtime-cached, for two reasons:
+     These entries are in SHELL, not runtime-cached, for two reasons:
        • they are render-blocking-ish. font-display:swap means a cold, offline
          start without them paints the fallback stack and then reflows when the
-         real faces arrive — with Anton (a heavy condensed face) against Arial
-         Narrow that reflow is large and obvious.
-       • they are small: 80404 bytes of woff2 across the four faces, about 0.6%
+         real faces arrive.
+       • they are small: 201200 bytes of woff2 across the six faces, a fraction
          of what vendor/three costs. There is nothing to save by deferring them.
 
-     Exactly the four faces vendor/fonts/fonts.css @font-face-references are
-     listed. The eight static Figtree instances in that directory are NOT
-     referenced by fonts.css (it uses the two variable-axis files), so
-     precaching them would be dead weight — and the eight OFL/PROVENANCE text
-     files are a redistribution obligation satisfied by shipping them in the
-     tree, not something the app fetches.
+     ⚠ UPDATED 2026-08-02 with the house type change (docs/HOUSE_STANDARD.md).
+     The app's faces are now Sora (display) + Inter (text). ANTON IS NO LONGER
+     PRECACHED: nothing references it any more, so precaching it would have
+     shipped 50 KB of dead weight to every visitor while the faces the app
+     actually renders were fetched from the network — which offline is no fetch
+     at all. FIGTREE IS STILL HERE, and not by oversight: the wordmark is
+     exempt from the type change and is pinned to it through --font-wordmark,
+     so dropping it would render the logo in a fallback face offline.
 
      The `latin-ext` slices are NOT optional: č ć ž š đ Č Ć Ž Š Đ live in Latin
      Extended-A and the `latin` slice alone renders every Croatian diacritic as
-     tofu (proven by cmap parsing — see PROVENANCE.md). Never drop them to save
-     41 KB. */
+     tofu (proven by cmap parsing — see PROVENANCE.md). Never drop them. */
   "./vendor/fonts/fonts.css",
-  "./vendor/fonts/anton-latin-400-normal.woff2",           // 18612 B
-  "./vendor/fonts/anton-latin-ext-400-normal.woff2",       // 31356 B — carries Č Š Ž
-  "./vendor/fonts/figtree-latin-wght-normal.woff2",        // 20156 B
-  "./vendor/fonts/figtree-latin-ext-wght-normal.woff2",    // 10280 B — carries č š ž ć đ
+  "./vendor/fonts/sora-latin-wght-normal.woff2",           // 25284 B — display
+  "./vendor/fonts/sora-latin-ext-wght-normal.woff2",       // 12156 B — carries Č Š Ž
+  "./vendor/fonts/inter-latin-wght-normal.woff2",          // 48256 B — text
+  "./vendor/fonts/inter-latin-ext-wght-normal.woff2",      // 85068 B — carries č š ž ć đ
+  "./vendor/fonts/figtree-latin-wght-normal.woff2",        // 20156 B — WORDMARK ONLY
+  "./vendor/fonts/figtree-latin-ext-wght-normal.woff2",    // 10280 B — WORDMARK ONLY
 
   "./js/views/katalog.js",
   "./js/views/proizvod.js",

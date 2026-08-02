@@ -57,11 +57,73 @@
 }
 
 /* ---------------------------------------------------------------
+   Display — Sora. THE HOUSE DISPLAY FACE (operator instruction,
+   2026-08-02): the ASC platform's pairing is now the standard for
+   this and every future project. Variable weight axis 100–800 in
+   two files; only 500–800 is declared because that is the range
+   this app actually sets, and declaring an axis wider than the file
+   carries invites synthetic weights.
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 500 800;
+  font-display: swap;
+  src: url('./sora-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 500 800;
+  font-display: swap;
+  src: url('./sora-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------------------------------------------------------------
+   Text — Inter. Variable weight axis 100–900; 300–800 declared.
+   --------------------------------------------------------------- */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('./inter-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('./inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------------------------------------------------------------
    Tokens
    --------------------------------------------------------------- */
 :root {
-  --font-display: 'Anton', 'Haettenschweiler', 'Arial Narrow', system-ui, sans-serif;
-  --font-text: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-text: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* ⚠ THE WORDMARK HAS ITS OWN FACE TOKEN AND MUST KEEP IT.
+     Operator instruction: "keep the logo original in font and color".
+     .wordmark used to read var(--font-text), so switching the house text
+     face to Inter would have silently re-faced the logo — the exact thing
+     that instruction forbids. Pinning it here makes the logo independent
+     of any future --font-text change. Anton and Figtree stay vendored for
+     this reason alone; they are no longer the app's faces. */
+  --font-wordmark: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 html {
@@ -71,15 +133,14 @@ html {
   text-rendering: optimizeLegibility;
 }
 
-/* Page h1 — the "SIMPLE" role. Anton is already tightly spaced;
-   more than about -0.02em starts closing the counters. */
+/* Page h1. Sora is a geometric sans set in SENTENCE CASE — see the note on
+   h1,h2 in css/styles.css for why uppercase must not come back. */
 .t-h1 {
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(2.75rem, 6vw, 4.5rem);   /* 44 – 72px */
-  letter-spacing: -0.015em;
-  line-height: 1.05;
-  text-transform: uppercase;
+  font-weight: 700;
+  font-size: clamp(2.25rem, 5.2vw, 3.5rem);  /* 36 – 56px */
+  letter-spacing: -0.025em;
+  line-height: 1.1;
   text-wrap: balance;
 }
 
@@ -96,11 +157,10 @@ html {
 /* Section h2 */
 .t-h2 {
   font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(1.75rem, 3.2vw, 2.5rem); /* 28 – 40px */
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-  text-transform: uppercase;
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3vw, 2rem);      /* 24 – 32px */
+  letter-spacing: -0.02em;
+  line-height: 1.18;
 }
 
 /* Card title — text face, not display: catalogue names are long in Croatian. */

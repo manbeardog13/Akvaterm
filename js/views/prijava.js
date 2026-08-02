@@ -118,7 +118,8 @@
 
 import { t } from "../i18n.js";
 import {
-  authConfigured, getSession, signIn, signOut, rememberedEmail, rememberEmail,
+  authConfigured, getSession, signIn, signInWithGoogle, signOut,
+  rememberedEmail, rememberEmail,
 } from "../db.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -170,7 +171,15 @@ html[${AUTH_ATTR}] #main{
    literal in the var() fallback is that same 12px, so the rule still resolves
    if the token is ever renamed rather than collapsing to a square corner.
    Buttons stay pills: the scale is never used to "slightly round" a control. */
-.pr-card{padding:26px 22px 22px;border-radius:var(--glass-radius-lg)}
+/* PADDING IS THE POINT. ASC's login reads premium mostly because of what is
+   NOT in it: design/login-arched-v2.html gives its form column 96px of top
+   padding and 44px of sides, and every control is 52px tall with 12px between.
+   Nothing there is decorated — it is just given room. These numbers are that
+   ratio brought down to a 430px phone card: 38px of top padding on a 28px
+   side, against controls that are 54px tall.
+   Concentric corners still hold: side padding 28px, so an inset panel lands on
+   var(--r-2xl) - 28. Controls are pills and opt out of that arithmetic. */
+.pr-card{padding:38px 28px 28px;border-radius:var(--glass-radius-lg)}
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
    so no blur is ever animated, and pointer devices only. */
@@ -182,14 +191,15 @@ html[${AUTH_ATTR}] #main{
 @media (hover:hover) and (pointer:fine){ .pr-card:hover .pr-sheen{opacity:1} }
 
 .pr-eyebrow{display:block;color:var(--accent-ink)}
-/* Anton: line-height >= 1.05 and no clipping box, or the caron in DOBRODOSLI
-   loses its hat. The card's 26px top padding is what gives it room. */
+/* Sora 600, sentence case, LEFT aligned — ASC sets "Dobro došli natrag" this
+   way and the calm comes from all three together. Centred uppercase display
+   type is the loud version of the same words. */
 .pr-title{
-  margin:8px 0 0;font-family:var(--font-display);font-weight:400;
-  font-size:clamp(26px,7.4vw,32px);line-height:1.12;letter-spacing:-.01em;
-  text-transform:uppercase;color:var(--ink);text-wrap:balance;
+  margin:10px 0 0;font-family:var(--font-display);font-weight:600;
+  font-size:clamp(25px,6.6vw,30px);line-height:1.2;letter-spacing:-.025em;
+  color:var(--ink);text-wrap:balance;
 }
-.pr-sub{margin:7px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted)}
+.pr-sub{margin:7px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
 
 /* ---- honest notice (CONFIG empty) ---- */
 .pr-notice{
@@ -201,24 +211,26 @@ html[${AUTH_ATTR}] #main{
 .pr-notice b{display:block;margin-bottom:3px;font-size:13.5px;font-weight:700;color:var(--accent-2-ink)}
 .pr-notice span{display:block;font-size:12.5px;line-height:1.45;color:var(--ink-2)}
 
-/* ---- form ---- */
-.pr-form{margin:18px 0 0}
+/* ---- form ----
+   PILLS AT 54px. ASC's controls are 52px tall on a 26px radius — a full
+   pill — with 12px between them and no visible labels at all. The label text
+   moves into the placeholder and survives as the accessible name via
+   aria-label, so nothing is lost to a screen reader and a whole row of
+   uppercase micro-type leaves the screen. That subtraction is most of the
+   difference in density between the two cards. */
+.pr-form{margin:16px 0 0}
 .pr-field{display:block;margin-bottom:12px}
-.pr-label{
-  display:block;margin-bottom:6px;font-size:11.5px;font-weight:700;
-  text-transform:uppercase;letter-spacing:var(--track-meta);color:var(--ink-2);
-}
 .pr-input{
-  display:flex;align-items:center;gap:10px;padding:0 13px;
-  background:var(--surface);border:1px solid var(--line-input);border-radius:var(--r-sm,12px);
+  display:flex;align-items:center;gap:11px;padding:0 20px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-pill);
   transition:border-color var(--dur) var(--smooth),box-shadow var(--dur) var(--smooth),background var(--dur) var(--smooth);
 }
-.pr-input:focus-within{border-color:var(--accent-ink);box-shadow:0 0 0 3px var(--accent-ring)}
+.pr-input:focus-within{border-color:var(--accent-ink);box-shadow:0 0 0 4px var(--accent-ring)}
 .pr-input .pr-ic{flex:none;display:grid;place-items:center;color:var(--muted)}
 /* The global input rule owns font-size:16px (iOS must not zoom on focus); only
    the chrome is stripped here so the icon and the field read as one control. */
 .pr-field input{
-  flex:1;min-width:0;min-height:46px;padding:11px 0;
+  flex:1;min-width:0;min-height:54px;padding:11px 0;
   border:0;background:none;box-shadow:none;border-radius:0;
 }
 .pr-field input:focus{outline:none;border:0;box-shadow:none}
@@ -230,7 +242,7 @@ html[${AUTH_ATTR}] #main{
 .pr-form fieldset:disabled .pr-input{background:var(--panel);cursor:not-allowed}
 .pr-form fieldset:disabled .pr-field input{cursor:not-allowed}
 .pr-eye{
-  flex:none;width:var(--tap);height:var(--tap);margin-right:-13px;
+  flex:none;width:var(--tap);height:var(--tap);margin-right:-10px;
   display:grid;place-items:center;border:0;background:none;border-radius:50%;
   color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent;
 }
@@ -242,19 +254,55 @@ html[${AUTH_ATTR}] #main{
 .pr-field.is-bad .pr-err{display:block}
 .pr-field.is-bad .pr-input{border-color:var(--danger-ink);box-shadow:0 0 0 3px var(--red-ring)}
 
+/* :empty COLLAPSES the row. Reserving height for a message that is usually
+   absent leaves a dead band under the control — which is the opposite of
+   negative space: it reads as a mistake, not as room. The form's own message
+   still reserves its line (it appears and disappears while the user is looking
+   straight at it, and a reflow there moves the button under their thumb); the
+   Google one does not, because it only ever appears as the page unloads. */
 .pr-msg{min-height:19px;margin:13px 0 0;font-size:13px;font-weight:600;line-height:1.4;text-align:center;color:var(--ink-2)}
+#prGoogleMsg{min-height:0;margin:0}
+#prGoogleMsg:not(:empty){margin-top:10px}
 .pr-msg.is-err{color:var(--danger-ink)}
 .pr-msg.is-ok{color:var(--ok-ink)}
 
+/* Sentence case, not uppercase micro-caps — ASC's reads "ili e-mailom". */
 .pr-div{
-  display:flex;align-items:center;gap:12px;margin:16px 0;
-  font-size:11px;font-weight:600;letter-spacing:var(--track-meta);
-  text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:14px;margin:18px 0;
+  font-size:12px;font-weight:500;letter-spacing:0;color:var(--muted);
 }
 .pr-div::before,.pr-div::after{content:"";flex:1;height:1px;background:var(--line)}
 
+/* ---- Google ----
+   FIRST, above the email form. That order is the convention every major
+   product uses and the one ASC follows: the fastest path is offered before
+   the slowest one, and a returning user never reads the form at all.
+
+   An OPAQUE white ground, not glass: the four Google colours must render as
+   themselves, and a translucent surface composites whatever is behind the card
+   into them. White also gives the mark the clear space its brand guidelines
+   ask for. Text is --ink on #FFFFFF = 13.01:1. */
+/* ⚠ THE LABEL COLOUR IS A LITERAL, NOT var(--ink). This control's ground is
+   #FFFFFF in BOTH themes, because Google's mark may not be re-coloured and a
+   translucent or dark ground would composite into it. --ink is #313131 in the
+   light theme but #F2EFEC in the dark one, so a token here renders white text
+   on the white ground — invisible, and only in dark mode. #313131 on #FFFFFF
+   is 10.96:1 and holds in either theme. Same reason the border is a literal:
+   --line is a light-on-dark rgba in dark mode and disappears against white. */
+.pr-google{
+  width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:11px;
+  background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--r-pill);
+  font-size:15px;font-weight:600;
+}
+.pr-google:hover:not(:disabled){background:#FFFFFF;border-color:rgba(0,0,0,.26)}
+.pr-google[disabled]{opacity:.55;cursor:not-allowed}
+.pr-google svg{flex:none}
+/* The label carries the pending state; the mark must not spin or fade, so
+   .is-busy is scoped to the text rather than the whole control. */
+.pr-google.is-busy .pr-glabel{opacity:.6}
+
 .pr-guest{width:100%}
-.pr-note{margin:13px 0 0;font-size:12px;line-height:1.5;text-align:center;color:var(--muted)}
+.pr-note{margin:14px 0 0;font-size:12.5px;line-height:1.5;text-align:center;color:var(--muted)}
 .pr-note+.pr-note{margin-top:5px}
 
 /* ---- signed-in state ---- */
@@ -318,6 +366,13 @@ const ICON_EYE_OFF = SVG(`<path d="M3 3l18 18"/><path d="M10.6 6.1A9.9 9.9 0 0 1
 const ICON_ARROW = SVG(`<path d="M5 12h14M13 6l6 6-6 6"/>`, 16);
 const ICON_INFO = SVG(`<circle cx="12" cy="12" r="8.6"/><path d="M12 11.4v4.6M12 8.2v.1"/>`, 17);
 
+// Google's "G". The only mark in this app that is NOT re-coloured to the Iris
+// palette: Google's Third-Party Branding Guidelines require the four official
+// colours unaltered, so it is filled, not stroked, and carries its own hex
+// values rather than tokens. docs/DESIGN_SYSTEM.md records the exemption
+// alongside the Akvaterm wordmark's.
+const ICON_GOOGLE = `<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true" focusable="false"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/><path fill="#34A853" d="M24 46c6 0 11-2 14.6-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.5 2.1-5.8 0-10.7-3.9-12.4-9.1H4.3v5.7C7.9 41.1 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.6 28.1c-.4-1.3-.7-2.7-.7-4.1s.2-2.8.7-4.1v-5.7H4.3C2.8 17.1 2 20.4 2 24s.8 6.9 2.3 9.8l7.3-5.7z"/><path fill="#EA4335" d="M24 10.8c3.3 0 6.2 1.1 8.5 3.3l6.3-6.3C35 4.3 30 2 24 2 15.4 2 7.9 6.9 4.3 14.2l7.3 5.7c1.7-5.2 6.6-9.1 12.4-9.1z"/></svg>`;
+
 // ---- markup ----------------------------------------------------------------
 function cardHead(titleKey, titleFallback) {
   return `
@@ -342,14 +397,19 @@ function field(id, labelKey, labelFallback, opts) {
     ? `<button type="button" class="pr-eye" id="prEye" aria-pressed="false" aria-controls="${id}"
          aria-label="${esc(tf("prijava.showPassword", "Prikaži lozinku"))}">${ICON_EYE}</button>`
     : "";
+  // NO VISIBLE LABEL. The field name moves into the placeholder, and aria-label
+  // carries it for assistive technology — so the accessible name is unchanged
+  // while a row of uppercase micro-type leaves the screen. The placeholder is
+  // the LABEL text ("Email"), not an example value: a placeholder that only
+  // shows a sample disappears on focus and takes the field's identity with it.
+  const label = esc(tf(labelKey, labelFallback));
   return `
     <div class="pr-field">
-      <label class="pr-label" for="${id}">${esc(tf(labelKey, labelFallback))}</label>
       <span class="pr-input">
         <span class="pr-ic">${opts.icon}</span>
         <input id="${id}" type="${opts.type}" name="${opts.name}"
                autocomplete="${opts.autocomplete}"${opts.inputmode ? ` inputmode="${opts.inputmode}"` : ""}
-               placeholder="${esc(tf(opts.placeholderKey, opts.placeholderFallback))}"
+               placeholder="${label}" aria-label="${label}"
                aria-describedby="${id}Err" aria-invalid="false"
                value="${esc(opts.value || "")}">
       ${eye}
@@ -393,6 +453,16 @@ function signInMarkup(configured) {
       <p class="pr-msg" id="prMsg" role="status" aria-live="polite"></p>
     </form>`;
 
+  // Disabled rather than hidden on the demo, and for the same reason the email
+  // form is: a control that is present but plainly unavailable explains the
+  // build, where a missing control just looks like a feature nobody built.
+  const google = `
+      <button type="button" class="btn btn-block pr-google" id="prGoogle"${configured ? "" : " disabled"}>
+        ${ICON_GOOGLE}
+        <span class="pr-glabel">${esc(tf("prijava.google", "Nastavi s Google računom"))}</span>
+      </button>
+      <p class="pr-msg" id="prGoogleMsg" role="status" aria-live="polite"></p>`;
+
   // The guest action is the ONLY enabled primary on the demo, and an ordinary
   // link either way, so the catalogue stays reachable even if no listener in
   // this file ever attached.
@@ -405,8 +475,9 @@ function signInMarkup(configured) {
         ${cardHead("prijava.title", "Dobrodošli natrag")}
         <p class="pr-sub">${esc(tf("prijava.sub", "Kupaonice, grijanje i klimatizacija"))}</p>
         ${notice}
+        ${google}
+        <div class="pr-div">${esc(tf("prijava.orEmail", "ili e-mailom"))}</div>
         ${form}
-        <div class="pr-div">${esc(tf("prijava.or", "ili"))}</div>
         <a class="${guestClass}" href="#/">${esc(tf("prijava.guest", "Nastavi kao gost"))}</a>
         ${configured ? "" : `<p class="pr-note">${esc(tf("prijava.guestHint", "Katalog, dizajner i 3D soba rade bez prijave."))}</p>`}
         <p class="pr-note">${esc(tf("prijava.localNote", "Favoriti i dizajni spremaju se na ovaj uređaj."))}</p>
@@ -488,7 +559,46 @@ export async function render(container) {
 
   wirePointerSheen(container);
   if (session) wireSignedIn(container);
-  else if (configured) wireForm(container);
+  else if (configured) { wireForm(container); wireGoogle(container); }
+}
+
+// Google is wired separately from wireForm() because it is NOT part of the
+// form: it must keep working if the email form is absent, and a click on it
+// must never submit the form's fields.
+function wireGoogle(container) {
+  const button = container.querySelector("#prGoogle");
+  const msg = container.querySelector("#prGoogleMsg");
+  if (!button) return;
+
+  button.addEventListener("click", async () => {
+    if (button.disabled) return;
+    if (msg) { msg.textContent = ""; msg.className = "pr-msg"; }
+    button.classList.add("is-busy");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+
+    try {
+      await signInWithGoogle();
+      // Resolved means "the redirect was issued", not "signed in". The browser
+      // is now leaving for accounts.google.com, so the control stays disabled
+      // deliberately — re-enabling it would invite a second click that starts a
+      // competing OAuth attempt during the hand-off.
+      if (msg) {
+        msg.textContent = tf("prijava.googleRedirect", "Otvaramo Google prijavu…");
+        msg.className = "pr-msg";
+      }
+    } catch (err) {
+      const code = ERR_FALLBACK[err?.code] ? err.code : "other";
+      if (msg) {
+        msg.textContent = tf("prijava.err." + code, ERR_FALLBACK[code]);
+        msg.className = "pr-msg is-err";
+      }
+      // Only restore the button on FAILURE — on success the page is unloading.
+      button.classList.remove("is-busy");
+      button.disabled = false;
+      button.setAttribute("aria-busy", "false");
+    }
+  });
 }
 
 // ASC's optical refraction. Pointer devices with motion allowed only; the

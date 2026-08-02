@@ -15,6 +15,25 @@
 // getSupabase() is synchronous by contract: it returns the client once the
 // lazy load has finished, and null before that (and always in offline mode).
 // Callers treat null as "local storage is the only store" and keep working.
+//
+// ---------------------------------------------------------------------------
+// WHY flowType MUST BE "pkce" HERE — this app is hash-routed
+// ---------------------------------------------------------------------------
+// auth-js 2.111.0 defaults to flowType "implicit" (verified in the vendored
+// bundle), which returns an OAuth result in the URL FRAGMENT:
+//     .../Akvaterm/#access_token=...&refresh_token=...
+// This app routes on that same fragment (#/katalog, #/dizajner, ...), so the
+// implicit return and the router would be reading and writing one value. Two
+// separate ways that breaks: the router sees an unknown route and rewrites the
+// hash, and it can do so before auth-js's asynchronous _initialize() has read
+// it — losing the session at random depending on which finishes first.
+//
+// PKCE returns ?code=... in the QUERY STRING instead, which the hash router
+// never touches, so there is no shared value and no race. detectSessionInUrl
+// then exchanges the code and strips it from the address bar.
+//
+// This is not a preference. Setting flowType back to implicit reintroduces a
+// timing-dependent sign-in failure that will not reproduce reliably.
 // ============================================================================
 
 import { CONFIG } from "./config.js";
@@ -44,7 +63,14 @@ export function initSupabase() {
       .then((mod) => {
         const createClient = mod?.createClient || mod?.default?.createClient;
         if (typeof createClient !== "function") throw new Error("supabase-js: createClient not found");
-        client = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey);
+        client = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+          auth: {
+            flowType: "pkce",        // see the header — not optional on a hash router
+            detectSessionInUrl: true, // exchange ?code=... on the return hop
+            persistSession: true,
+            autoRefreshToken: true,
+          },
+        });
         return client;
       })
       .catch((err) => {

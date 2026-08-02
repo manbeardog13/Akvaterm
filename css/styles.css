@@ -531,13 +531,20 @@ h1,h2,.t-h1,.t-h2{
   padding-block-start:.16em;
   overflow:visible;
 }
+/* SENTENCE CASE, NOT UPPERCASE — and that is a consequence of the face, not
+   a taste change. Anton is a condensed poster face with no lowercase presence
+   worth using, so uppercase was the only way to set it. Sora is a geometric
+   sans with real lowercase, and setting it in caps produces exactly the loud,
+   wide heading ASC avoids: its own headings ("Dobro došli natrag", "Vaše gume,
+   na sigurnom") are sentence case at weight 600. Re-adding text-transform here
+   undoes the reason the face was changed. */
 h1,h2{
-  margin:0;font-family:var(--font-display);font-weight:400;font-style:normal;
-  line-height:1.1;letter-spacing:-.015em;text-transform:uppercase;
+  margin:0;font-family:var(--font-display);font-weight:600;font-style:normal;
+  line-height:1.18;letter-spacing:-.02em;text-transform:none;
   text-wrap:balance;
 }
-h1{font-size:clamp(26px,4.2vw,34px)}
-h2{font-size:clamp(20px,3vw,24px)}
+h1{font-size:clamp(25px,4.2vw,32px)}
+h2{font-size:clamp(19px,3vw,23px)}
 /* h3/h4 stay on the text face: Croatian catalogue strings are long and Anton
    is too condensed to carry them at small sizes. */
 h3,h4{margin:0;font-family:var(--font-text);font-weight:700;line-height:1.3;letter-spacing:-.005em}
@@ -578,6 +585,92 @@ small{font-size:12.5px}
 .meta-label{font-size:11.5px;font-weight:600;color:var(--muted)}
 /* Long Croatian strings must not become a single scrolling word when tracked. */
 .eyebrow,.meta-label{overflow-wrap:anywhere}
+
+/* ============================== Dark theme ============================== */
+/* Operator instruction, 2026-08-02: light/dark with a visible switch, here and
+   in every future project.
+
+   HOW IT IS SCOPED. The switch writes html[data-theme="light"|"dark"]; with no
+   attribute the app follows the SYSTEM preference via prefers-color-scheme. So
+   there are three states, not two, and the third is the default — a first-time
+   visitor whose phone is in dark mode gets dark without touching anything.
+   Both selectors set the same custom properties, so the palette is written
+   once and the media query only forwards it.
+
+   WHY ONLY THE SURFACE AND INK TOKENS ARE OVERRIDDEN. Everything else in this
+   sheet is DERIVED from these by a recorded operation, so re-pointing the
+   roots re-derives the whole system. Overriding derived tokens individually is
+   how a theme drifts out of step with itself.
+
+   CONTRAST — computed with the WCAG 2.x relative-luminance formula, not
+   estimated:
+
+     --ink     #F2EFEC on --surface #1C1815   15.40:1
+     --ink     #F2EFEC on --paper   #14100E   16.51:1
+     --ink-2   #C9C0BB on --surface           9.86:1
+     --muted   #A79C97 on --surface           6.59:1
+     --muted   #A79C97 on --paper             7.07:1
+     --muted   #A79C97 on --panel   #262120   5.94:1
+     --accent-ink  #5FD3E0 on --surface       9.98:1
+     --accent-2-ink #F0B860 on --surface      9.85:1
+     --danger-ink  #FF8A7A on --surface       7.70:1
+     --ok-ink      #6FD79A on --surface       9.96:1
+
+   The light theme's accent inks are DARK teal and DARK amber, chosen to carry
+   on white. On these grounds they measure under 2:1, so dark mode lifts them
+   to the light end of the same hues rather than reusing them. */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#14100E; --surface:#1C1815; --panel:#262120; --panel-2:#201B19;
+    --ink:#F2EFEC; --ink-2:#C9C0BB; --muted:#A79C97;
+    --line:rgba(242,239,236,.12); --line-input:rgba(242,239,236,.30);
+    --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
+    --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
+    --glass-wash:rgba(255,255,255,.06);
+    --shadow-warm:#000000;
+    /* THE GLASS HAS TO BE RE-COMPOSED, not re-tinted. --glass-bg-* are built
+       as hsl(var(--glass-tint) 97% / alpha) with the 97% LIGHTNESS written
+       into the composed value, so overriding --glass-tint alone still yields a
+       near-white pane — a light card carrying near-white ink, which is how
+       this first rendered. The composed variables are overridden instead.
+
+       Worst case for DARK glass is the opposite of the light one: the
+       LIGHTEST possible backdrop, i.e. pure white. hsl(24 14% 13%) = #26201D
+       at alpha .90 over #FFFFFF composites to #3C3634, and every tier is
+       measured against that:
+         --glass-ink        #F2EFEC  10.36:1
+         --glass-ink-muted  #BDB5B8   5.91:1
+         --accent-on-glass  #7FE0EA   7.77:1
+         --warm-on-glass    #F0B860   6.63:1
+         --ok-on-glass      #6FD79A   6.70:1
+         --danger-on-glass  #FFA79A   6.36:1
+       The light theme's on-glass inks are all DARK (#5C4B51, #0B5863, …) and
+       measure under 2:1 here, so every one of them is re-pointed. */
+    --glass-bg-text:hsl(24 14% 13% / .90);
+    --glass-bg-strong:hsl(24 14% 13% / .94);
+    --glass-bg-deco:hsl(24 14% 13% / .40);
+    --glass-solid:#26201D; --glass-solid-deep:#1E1917;
+    --glass-ink:#F2EFEC; --glass-ink-muted:#BDB5B8;
+    --accent-on-glass:#7FE0EA; --warm-on-glass:#F0B860;
+    --ok-on-glass:#6FD79A; --danger-on-glass:#FFA79A;
+    --glass-rim-top:rgba(255,255,255,.10);
+    --glass-rim-bottom:rgba(255,255,255,.05);
+    --glass-rim-side:rgba(255,255,255,.04);
+    --glass-hairline:rgba(255,255,255,.08);
+    --glass-edge-dark:rgba(0,0,0,.40);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#14100E; --surface:#1C1815; --panel:#262120; --panel-2:#201B19;
+  --ink:#F2EFEC; --ink-2:#C9C0BB; --muted:#A79C97;
+  --line:rgba(242,239,236,.12); --line-input:rgba(242,239,236,.30);
+  --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
+  --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
+  --glass-tint:24 18%; --glass-wash:rgba(255,255,255,.06);
+  --shadow-warm:#000000;
+}
 
 /* ============================== Wordmark ================================ */
 /* THE LOGO IS EXEMPT FROM THE IRIS PALETTE. Operator instruction, 2026-08-02:
@@ -628,7 +721,7 @@ small{font-size:12.5px}
   --logo-red:#d6252e;                  /* TERM half — protected brand colour */
 }
 .wordmark,.topbar .brand{
-  font-family:var(--font-text);font-style:italic;font-weight:800;
+  font-family:var(--font-wordmark);font-style:italic;font-weight:800;
   text-transform:none;letter-spacing:-.01em;line-height:1.15;
   white-space:nowrap;user-select:none;
 }
@@ -638,6 +731,25 @@ small{font-size:12.5px}
    TERM keeps its red — the same rule the original identity used. */
 .wordmark-on-dark .akva,.wordmark-on-dark .brand-akva{color:var(--on-dark)}
 .wordmark-on-dark .term,.wordmark-on-dark .brand-term{color:var(--logo-red)}
+
+/* DARK THEME — the same rule, applied automatically rather than by hand.
+   #00008C on --paper #14100E measures 1.11:1: the AKVA half does not become
+   hard to read, it becomes INVISIBLE. So dark mode reuses the identity's own
+   on-dark treatment rather than inventing one. TERM keeps #d6252e, which is
+   3.75:1 on that ground — above the 3:1 large-text threshold the mark is set
+   at (30-38px, weight 800), and brand marks are exempt from 1.4.3 regardless.
+   This is the ONE place the logo's colour is allowed to move, and only the
+   half that would otherwise disappear. */
+:root[data-theme="dark"] .wordmark .akva,
+:root[data-theme="dark"] .wordmark .brand-akva,
+:root[data-theme="dark"] .topbar .brand .akva,
+:root[data-theme="dark"] .topbar .brand .brand-akva{color:var(--ink)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .wordmark .akva,
+  :root:not([data-theme="light"]) .wordmark .brand-akva,
+  :root:not([data-theme="light"]) .topbar .brand .akva,
+  :root:not([data-theme="light"]) .topbar .brand .brand-akva{color:var(--ink)}
+}
 
 /* ============================== Branded splash ========================== */
 /* THE ENTRANCE. Visible on first paint (this sheet is render-blocking), and
@@ -989,9 +1101,11 @@ html.splashing #main.view-enter>*{animation-play-state:paused}
 /* index.html ships #app; #app-root is the id js/app.js recreates when it has to
    self-heal a stale cached shell. Both must get the shell layout. */
 #app,#app-root{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+/* The bottom pad used to clear the floating tab bar (--nav-h + safe area). The
+   tab bar is retired, so the only thing left to clear is the home indicator. */
 main,#main{
   flex:1;width:100%;max-width:var(--maxw);margin:0 auto;
-  padding:18px 16px calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 28px);
+  padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 34px);
 }
 @media(min-width:720px){main,#main{padding:26px 24px 44px}}
 
@@ -1102,8 +1216,135 @@ main,#main{
 .topbar .more-btn{min-height:38px;padding:0 13px;font-size:13.5px}
 @media(max-width:519px){.topbar .more-btn .lbl{display:none}.topbar .more-btn{padding:0;width:var(--tap)}}
 
+/* ------------------------------------------------------- Left drawer ----- */
+/* Operator instruction, 2026-08-02: "there's a menu that slides from the left
+   side. That is how I want the menus to look and not fixed on the bottom."
+   Geometry ported from ASC app/app.css .side — 300px capped at 84vw, a 22px
+   radius on the right edge only, translateX(-103%) parked (the extra 3% keeps
+   the shadow off-screen too, which a flat -100% does not).
+
+   THE SCRIM CARRIES THE BLUR, not the app content. Blurring #main directly
+   would make it a backdrop root and disable every glass surface underneath it
+   for the whole time the drawer is open — the exact failure this project has
+   already been bitten by once (see the note on viewFade in the router). A
+   separate fixed layer with backdrop-filter blurs what is behind IT and leaves
+   the stacking of everything else alone.
+
+   Motion: 320ms on --smooth for the slide, 280ms for the scrim fade, which is
+   ASC's pairing — the drawer arrives a beat after the ground dims, so the two
+   read as one gesture rather than a race. */
+.side-scrim{
+  position:fixed;inset:0;z-index:114;
+  background:rgba(20,16,14,.44);
+  opacity:0;transition:opacity 280ms var(--smooth);
+}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .side-scrim{-webkit-backdrop-filter:blur(3px) saturate(120%);backdrop-filter:blur(3px) saturate(120%)}
+}
+html.side-open .side-scrim{opacity:1}
+
+.side{
+  position:fixed;left:0;top:0;bottom:0;z-index:116;
+  width:min(300px,84vw);
+  display:flex;flex-direction:column;
+  padding:calc(14px + env(safe-area-inset-top,0px)) 10px calc(14px + env(safe-area-inset-bottom,0px));
+  padding-left:max(10px,env(safe-area-inset-left,0px));
+  border-radius:0 22px 22px 0;
+  background:var(--surface);
+  box-shadow:0 1px 2px -1px rgba(93,79,79,.10),0 18px 40px -22px rgba(93,79,79,.44),
+    inset 0 1px 0 rgba(255,255,255,.55),inset 0 0 0 1px rgba(104,52,15,.05);
+  transform:translateX(-103%);
+  transition:transform 320ms var(--smooth);
+  overscroll-behavior:contain;
+}
+html.side-open .side{transform:none}
+
+.sb-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 12px 12px;min-height:40px}
+.sb-eyebrow{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.sb-x{
+  flex:none;width:32px;height:32px;border:0;border-radius:10px;cursor:pointer;
+  background:transparent;color:var(--muted);display:grid;place-items:center;
+  transition:background 160ms var(--snap),color 160ms var(--snap);
+}
+.sb-x svg{width:19px;height:19px}
+.sb-x:hover{background:var(--panel);color:var(--ink)}
+
+.sb-nav{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.sb-item{
+  position:relative;display:flex;align-items:center;gap:11px;min-height:44px;
+  padding:0 12px;border-radius:12px;text-decoration:none;cursor:pointer;
+  border:0;background:transparent;width:100%;text-align:left;
+  font-size:14px;font-weight:500;color:var(--ink-2);
+  transition:background 180ms var(--snap),color 180ms var(--snap),box-shadow 220ms var(--snap);
+}
+/* One optical axis: every glyph sits in the same 20px column so the labels
+   align exactly, which is most of why the ASC list reads as calm. */
+.side .sb-item svg{flex:none;width:20px;height:20px;color:var(--muted);transition:color 180ms var(--snap)}
+.sb-item .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(any-hover:hover){
+  .sb-item:hover{background:var(--panel);color:var(--ink)}
+  .sb-item:hover svg{color:var(--ink-2)}
+}
+.sb-item:active{transform:scale(.985);transition-duration:80ms}
+.sb-item:focus-visible{outline:2px solid var(--accent-ink);outline-offset:-2px}
+.sb-item.active{
+  background:var(--panel-2);color:var(--accent-ink);
+  box-shadow:0 1px 3px rgba(93,79,79,.10),inset 0 1px 0 rgba(255,255,255,.55),0 4px 14px -8px var(--accent-ring);
+}
+.side .sb-item.active svg{color:var(--accent-ink)}
+.sb-item.active::before{
+  content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;
+  background:var(--accent);animation:sbBar 260ms var(--snap) both;
+}
+@keyframes sbBar{from{transform:scaleY(.4);opacity:0}}
+.sb-div{flex:none;height:1px;background:var(--line);margin:12px 10px}
+.sb-eyebrow2{flex:none;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:2px 12px 6px}
+
+.sb-foot{flex:none;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+/* The switch is the state; the two glyphs cross-fade in place so nothing in
+   the row changes width when the theme flips. */
+.sb-themeic{flex:none;width:20px;height:20px;position:relative;display:block}
+.sb-themeic svg{position:absolute;inset:0;transition:opacity 200ms var(--snap),transform 260ms var(--snap)}
+.sb-themeic svg:nth-child(1){opacity:1}
+.sb-themeic svg:nth-child(2){opacity:0;transform:rotate(-35deg)}
+.sb-theme[aria-pressed="true"] .sb-themeic svg:nth-child(1){opacity:0;transform:rotate(35deg)}
+.sb-theme[aria-pressed="true"] .sb-themeic svg:nth-child(2){opacity:1;transform:none}
+.sb-switch{
+  flex:none;width:38px;height:22px;border-radius:var(--r-pill);
+  background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);
+  display:block;position:relative;transition:background 200ms var(--snap);
+}
+.sb-switch i{
+  position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+  background:var(--surface);box-shadow:0 1px 3px rgba(93,79,79,.35);
+  transition:transform 240ms var(--snap);
+}
+.sb-theme[aria-pressed="true"] .sb-switch{background:var(--accent)}
+.sb-theme[aria-pressed="true"] .sb-switch i{transform:translateX(16px)}
+
+.sb-burger{
+  display:grid;place-items:center;flex:none;width:38px;height:38px;
+  border:0;border-radius:12px;cursor:pointer;
+  background:transparent;color:var(--ink);
+  transition:background 140ms var(--snap),transform 140ms var(--snap);
+}
+.sb-burger svg{width:21px;height:21px}
+.sb-burger:hover{background:var(--panel)}
+.sb-burger:active{transform:scale(.92)}
+/* Desktop shows the whole nav in the top bar, so the drawer is a phone control
+   only — offering both at once is two menus for one job. */
+@media(min-width:900px){ .sb-burger{display:none} }
+
+@media(prefers-reduced-motion:reduce){
+  .side,.side-scrim,.sb-switch i,.sb-themeic svg{transition-duration:1ms}
+  .sb-item.active::before{animation:none}
+}
+
 /* ------------------------------------------------- Bottom tab bar (mobile) */
-/* Glass surface #2 of the standing pair — same split-surface arrangement. */
+/* RETIRED 2026-08-02 — replaced by the left drawer above, per operator
+   instruction. The rules are kept because .tabbar selectors are still
+   referenced by the glass budget documentation and the route-scoped
+   suppression in js/views/prijava.js; nothing renders them any more. */
 .tabbar{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
   height:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));

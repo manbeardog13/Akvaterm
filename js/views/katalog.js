@@ -229,8 +229,8 @@ const CATALOG_CSS = `
   --akv-r-pill:var(--r-pill,999px);
   --akv-r:var(--akv-r-xl);                   /* the card default */
   --akv-ease:var(--glass-ease,cubic-bezier(.32,.72,0,1));
-  --akv-fam-display:var(--font-display,'Anton','Haettenschweiler','Arial Narrow',system-ui,sans-serif);
-  --akv-fam-text:var(--font-text,'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
+  --akv-fam-display:var(--font-display,'Sora',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
+  --akv-fam-text:var(--font-text,'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
   --akv-track-meta:var(--track-meta,.08em);
 }
 
@@ -242,14 +242,19 @@ const CATALOG_CSS = `
    ancestors) — but the heading needs real headroom above it or a Č can touch
    the eyebrow, hence the .12em top padding. line-height stays above the 1.05
    floor the font metrics require. */
+/* Sentence case and weight 600, matching the h1/h2 rule in css/styles.css.
+   These were uppercase 400 because the display face was Anton, a condensed
+   poster face with no usable lowercase; the house face is now Sora, which is
+   set in sentence case everywhere. Sizes come down a step with the change —
+   Anton at 3.75rem and Sora at 3.75rem are not the same amount of ink. */
 .akv-display-1,.akv-display-2{
-  font-family:var(--akv-fam-display);font-weight:400;text-transform:uppercase;
+  font-family:var(--akv-fam-display);font-weight:600;
   color:var(--akv-ink);margin:0;
-  line-height:1.12;
+  line-height:1.18;
   overflow:visible;padding-block-start:.12em;
 }
-.akv-display-1{font-size:clamp(2.25rem,5.6vw,3.75rem);letter-spacing:-.015em}
-.akv-display-2{font-size:clamp(1.5rem,3vw,2.25rem);letter-spacing:-.01em}
+.akv-display-1{font-size:clamp(2rem,4.8vw,3rem);letter-spacing:-.025em}
+.akv-display-2{font-size:clamp(1.375rem,2.8vw,1.875rem);letter-spacing:-.02em}
 .akv-meta{
   font-family:var(--akv-fam-text);font-weight:500;font-size:.75rem;
   letter-spacing:var(--akv-track-meta);line-height:1.4;text-transform:uppercase;

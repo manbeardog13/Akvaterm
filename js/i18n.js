@@ -477,6 +477,11 @@ const DICT = {
   "prijava.submit": "Prijavi se",
   "prijava.busy": "Prijava u tijeku…",
   "prijava.or": "ili",
+  "prijava.orEmail": "ili e-mailom",
+  /* "Google" stays untranslated and capitalised — it is a product name, and
+     Google's branding guidelines require it verbatim in the sign-in label. */
+  "prijava.google": "Nastavi s Google računom",
+  "prijava.googleRedirect": "Otvaramo Google prijavu…",
   "prijava.guest": "Nastavi kao gost",
   "prijava.guestHint": "Katalog, dizajner i 3D soba rade bez prijave.",
   "prijava.localNote": "Favoriti i dizajni spremaju se na ovaj uređaj.",
@@ -498,6 +503,10 @@ const DICT = {
   "prijava.signedOut": "Odjavljeni ste.",
   "prijava.toCatalog": "U katalog",
   "a11y.prijavaCard": "Prijava na Akvaterm",
+  /* Left drawer + theme switch (js/app.js). */
+  "a11y.openMenu": "Otvori izbornik",
+  "a11y.closeMenu": "Zatvori izbornik",
+  "theme.label": "Tamna tema",
 
   /* ---- Common ---- */
   "common.back": "Natrag",

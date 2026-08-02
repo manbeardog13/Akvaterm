@@ -89,7 +89,7 @@ import { authConfigured, getSession, onAuthChange, signOut } from "./db.js";
 // registration WITHOUT the query would fall back to; keep it equal to this
 // string anyway, so a hand-registered worker lands in the same cache.
 // The worker's SHELL list must still cover every shipped file.
-export const APP_V = "v2";
+export const APP_V = "v3";
 
 document.documentElement.lang = LANG;
 
@@ -239,6 +239,16 @@ const ICONS = {
   savjetnik: SVG(`<path d="M20.6 12.1c0 3.9-3.85 7.1-8.6 7.1-.95 0-1.86-.13-2.72-.36L4.2 20.4l1.42-3.5A6.75 6.75 0 0 1 3.4 12.1C3.4 8.2 7.25 5 12 5s8.6 3.2 8.6 7.1z"/>`),
   // Više — horizontal ellipsis
   vise: SVG(`<circle cx="5.6" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.4" cy="12" r="1.6" fill="currentColor" stroke="none"/>`),
+  // Drawer glyphs. Same construction as the four above — 24px box, 1.7 stroke,
+  // round joins, drawn on currentColor — so the drawer and the top bar read as
+  // one icon set rather than two.
+  burger: SVG(`<path d="M4 7h16M4 12h16M4 17h16"/>`),
+  favoriti: SVG(`<path d="M12 20.2S3.8 15.4 3.8 9.7A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 8.2 2.3c0 5.7-8.2 10.5-8.2 10.5z"/>`),
+  dizajni: SVG(`<path d="M12 3.2l8.4 4.3-8.4 4.3-8.4-4.3z"/><path d="M3.6 12l8.4 4.3 8.4-4.3M3.6 16.4l8.4 4.3 8.4-4.3"/>`),
+  prijava: SVG(`<circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/>`),
+  sun: SVG(`<circle cx="12" cy="12" r="4.1"/><path d="M12 2.6v2.3M12 19.1v2.3M4.36 4.36l1.63 1.63M18.01 18.01l1.63 1.63M2.6 12h2.3M19.1 12h2.3M4.36 19.64l1.63-1.63M18.01 5.99l1.63-1.63"/>`),
+  moon: SVG(`<path d="M20.4 13.4A8.3 8.3 0 0 1 10.6 3.6a8.4 8.4 0 1 0 9.8 9.8z"/>`),
+  close: SVG(`<path d="M6 6l12 12M18 6L6 18"/>`),
 };
 
 const NAV = [
@@ -267,10 +277,18 @@ function mountFrame() {
   const moreLabel = esc(T("nav.vise", "Više"));
   const moreBtn = (cls) =>
     `<button type="button" class="${cls}" aria-haspopup="menu" aria-expanded="false"><span class="ic">${ICONS.vise}</span><span class="lbl">${moreLabel}</span></button>`;
+  // Drawer row. Same <a> shape as the top-nav link, plus the icon column the
+  // ASC sidebar aligns every label against.
+  const sideLink = (n) =>
+    `<a class="sb-item" href="#${n.route}" data-route="${n.route}">${ICONS[n.icon]}<span class="t">${esc(T(n.key, n.fb))}</span></a>`;
+
   root.innerHTML = `
     <header class="topbar">
       <span class="topbar__surface" aria-hidden="true"></span>
       <div class="topbar__inner">
+        <button type="button" class="sb-burger" id="sideOpen"
+                aria-label="${esc(T("a11y.openMenu", "Otvori izbornik"))}"
+                aria-controls="sideNav" aria-expanded="false">${ICONS.burger}</button>
         <a class="brand wordmark" href="#/" aria-label="Akvaterm"><span class="akva">AKVA</span><span class="term">TERM</span></a>
         <nav class="topbar-nav" aria-label="${esc(T("a11y.primaryNav", "Glavna navigacija"))}">${NAV.map((n) => link(n)).join("")}</nav>
         <span class="spacer"></span>
@@ -278,12 +296,151 @@ function mountFrame() {
       </div>
     </header>
     <main id="main"></main>
-    <nav class="tabbar" aria-label="${esc(T("a11y.sections", "Odjeljci"))}">
-      <span class="tabbar__surface" aria-hidden="true"></span>
-      ${NAV.map((n) => link(n, "tabbar__item")).join("")}
-      ${moreBtn("more-btn tab-more tabbar__item")}
-    </nav>
+
+    <!-- The scrim is a SIBLING of the drawer, not a child: it must paint over
+         the whole app while the drawer paints over IT, and a child cannot sit
+         behind its own parent. It carries the backdrop blur. -->
+    <div class="side-scrim" id="sideScrim" hidden></div>
+    <aside class="side" id="sideNav" aria-hidden="true">
+      <div class="sb-head">
+        <span class="sb-eyebrow">${esc(T("a11y.sections", "Odjeljci"))}</span>
+        <button type="button" class="sb-x" id="sideClose"
+                aria-label="${esc(T("a11y.closeMenu", "Zatvori izbornik"))}">${ICONS.close}</button>
+      </div>
+      <nav class="sb-nav" aria-label="${esc(T("a11y.primaryNav", "Glavna navigacija"))}">
+        ${NAV.map(sideLink).join("")}
+        <div class="sb-div" role="presentation"></div>
+        <span class="sb-eyebrow2">${esc(T("nav.vise", "Više"))}</span>
+        ${sideLink({ route: "/favoriti", key: "nav.favoriti", fb: "Favoriti", icon: "favoriti" })}
+        ${sideLink({ route: "/dizajni", key: "nav.dizajni", fb: "Moji dizajni", icon: "dizajni" })}
+        ${sideLink({ route: "/prijava", key: "nav.prijava", fb: "Prijava", icon: "prijava" })}
+      </nav>
+      <div class="sb-foot">
+        <button type="button" class="sb-item sb-theme" id="themeToggle" aria-pressed="false">
+          <span class="sb-themeic">${ICONS.sun}${ICONS.moon}</span>
+          <span class="t">${esc(T("theme.label", "Tamna tema"))}</span>
+          <span class="sb-switch" aria-hidden="true"><i></i></span>
+        </button>
+      </div>
+    </aside>
+
     <div id="toasts" class="toasts" aria-live="polite"></div>`;
+}
+
+// ---- Left drawer ------------------------------------------------------------
+// Replaces the bottom tab bar (operator instruction, 2026-08-02: menus slide in
+// from the left, ASC's pattern, "and not fixed on the bottom").
+//
+// THE STATE LIVES ON <html>, not on the drawer element, for the same reason the
+// transparency switch does: the scrim, the drawer transform and the scroll lock
+// are three different elements, and one attribute drives all three from CSS
+// without any of them needing a reference to the others.
+//
+// `hidden` on the scrim is toggled a frame apart from the class, deliberately:
+// an element going from display:none straight to opacity:1 does not transition
+// at all — the browser has no previous computed value to interpolate from. So
+// the scrim is un-hidden first, then the class lands on the NEXT frame.
+const SIDE_ATTR = "side-open";
+let sideRestoreFocus = null;
+let frameWired = false;
+
+function sideOpen() {
+  const scrim = document.getElementById("sideScrim");
+  const drawer = document.getElementById("sideNav");
+  if (!drawer) return;
+  sideRestoreFocus = document.activeElement;
+  if (scrim) scrim.hidden = false;
+  requestAnimationFrame(() => {
+    document.documentElement.classList.add(SIDE_ATTR);
+    drawer.setAttribute("aria-hidden", "false");
+    document.getElementById("sideOpen")?.setAttribute("aria-expanded", "true");
+    // Focus moves INTO the drawer, or a keyboard user is left behind a scrim
+    // they cannot reach, tabbing through content they cannot see.
+    drawer.querySelector(".sb-item")?.focus({ preventScroll: true });
+  });
+}
+
+function sideClose() {
+  const drawer = document.getElementById("sideNav");
+  const scrim = document.getElementById("sideScrim");
+  if (!document.documentElement.classList.contains(SIDE_ATTR)) return;
+  document.documentElement.classList.remove(SIDE_ATTR);
+  drawer?.setAttribute("aria-hidden", "true");
+  document.getElementById("sideOpen")?.setAttribute("aria-expanded", "false");
+  // Re-hide only AFTER the fade, or the scrim vanishes instantly and the
+  // drawer appears to slide out from behind nothing.
+  if (scrim) {
+    const done = () => { if (!document.documentElement.classList.contains(SIDE_ATTR)) scrim.hidden = true; };
+    scrim.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 400);   // fallback when the transition is skipped
+  }
+  // Restore focus to whatever opened it, but never to a detached node.
+  if (sideRestoreFocus?.isConnected) sideRestoreFocus.focus({ preventScroll: true });
+  sideRestoreFocus = null;
+}
+
+function wireSide() {
+  document.getElementById("sideOpen")?.addEventListener("click", sideOpen);
+  document.getElementById("sideClose")?.addEventListener("click", sideClose);
+  document.getElementById("sideScrim")?.addEventListener("click", sideClose);
+  // Escape closes, as it does for the popover — one habit, not two.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") sideClose();
+  });
+  // A drawer that survives navigation would cover the page the user just asked
+  // for. route() also calls this, so a link inside the drawer closes it.
+  window.addEventListener("hashchange", sideClose);
+}
+
+// ---- Theme ------------------------------------------------------------------
+// Three states, and the third is the default: html[data-theme] absent means
+// "follow the system", which css/styles.css implements with a
+// prefers-color-scheme query. The switch only ever writes an explicit value,
+// so a user who has chosen keeps their choice when the OS flips.
+const THEME_KEY = "akv:theme";
+
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY) || ""; } catch { return ""; }
+}
+
+function systemPrefersDark() {
+  return Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+}
+
+function themeIsDark() {
+  const stored = storedTheme();
+  return stored ? stored === "dark" : systemPrefersDark();
+}
+
+// iOS paints the area around the notch from <meta name="theme-color">. It is
+// static markup, so it has to be re-tinted whenever the theme moves or the top
+// of the screen stays light while the app goes dark.
+function setThemeColor(dark) {
+  let m = document.querySelector('meta[name="theme-color"]');
+  if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
+  m.setAttribute("content", dark ? "#14100E" : "#F2F2F2");
+}
+
+function applyTheme() {
+  const stored = storedTheme();
+  const root = document.documentElement;
+  if (stored) root.setAttribute("data-theme", stored);
+  else root.removeAttribute("data-theme");
+  const dark = themeIsDark();
+  setThemeColor(dark);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.setAttribute("aria-pressed", String(dark));
+}
+
+function wireTheme() {
+  applyTheme();
+  document.getElementById("themeToggle")?.addEventListener("click", () => {
+    try { localStorage.setItem(THEME_KEY, themeIsDark() ? "light" : "dark"); } catch { /* storage blocked — the theme still flips for this session */ }
+    applyTheme();
+  });
+  // Follow the system only while the user has expressed no preference.
+  window.matchMedia?.("(prefers-color-scheme: dark)")
+    ?.addEventListener?.("change", () => { if (!storedTheme()) applyTheme(); });
 }
 
 // Every navigation gets a FRESH <main id="main">. A view whose data await is
@@ -306,14 +463,22 @@ function setActiveNav(path) {
   const seg = path.split("/")[1] || "";
   let base = "/" + seg;
   if (seg === "" || seg === "katalog" || seg === "proizvod") base = "/";
-  const onMore = seg === "favoriti" || seg === "dizajni" || seg === "prijava";
+  // No special case for favoriti/dizajni/prijava any more. They used to be
+  // excluded because only the four top-nav links carried data-route and none of
+  // them should light up on those routes; the drawer now carries them too, so
+  // an exact route match is both correct and sufficient — the top bar has no
+  // link to match, and the drawer row lights up as it should.
   document.querySelectorAll("[data-route]").forEach((a) => {
-    const on = !onMore && a.dataset.route === base;
+    const on = a.dataset.route === base;
     a.classList.toggle("active", on);
     if (on) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
-  document.querySelectorAll(".more-btn").forEach((b) => b.classList.toggle("active", onMore));
+  // The "Više" button highlights on exactly the routes that live behind it.
+  // Recomputed here rather than reusing the loop above: those routes have no
+  // [data-route] link in the TOP bar, so the loop never visits them.
+  const behindMore = seg === "favoriti" || seg === "dizajni" || seg === "prijava";
+  document.querySelectorAll(".more-btn").forEach((b) => b.classList.toggle("active", behindMore));
 }
 
 // ---- Toasts (window.AKV.toast) ----------------------------------------------
@@ -354,12 +519,55 @@ window.AKV = { toast };
 const SIGNOUT_ATTR = "data-akv-signout";
 let authedEmail = null;
 
+// Read at module evaluation, BEFORE supabase-js strips the OAuth parameters
+// from the address bar — by the time a session arrives the evidence is gone.
+// Two distinct returns to recognise:
+//   ?code=...   — the PKCE hand-back; a session is about to appear
+//   ?error=...  — Google or Supabase refused (user pressed "Cancel", the
+//                 client is misconfigured, the account is not permitted)
+// Query string, not fragment: see js/supabaseClient.js on why this app must
+// stay on the PKCE flow.
+const oauthReturn = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("error")) return { kind: "error", detail: q.get("error_description") || q.get("error") };
+    if (q.get("code")) return { kind: "code" };
+  } catch { /* no URL API, or an exotic address — treat as an ordinary load */ }
+  return null;
+})();
+
 function watchAuthState() {
   if (!authConfigured()) return;   // no backend to ask, and nothing to change
   getSession().then((session) => { authedEmail = session?.user?.email || null; }).catch(() => {});
+
+  // Only the FIRST session after an OAuth return is worth announcing. Without
+  // this latch every page load of an already-signed-in user would toast, since
+  // onAuthChange also fires for the restored INITIAL_SESSION.
+  let announce = oauthReturn?.kind === "code";
+
   // App-lifetime subscription: a session that expires, or a sign-in performed
   // on the login screen, must move this label without a reload.
-  onAuthChange((session) => { authedEmail = session?.user?.email || null; });
+  onAuthChange((session) => {
+    authedEmail = session?.user?.email || null;
+    if (announce && authedEmail) {
+      announce = false;
+      toast(T("prijava.success", "Prijavljeni ste."));
+    }
+  });
+
+  // A failed return leaves no session and fires no auth event, so it would
+  // otherwise be completely silent — the user would land back on the catalogue
+  // with no sign that anything was attempted.
+  if (oauthReturn?.kind === "error") {
+    console.warn("[auth] OAuth return carried an error:", oauthReturn.detail);
+    toast(T("prijava.err.other", "Prijava nije uspjela. Pokušajte ponovno."));
+    // supabase-js only cleans the address bar on SUCCESS, so clear the failure
+    // parameters here — otherwise the hash router keeps them across every
+    // subsequent navigation and a reload re-announces a stale failure.
+    try {
+      history.replaceState(null, "", window.location.pathname + window.location.hash);
+    } catch { /* replaceState blocked — a visible query string is harmless */ }
+  }
 }
 
 // ---- "Više" popover (Favoriti + Moji dizajni + Prijava) ---------------------
@@ -502,8 +710,13 @@ async function route() {
   window.dispatchEvent(new Event("akv:teardown"));
 
   mountFrame();
+  // Wired AFTER mountFrame(), and once: mountFrame() returns early when the
+  // frame already exists, so these elements are built exactly one time and
+  // their listeners must be attached exactly one time with them.
+  if (!frameWired) { frameWired = true; wireSide(); wireTheme(); }
   setActiveNav(path);
   closeMore();
+  sideClose();
   const main = swapMain();
 
   const match = ROUTES.map((r) => ({ r, m: path.match(r.pattern) })).find((x) => x.m);
@@ -547,6 +760,36 @@ function revealApp() {
 // ---- Boot -------------------------------------------------------------------
 initSupabase();   // no-op in the offline demo; fire-and-forget when configured
 watchAuthState(); // also a no-op in the demo; only ever moves a menu label
+
+// THE LOGIN SCREEN IS THE FRONT DOOR (operator instruction, 2026-08-02: "this
+// login page is the first page that has to load when starting up the
+// platform"). A COLD START with no route lands on #/prijava.
+//
+// This is still not an auth GATE, and the difference matters: no route checks a
+// session, nothing redirects into #/prijava from anywhere else, and the card's
+// own "Nastavi kao gost" is an ordinary <a href="#/">. It is the first screen,
+// not a locked one — one tap past it and the whole app is there.
+//
+// Only when the hash is EMPTY. A deep link (a shared design, a product, the
+// OAuth return) must open what it points at; sending those to the login screen
+// would break every link the app hands out.
+//
+// history.replaceState, NOT location.replace or a hash assignment. Both of
+// those fire a hashchange, and that event races the route() call below: two
+// route() calls start, the second bumps navSeq, and the first — the one whose
+// render is already in flight — hits its own stale() guard and returns without
+// painting. The result is a correct URL and an empty screen. replaceState
+// rewrites the address silently, so exactly one route() runs, and it reads the
+// hash this line just wrote. It also leaves no history entry, so Back does not
+// bounce off the login screen.
+if (!location.hash || location.hash === "#" || location.hash === "#/") {
+  if (oauthReturn === null) {   // returning FROM Google — do not intercept
+    try {
+      history.replaceState(null, "", `${location.pathname}${location.search}#/prijava`);
+    } catch { /* replaceState blocked — the app opens on the catalogue instead */ }
+  }
+}
+
 window.addEventListener("hashchange", route);
 // Registered WITH ?v=${APP_V}: that query is the worker's only source of
 // VERSION, so `akv-${APP_V}` is the cache name by construction rather than by

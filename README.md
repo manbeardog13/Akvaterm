@@ -1,5 +1,10 @@
 # Akvaterm — Katalog i dizajner prostora
 
+> ### ▶ Read [docs/HOUSE_STANDARD.md](docs/HOUSE_STANDARD.md) first
+> Sora + Inter, soft UI, left drawer, light/dark, and the login-screen
+> contract. **Binding for this project and for every future one** — a new
+> platform starts from that file, not from scratch.
+
 Web platforma za Akvaterm d.o.o. (Dubrovnik): katalog opreme za dom — pločice, sanitarije,
 armature, grijanje, klimatizacija — s dizajnerom prostora u kojem kupci oblažu kupaonice, kuhinje
 i dnevne boravke pločicama iz kataloga, u 2D scenama i u 3D sobi, uz AI savjetnicu **Termu**.

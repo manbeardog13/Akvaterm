@@ -25,6 +25,7 @@
 // same). What signing in changes today is the mirror's write leg, nothing else.
 // ============================================================================
 
+import { CONFIG } from "./config.js";
 import { getSupabase, initSupabase, isConfigured } from "./supabaseClient.js";
 import { newId } from "./domain.js";
 
@@ -139,6 +140,45 @@ export async function signIn(email, password) {
   if (result?.error) throw authError(authCode(result.error), result.error.message);
   sessionCache = result?.data?.session ?? null;
   return sessionCache;
+}
+
+/** Google sign-in. Unlike signIn(), this does NOT resolve to a session: on
+ *  success the browser LEAVES this page for accounts.google.com and comes back
+ *  with ?code=... in the query string, which supabaseClient.js's PKCE settings
+ *  exchange on the next load. So a resolved promise here means only "the
+ *  redirect was issued"; the caller must keep its button in a pending state and
+ *  let the navigation happen.
+ *
+ *  Throws an Error with `.code` on the same scale as signIn().
+ *
+ *  redirectTo is CONFIG.appUrl, not the current address, on purpose: Supabase
+ *  rejects any return URL outside the project's allow-list and silently falls
+ *  back to the Site URL, which produces a confusing hop rather than an error.
+ *  Pointing at the one allow-listed address makes the outcome predictable. The
+ *  consequence is that Google sign-in does not complete from a local copy of
+ *  the app — that is a deliberate trade, and it is why this is untestable
+ *  without deploying. */
+export async function signInWithGoogle() {
+  const sb = await initSupabase();
+  if (!sb) throw authError("unavailable");
+  let result;
+  try {
+    result = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: CONFIG.appUrl || undefined,
+        // Ask Google to show the account chooser rather than silently reusing
+        // whichever account the browser signed in with last. On a shared or
+        // family machine the silent path signs the wrong person in with no
+        // visible step at which to notice.
+        queryParams: { prompt: "select_account" },
+      },
+    });
+  } catch (err) {
+    throw authError(authCode(err), err?.message);
+  }
+  if (result?.error) throw authError(authCode(result.error), result.error.message);
+  return true;
 }
 
 /** Sign out. Clears the cache first, so the UI is honest even if the network
