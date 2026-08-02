@@ -577,24 +577,51 @@ export async function mountScene(el, {
   // product drawer is about to re-tile) and a FIXTURE footprint (what a drag
   // will move). Both are added to the renderer's scene, never to the groups
   // that get raycast or rebuilt.
+  // EDGE ONLY — never a wash over the tiles. Operator instruction, 2026-08-02:
+  // selecting a surface used to lay a translucent teal plane over the whole of
+  // it, which tinted every tile underneath. That defeats the one thing the
+  // designer is for: you pick a surface, then scroll the drawer comparing tile
+  // COLOURS, and the colours were being shifted by the very act of selecting.
+  // So the affordance is now a band hugging the border and nothing else.
+  //
+  // The band is rebuilt in real metres on every selection rather than scaled
+  // from a unit square, because surfSel is scaled non-uniformly (a 3.6 x 2.6 m
+  // wall) and a scaled ring would come out thicker on one axis than the other.
+  // Rebuilding costs 8 vertices on a click — cheaper than the tint it replaces.
   const surfSel = new THREE.Group();
   surfSel.visible = false;
-  const surfFill = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
+  const surfBand = new THREE.Mesh(
+    new THREE.BufferGeometry(),
     new THREE.MeshBasicMaterial({
-      color: IRIS.teal600, transparent: true, opacity: 0.16, depthWrite: false,
+      color: IRIS.amber500, transparent: true, opacity: 0.95,
+      depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     }));
-  surfFill.raycast = () => {};
-  surfSel.add(surfFill);
-  const surfLoop = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3(0.5, -0.5, 0),
-      new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(-0.5, 0.5, 0),
-    ]),
-    new THREE.LineBasicMaterial({ color: IRIS.amber500, depthTest: false }));
-  surfLoop.renderOrder = 999;
-  surfLoop.raycast = () => {};
-  surfSel.add(surfLoop);
+  surfBand.renderOrder = 999;
+  surfBand.raycast = () => {};
+  surfSel.add(surfBand);
+
+  const SURF_BAND_M = 0.045;   // ~4.5 cm of border, readable without crowding
+
+  /** Rebuild the border band as a rectangular ring w x h metres, centred on 0. */
+  function buildSurfaceBand(w, h) {
+    const bw = Math.min(SURF_BAND_M, w / 6, h / 6);   // never eat a small surface
+    const ox = w / 2, oy = h / 2, ix = ox - bw, iy = oy - bw;
+    // Four quads (top, bottom, left, right) as two triangles each.
+    const quad = (ax, ay, bx, by, cx, cy, dx, dy) => [
+      ax, ay, 0, bx, by, 0, cx, cy, 0,
+      ax, ay, 0, cx, cy, 0, dx, dy, 0,
+    ];
+    const v = [
+      ...quad(-ox, oy, ox, oy, ox, iy, -ox, iy),        // top
+      ...quad(-ox, -iy, ox, -iy, ox, -oy, -ox, -oy),    // bottom
+      ...quad(-ox, iy, -ix, iy, -ix, -iy, -ox, -iy),    // left
+      ...quad(ix, iy, ox, iy, ox, -iy, ix, -iy),        // right
+    ];
+    surfBand.geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+    surfBand.geometry = g;
+  }
 
   const fixSel = new THREE.Group();
   fixSel.visible = false;
@@ -641,7 +668,10 @@ export async function mountScene(el, {
     if (!rec || !rec.mesh.visible) { surfSel.visible = false; return; }
     surfSel.position.copy(rec.mesh.position).addScaledVector(rec.inward, 0.006);
     surfSel.rotation.copy(rec.mesh.rotation);
-    surfSel.scale.set(rec.sizeM[0], rec.sizeM[1], 1);
+    // Scale stays 1: the band carries its real metre dimensions, so its width
+    // is even on all four sides regardless of the surface's aspect ratio.
+    surfSel.scale.set(1, 1, 1);
+    buildSurfaceBand(rec.sizeM[0], rec.sizeM[1]);
     surfSel.visible = true;
   }
 
