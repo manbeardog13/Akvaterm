@@ -912,6 +912,38 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     syncSelectionRing();
   }
 
+  /** Re-place a record after its ROTATION changed, the same way reflow()
+   *  re-places it after the ROOM changed.
+   *
+   *  Rotating changes the footprint's world extent, so the flush position on
+   *  every wall moves. settle() is the WRONG tool here: it re-derives BOTH
+   *  anchors from proximity against the NEW extent, so a fixture that was flush
+   *  ends up parked short of its wall and silently reverts to ax/az = 0 (free)
+   *  — after which reflow() no longer walks it with that wall and the next
+   *  setDims() strands it. That is the operator's original "stranded fixture",
+   *  reached through the rotate button instead of the dimension field.
+   *
+   *  So: an anchored axis is re-derived flush against the wall it is already
+   *  anchored to, using the new extent (reanchor(), exactly as reflow() does).
+   *  Only a FREE axis goes through axisSettle(), where the wall magnet may
+   *  legitimately acquire a new anchor because the turn brought that edge
+   *  within WALL_SNAP_M of a wall. */
+  function resettleAfterRotate(rec) {
+    const L = limitsFor(rec.footprint, rec.rotY, dims);
+    if (rec.ax !== 0) {
+      rec.x = reanchor(rec.x, rec.ax, L.loX, L.hiX);
+    } else {
+      const a = axisSettle(rec.x, L.loX, L.hiX);
+      rec.x = a.v; rec.ax = a.anchor;
+    }
+    if (rec.az !== 0) {
+      rec.z = reanchor(rec.z, rec.az, L.loZ, L.hiZ);
+    } else {
+      const b = axisSettle(rec.z, L.loZ, L.hiZ);
+      rec.z = b.v; rec.az = b.anchor;
+    }
+  }
+
   function buildRec(f, index) {
     const spec = specOf(f.type);
     if (!spec) return null;
@@ -1001,6 +1033,16 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
         if (Number.isFinite(Number(f.rotY))) rec.rotY = Number(f.rotY);
         if (f.ax === -1 || f.ax === 0 || f.ax === 1) rec.ax = f.ax;
         if (f.az === -1 || f.az === 0 || f.az === 1) rec.az = f.az;
+        // Re-clamp before painting. This is the ONE public entry point that
+        // takes x/z straight from the caller, and nothing upstream guarantees
+        // those numbers fit the room currently on screen (a design saved in a
+        // 4 m room, re-pushed into a 2 m one, would otherwise be placed through
+        // a wall). Same pass reflow() runs: an anchored axis re-derives flush
+        // against its wall, a free axis is clamped where it stands. buildRec(),
+        // reflow() and queueModel() all do this already; this branch did not.
+        const L = limitsFor(rec.footprint, rec.rotY, dims);
+        rec.x = reanchor(rec.x, rec.ax, L.loX, L.hiX);
+        rec.z = reanchor(rec.z, rec.az, L.loZ, L.hiZ);
         applyRec(rec);
         continue;
       }
@@ -1107,6 +1149,16 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     if (e.pointerType !== "touch") arm();
     if (!e.isPrimary) return;
 
+    // Take focus explicitly. The canvas is already tabindex="0", but the drag
+    // branch below calls e.preventDefault() on pointerdown, which suppresses the
+    // compatibility mousedown — and mousedown's default action is what would
+    // otherwise move focus here. Without this line the keyboard shortcuts the
+    // canvas advertises via aria-keyshortcuts (R, the arrow nudge, Escape) can
+    // fail to reach it after the user selects a fixture with the mouse.
+    // Unconditional and cheap: no branch has to reason about whether the
+    // suppression applies in the engine it is running on.
+    try { canvasEl.focus({ preventScroll: true }); } catch { canvasEl.focus(); }
+
     const rec = pickFixture(e);
     if (!rec) { setSelected(null); return; }     // empty space: orbit works normally
 
@@ -1189,7 +1241,10 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     else if (rec.ax !== 0 && rec.ax !== grab.ax) rotY = rec.ax === -1 ? Math.PI / 2 : -Math.PI / 2;
     if (rotY === null || Math.abs(rotY - rec.rotY) < 1e-6) return;
     rec.rotY = rotY;
-    settle(rec, rec.x, rec.z);      // the new extent may not fit where the old one did
+    // The new extent may not fit where the old one did — and the fixture has
+    // just BECOME flush, so the anchor it acquired one line ago is the thing
+    // that must survive the turn. See resettleAfterRotate().
+    resettleAfterRotate(rec);
     applyRec(rec);
     syncSelectionRing();
   }
@@ -1199,7 +1254,8 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     if (!rec) return;
     const next = rec.rotY + delta;
     rec.rotY = Math.atan2(Math.sin(next), Math.cos(next));   // normalise to (−π, π]
-    settle(rec, rec.x, rec.z);                               // mandatory: the extent changed
+    resettleAfterRotate(rec);        // mandatory: the extent changed. NOT settle() —
+                                     // that would drop the wall anchor. See the helper.
     applyRec(rec);
     syncSelectionRing();
     updateAriaLabel();

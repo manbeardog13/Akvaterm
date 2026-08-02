@@ -20,12 +20,23 @@
      see js/terma.js — because CSS is the one context esc() does not neutralise.
      It no longer allows fonts.googleapis.com, and font-src is now 'self' alone:
      the brand faces (Anton + Figtree) are vendored under /vendor/fonts/ and
-     loaded by css/styles.css, so the app makes no font request off-origin.
-     img-src 'self' data: covers the procedural swatches (canvas.toDataURL) and
-     the base64 photo previews, and blocks the url() beacon a CSS injection
-     would otherwise fire.
-     connect-src allows Supabase (catalog mirror + the Terma Edge Function);
-     it is a wildcard because js/config.js is filled in per deployment.
+     linked directly below, so the app makes no font request off-origin.
+
+     img-src 'self' data: blob: covers the procedural swatches
+     (canvas.toDataURL), the base64 photo previews, and — the reason blob: is
+     here — the textures inside the sourced CC0 .glb models: three.js's
+     GLTFLoader wraps every bufferView-backed image in a Blob and hands the
+     resulting blob: URL to an <img>/ImageBitmap. Without blob: four models
+     rendered with no colour map at all and logged a CSP violation each.
+     img-src still blocks the url() beacon a CSS injection would otherwise
+     fire, because a blob: URL can only name an object this document created.
+     connect-src allows the same blob: URLs, because in Chrome GLTFLoader takes
+     the ImageBitmapLoader/fetch branch, which is a connect and not an image
+     load; plus Supabase (catalog mirror + the Terma Edge Function), a wildcard
+     because js/config.js is filled in per deployment. blob: widens the policy
+     to nothing remote — a blob: URL is same-origin and app-created by
+     construction, and it is NOT added to script-src, so it cannot become an
+     execution vector.
      cdn.jsdelivr.net is ONLY the transitional supabase-js fallback in
      js/supabaseClient.js — remove it here once that library is vendored under
      /vendor/, as docs/BUILD_CONTRACTS.md requires. -->
@@ -37,8 +48,8 @@
   script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-6G61/LDa3KMcuKr7MoxiJUAhQKSNzEtJUw3h9otBbms=' https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
-  img-src 'self' data:;
-  connect-src 'self' https://*.supabase.co;
+  img-src 'self' data: blob:;
+  connect-src 'self' blob: https://*.supabase.co;
   worker-src 'self';
   manifest-src 'self'
 ">
@@ -48,19 +59,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Akvaterm — Katalog i dizajner</title>
 <meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
-<!-- #F4F8F9 is the Iris glass tint hsl(187 44% 97%) composited at the shipped
-     --glass-alpha-text of .78 over --paper #F2F2F2 — i.e. exactly what the top
-     bar paints when the page behind it is at rest. Matching it here stops the
-     browser chrome from stepping out of the app on scroll.
-     (manifest.webmanifest still carries the retired navy — see handoff.) -->
+<!-- #F4F8F9 is the Iris glass tint hsl(187 44% 97%) = #F4FAFB composited at the
+     shipped --glass-alpha-text of .78 over --paper #F2F2F2 — i.e. exactly what
+     the top bar paints when the page behind it is at rest. Matching it here
+     stops the browser chrome from stepping out of the app on scroll.
+     manifest.webmanifest now carries the SAME value, which is the one that
+     actually tints the title bar in "display": "standalone"; keep the two in
+     step, and keep the manifest's background_color on --paper #F2F2F2. -->
 <meta name="theme-color" content="#F4F8F9">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 
 <!-- Brand type is VENDORED: Anton (display) + Figtree (text), SIL OFL 1.1,
-     under /vendor/fonts/ and pulled in by the @import at the top of
-     css/styles.css. There is no runtime CDN — the retired Open Sans <link> to
-     fonts.googleapis.com is gone, and the CSP above no longer permits it. -->
+     under /vendor/fonts/. There is no runtime CDN — the retired Open Sans
+     <link> to fonts.googleapis.com is gone, and the CSP above no longer
+     permits it.
+
+     The two preloads are the latin-ext slices, and only those two: latin-ext
+     is what carries č ć ž š đ Č Ć Ž Š Đ, so it is the slice Croatian copy
+     actually needs on first paint. They must come BEFORE the stylesheet links
+     so the connection is already warm when the @font-face rules parse.
+     Previously fonts.css was reached by an @import inside css/styles.css,
+     which put the woff2 URLs three serialised round trips deep and out of
+     reach of the preload scanner; with font-display:swap that meant the
+     render-blocking splash's wordmark painted in the fallback stack and
+     reflowed. service-worker.js precaches these faces, but a service worker
+     only helps from the second visit — this pair is what fixes the first.
+     font-src 'self' in the CSP above already permits them; crossorigin is
+     REQUIRED on a font preload even same-origin, or the preload is discarded
+     and the face is fetched twice. -->
+<link rel="preload" href="vendor/fonts/anton-latin-ext-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/figtree-latin-ext-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 
 <!-- iOS 26 samples the html/body background colour to tint its own chrome, and
      a root with no background makes it sample whatever paints behind. Declared
@@ -68,6 +97,10 @@
      stylesheet is slow or fails; both say --paper #F2F2F2. -->
 <style>html,body{background:#F2F2F2}html{color-scheme:light}</style>
 
+<!-- fonts.css MUST stay above css/styles.css: it declares the @font-face
+     blocks and the --font-display / --font-text tokens that styles.css
+     consumes, and the cascade order has to match what the old @import gave. -->
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
 <link rel="stylesheet" href="css/styles.css">
 
 <!-- three.js resolves through this map to the vendored copy (lazy-loaded by

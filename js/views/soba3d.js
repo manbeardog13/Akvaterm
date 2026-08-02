@@ -25,8 +25,15 @@
 // surfaces; the app shell's top bar and mobile tab bar are the standing pair.
 // This view therefore ships EXACTLY ONE: the floating canvas HUD. The hint chip
 // and every panel below the stage are solid tinted surfaces, deliberately.
-// All four degradation paths (@supports, reduced-transparency, contrast/forced-
-// colors, reduced-motion) are shipped with it.
+//
+// The HUD is the SHIPPED glass, not a local imitation: the element carries
+// `.glass .glass-interactive` from css/styles.css, so it gets the system tint,
+// the teal→amber gradient hairline, the warm amber rim on hover and the
+// upstream degradation rules. The scoped block below re-states the same tokens
+// as fallbacks and ships all FIVE degradation paths — @supports,
+// prefers-reduced-transparency (gated so an explicit "full" choice wins), the
+// MANUAL html[data-transparency="reduced"] switch that iOS Safari depends on,
+// prefers-contrast/forced-colors, and prefers-reduced-motion.
 // ============================================================================
 
 import * as db from "../db.js";
@@ -423,25 +430,30 @@ const fixtureLabel = (type) => {
 // ============================================================================
 // Markup
 // ============================================================================
-// Colour discipline: every hex below is either a pixel-sampled Iris token from
-// docs/DESIGN_SYSTEM.md or a shade DERIVED from one and verified numerically.
-// The contrast figures in the comments were computed with the WCAG 2.x relative
-// luminance formula, not estimated. The two derived tokens are:
+// Colour discipline: this view owns NO colour of its own. Every --s3d-* token
+// below is a `var(--iris-token, literal)` bridge to css/styles.css, exactly the
+// way js/views/katalog.js:145-186 and js/views/savjetnik.js:498-540 do it. The
+// literal after the comma is the SAME value the sheet ships, so the view stays
+// correct and measurable if a token is renamed — it is not a second source of
+// truth, and a retune of css/styles.css now reaches this view like every other.
 //
-//   --teal-700  #0E7484  = --teal-600 #139EB1 darkened (×0.756, rounded)
-//                          4.87:1 on --paper #F2F2F2, 5.45:1 on #FFFFFF.
-//                          White text on it: 5.45:1.  AA at any size.
-//   --amber-ink #8A5F2C  = --amber-500 #EAA651 darkened (×0.60, rounded)
-//                          5.00:1 on --paper, 5.59:1 on #FFFFFF.
-//   --mauve-ink #6E6266  = --mauve-400 #A6979C darkened; 5.83:1 on #FFFFFF.
-//                          (--mauve-400 itself is only 2.79:1 and can never
-//                          carry small text.)
+// This block previously re-derived three shades to values the sheet does not
+// ship (--teal-700 #0E7484 vs #0D707D, --amber-ink #8A5F2C vs #935616,
+// --mauve-ink #6E6266 vs --mauve-600 #756168), so the 3D room rendered its
+// teal, amber and mauve tiers in visibly different colours from the rest of
+// the platform. The shipped values are used now and every ratio below was
+// RECOMPUTED against them with the WCAG 2.x relative-luminance formula:
 //
-// The reason those exist at all: --teal-600 FAILS as a small-text background.
+//   --teal-700  #0D707D   white on it 5.78:1 · on --paper 5.17:1 · on #FFF 5.78:1
+//   --amber-ink #935616   on #FFFFFF 5.86:1 · on --paper 5.23:1
+//   --mauve-600 #756168   on --paper 5.12:1 · on #FFFFFF 5.73:1
+//
+// The reason those darker tiers exist at all: --teal-600 FAILS as a small-text
+// background.
 //   white on --teal-600 = 3.20:1   → 3:1 large-bold only, never body text
 //   --ink on --teal-600 = 4.06:1   → still under 4.5:1
 //   --teal-600 on --paper = 2.86:1 → not a text colour on light
-// so --teal-600 is used ONLY as a 3D scene tint and as a decorative rule here.
+// so --teal-600 is used ONLY as a 3D scene tint and as a decorative dot here.
 // Filled controls use --teal-700.
 //
 // Anton hazard, measured from the font: Croatian carons (Č Š Ž) reach 1.100em,
@@ -452,21 +464,44 @@ function markup() {
   return `
     <style>
       /* ---------------------------------------------------------------
-         Iris tokens, scoped to this view so it renders correctly whether
-         or not css/styles.css has landed its own :root yet.
+         Iris tokens, BRIDGED to css/styles.css. Every value is
+         var(--sheet-token, same-value-literal): the sheet is the single
+         source of truth, the literal only keeps this view correct if the
+         stylesheet has not landed its :root yet.
          --------------------------------------------------------------- */
       .s3d{
-        --s3d-paper:#F2F2F2; --s3d-ink:#313131;
-        --s3d-teal-600:#139EB1; --s3d-teal-700:#0E7484;
-        --s3d-amber-500:#EAA651; --s3d-amber-ink:#8A5F2C;
-        --s3d-brown-800:#68340F; --s3d-sky-200:#C0D8F2;
-        --s3d-mauve-400:#A6979C; --s3d-mauve-ink:#6E6266;
-        --s3d-line:#D8D3D4; --s3d-surface:#FFFFFF;
-        /* Glass: --paper pulled 14% toward --sky-200, so the glass is cool and
-           teal-leaning rather than grey (design system rule 4). */
-        --s3d-glass-tint:235,238,242;
-        --s3d-glass-alpha:.68;
-        --s3d-glass-blur:18px;
+        --s3d-paper:var(--paper,#F2F2F2);
+        --s3d-ink:var(--ink,#313131);
+        --s3d-surface:var(--surface,#FFFFFF);
+        --s3d-teal-600:var(--teal-600,#139EB1);
+        --s3d-teal-700:var(--teal-700,#0D707D);
+        --s3d-amber-500:var(--amber-500,#EAA651);
+        --s3d-amber-ink:var(--amber-ink,#935616);
+        --s3d-brown-800:var(--brown-800,#68340F);
+        --s3d-sky-200:var(--sky-200,#C0D8F2);
+        --s3d-mauve-400:var(--mauve-400,#A6979C);
+        --s3d-mauve-ink:var(--mauve-600,#756168);
+        /* Warm hairlines, never neutral grey: --brown-800 rgb(104,52,15) at
+           low alpha. --line-strong composites to #DED2CA over --surface =
+           1.48:1, i.e. IDENTICAL in contrast to the #D8D3D4 this replaces —
+           the swap is a hue correction, not a legibility change. Inputs get
+           the sheet's heavier --line-input (#A98B76, 3.15:1) because a text
+           field's boundary is an essential UI control under WCAG 1.4.11. */
+        --s3d-line:var(--line-strong,rgba(104,52,15,.22));
+        --s3d-line-input:var(--line-input,rgba(104,52,15,.57));
+        /* Glass: THE SHIPPED RECIPE, not a second one. The HUD carries the
+           .glass class from css/styles.css; these are the same tokens, named
+           locally so the scoped degradation rules below can land on them. */
+        --s3d-glass-bg:var(--glass-bg-text,hsl(187 44% 97% / .78));
+        --s3d-glass-solid:var(--glass-solid,#F4FAFB);
+        --s3d-glass-ink-muted:var(--glass-ink-muted,#5C4B51);
+        --s3d-glass-blur:var(--glass-blur-md,18px);
+        --s3d-shadow-2:var(--glass-shadow-2,0 2px 6px rgba(93,79,79,.14),0 12px 34px rgba(93,79,79,.22));
+        --s3d-rim-top:var(--glass-rim-top,rgba(255,255,255,.62));
+        --s3d-rim-bottom:var(--glass-rim-bottom,rgba(255,255,255,.26));
+        --s3d-rim-side:var(--glass-rim-side,rgba(255,255,255,.18));
+        --s3d-edge-dark:var(--glass-edge-dark,rgba(93,79,79,.12));
+        --s3d-radius-md:var(--glass-radius-md,20px);
         color:var(--s3d-ink);
       }
       .s3d :where(h1,h2){text-wrap:balance}
@@ -482,7 +517,7 @@ function markup() {
       .s3d-sub{
         font-family:var(--font-text,'Figtree',system-ui,sans-serif);font-weight:300;
         font-size:14px;line-height:1.55;letter-spacing:.02em;margin:8px 0 16px;
-        color:var(--s3d-mauve-ink);                            /* 5.83:1 on #FFFFFF */
+        color:var(--s3d-mauve-ink);                            /* 5.12:1 on --paper */
         max-width:64ch;
       }
       /* Meta / section label — the reference's signature gesture. */
@@ -491,7 +526,7 @@ function markup() {
         font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
         color:var(--s3d-mauve-ink);margin:0 0 10px;display:flex;align-items:center;gap:10px;
       }
-      .s3d-label::after{content:"";flex:1;height:1px;background:var(--s3d-line)}
+      .s3d-label::after{content:"";flex:1;height:1px;background:var(--s3d-line)}   /* decorative rule */
 
       /* ---------------------------------------------------------------
          Stage + the one glass surface in this view
@@ -501,28 +536,57 @@ function markup() {
         box-shadow:0 10px 30px rgba(93,79,79,.16),0 1px 2px rgba(93,79,79,.12)}
       .s3d-stage canvas{border-radius:18px}
 
-      /* THE canvas HUD — this view's only backdrop-filter surface. */
+      /* THE canvas HUD — this view's only backdrop-filter surface.
+         The element also carries '.glass .glass-interactive' from
+         css/styles.css, so the tint, the teal→amber gradient hairline, the
+         specular sheen, the warm amber rim on hover and ALL FIVE degradation
+         paths come from the shipped system rather than from a private recipe.
+         What stays here is layout, plus the same token values written as
+         fallbacks so the panel is still correct if the sheet has not landed.
+
+         This previously painted rgba(235,238,242,.68) — a blue-grey at hue
+         ≈214° and BELOW the system's .78 alpha floor — with a plain white rim
+         and no hover state. That is the "second, divergent glass recipe" the
+         audit found; docs/DESIGN_SYSTEM.md requires a teal-leaning glass with a
+         warm amber rim response, never a grey glass. */
       .s3d-hud{
         position:absolute;left:12px;right:12px;bottom:12px;z-index:2;
         display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-        padding:10px 12px;border-radius:16px;
-        background:rgba(235,238,242,.68);
-        border:1px solid rgba(255,255,255,.55);
-        box-shadow:0 8px 24px rgba(93,79,79,.20),inset 0 1px 0 rgba(255,255,255,.75);
+        padding:10px 12px;border-radius:var(--s3d-radius-md);
+        background:var(--s3d-glass-bg);
+        /* The .glass recipe's own elevation, restated in full: the drop shadow
+           PLUS the four inset rims. Restating only the drop shadow would win on
+           document order and silently delete the specular rim the system glass
+           is built from. Under html[data-transparency="reduced"] the sheet's
+           own :is(.glass,...) rule (specificity 0,2,0) beats this one and
+           flattens it to --glass-shadow-1, which is the intended behaviour for
+           a solidified panel. */
+        box-shadow:
+          var(--s3d-shadow-2),
+          inset 0 1px 0 0 var(--s3d-rim-top),
+          inset 0 -1px 0 0 var(--s3d-rim-bottom),
+          inset 1px 0 0 0 var(--s3d-rim-side),
+          inset -1px 0 0 0 var(--s3d-rim-side),
+          inset 0 -12px 24px -18px var(--s3d-edge-dark);
         /* Safari silently drops -webkit-backdrop-filter when it contains a
            var(), so this line is written with LITERAL values on purpose. The
            unprefixed line below carries the token. Do not "tidy" them together. */
-        -webkit-backdrop-filter:saturate(1.5) blur(18px);
-        backdrop-filter:saturate(1.5) blur(var(--s3d-glass-blur));
-        /* CONTRAST, computed not eyeballed. Worst case is the glass composited
-           over a pure-black backdrop (the room can show an antracit floor):
-             C = .68×(235,238,242) + .32×(0,0,0) = (160,162,165)
-             --ink #313131 on that            = 5.07:1  ✔
-           Best case, over pure white:
-             --ink #313131 on (248,249,250)   = 11.75:1 ✔
-           So body text on this panel is AA at any size in every case. Note that
-           --teal-700 as TEXT on the glass is only 2.13:1 over black — the accent
-           is carried by the rim and by solid fills, never by text colour. */
+        -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
+        backdrop-filter:blur(var(--s3d-glass-blur)) saturate(180%) brightness(1.06);
+        /* CONTRAST, computed with the WCAG 2.x relative-luminance formula, not
+           eyeballed. The tint is hsl(187 44% 97%) = #F4FAFB. Worst case is the
+           glass over a pure-black backdrop — the room really can show an
+           antracit floor, and brightness(1.06) cannot lift black:
+             C = .78×(244,250,251) + .22×(0,0,0) = (190,195,196) = #BEC3C4
+             --ink #313131 on that                          =  7.30:1  ✔
+             --glass-ink-muted #5C4B51 on that              =  4.57:1  ✔  (12px)
+           Best case, over pure white — C = (246,251,252):
+             --ink #313131 on that                          = 12.48:1  ✔
+           Both permitted tiers are AA at any size in every case. That is the
+           whole point of the .78 floor: at the .68 this used to ship, the
+           worst case was (160,162,165) and only --ink survived it.
+           --teal-700 as TEXT on glass is 2.13:1 over black and is NOT used
+           here — the accent is carried by the rim and by solid fills. */
         color:var(--s3d-ink);
       }
       .s3d-hud[hidden]{display:none}
@@ -533,19 +597,26 @@ function markup() {
       .s3d-hud-name .s3d-dot{width:10px;height:10px;border-radius:50%;flex:none;
         background:var(--s3d-teal-600);box-shadow:0 0 0 3px rgba(19,158,177,.22)}
       .s3d-hud-name b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      /* The informational tier, carried by COLOUR and not by opacity.
+         This used to be 'color:--ink; opacity:.82', which composites to
+         (69,69,70) against the worst-case glass and measures 3.72:1 — a fail
+         for 12px text, and a direct contradiction of the AA claim written
+         above it. --glass-ink-muted is the sheet's certified muted tier on
+         light glass: 4.57:1 on the #BEC3C4 worst case, 7.72:1 once the panel
+         degrades to the opaque --glass-solid. No opacity anywhere. */
       .s3d-hud-pos{font-size:12px;font-weight:500;letter-spacing:.06em;
-        color:var(--s3d-ink);opacity:.82;font-variant-numeric:tabular-nums}
+        color:var(--s3d-glass-ink-muted);font-variant-numeric:tabular-nums}
 
       /* Controls ON the glass are SOLID, so their contrast is independent of
          whatever the room shows behind them. */
       .s3d-hbtn{
         min-height:40px;padding:8px 14px;border-radius:11px;border:1px solid transparent;
         font:inherit;font-size:13.5px;font-weight:600;letter-spacing:.02em;cursor:pointer;
-        background:#FFFFFF;color:var(--s3d-ink);              /* 13.01:1 */
+        background:var(--s3d-surface);color:var(--s3d-ink);   /* 13.01:1 */
         box-shadow:0 1px 2px rgba(93,79,79,.18);
       }
-      .s3d-hbtn.is-primary{background:var(--s3d-teal-700);color:#FFFFFF}  /* 5.45:1 */
-      .s3d-hbtn.is-danger{background:#FFFFFF;color:var(--s3d-amber-ink)}  /* 5.59:1 */
+      .s3d-hbtn.is-primary{background:var(--s3d-teal-700);color:#FFFFFF}         /* 5.78:1 */
+      .s3d-hbtn.is-danger{background:var(--s3d-surface);color:var(--s3d-amber-ink)}  /* 5.86:1 */
       .s3d-hbtn:hover{border-color:var(--s3d-amber-500)}      /* warm amber rim on hover */
       .s3d-hbtn:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
 
@@ -553,27 +624,56 @@ function markup() {
          already spent on the HUD (top bar + tab bar are the standing pair). */
       .s3d-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
         max-width:calc(100% - 24px);padding:8px 14px;border-radius:999px;
-        background:#EBEEF2;color:var(--s3d-ink);              /* 11.18:1 */
+        background:var(--s3d-glass-solid);color:var(--s3d-ink);   /* 12.34:1 */
         font-size:13px;font-weight:600;letter-spacing:.01em;
         box-shadow:0 2px 8px rgba(93,79,79,.22);pointer-events:none;text-align:center;z-index:1}
       .s3d-hint.is-gone{opacity:0}
 
-      /* ---- Degradation paths (all four, mandatory) ------------------- */
+      /* ---- Degradation paths — FIVE, all landing on --glass-solid ----
+         css/styles.css:1450-1545 ships five, and calls the manual one
+         REQUIRED rather than a nicety. This block previously shipped four:
+         it had no html[data-transparency="reduced"] rule at all, so on iOS
+         Safari — which never reports prefers-reduced-transparency, and which
+         is the bulk of this audience — the "Smanji prozirnost" switch in the
+         Više menu could not solidify this HUD. And its reduced-transparency
+         media block was unqualified, so a user who explicitly chose "keep the
+         glass" had it forced solid here while the shell bars stayed live.
+         Both are fixed below.
+
+         The HUD also carries .glass, so css/styles.css degrades it upstream on
+         all five paths; these scoped rules are the belt to that braces. They
+         matter on their own for path 1, where the sheet's '.glass' rule and
+         this file's '.s3d-hud' rule have equal specificity and this file wins
+         on document order. --ink on --glass-solid #F4FAFB = 12.34:1. */
       @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-        .s3d-hud{background:#EBEEF2}      /* solid tint — --ink on it is 11.18:1 */
+        .s3d-hud{background:var(--s3d-glass-solid)}
       }
+      /* 2. OS hint — gated so an explicit "full" choice wins, mirroring
+            css/styles.css:1469. */
       @media (prefers-reduced-transparency:reduce){
-        .s3d-hud{background:#EBEEF2;-webkit-backdrop-filter:none;backdrop-filter:none}
+        html:not([data-transparency="full"]) .s3d-hud{
+          background:var(--s3d-glass-solid);
+          -webkit-backdrop-filter:none;backdrop-filter:none;
+        }
+      }
+      /* 3. MANUAL escape hatch — js/app.js writes html[data-transparency].
+            Safari never exposes the OS media query, so without this rule the
+            toggle does nothing to this panel on iOS. */
+      html[data-transparency="reduced"] .s3d-hud{
+        background:var(--s3d-glass-solid);
+        -webkit-backdrop-filter:none;backdrop-filter:none;
       }
       @media (prefers-contrast:more){
-        .s3d-hud{background:#FFFFFF;border-color:var(--s3d-ink);
+        .s3d-hud{background:var(--s3d-surface);border:1px solid var(--s3d-ink);
           -webkit-backdrop-filter:none;backdrop-filter:none}
+        .s3d-hud-pos{color:var(--s3d-ink)}        /* 13.01:1 on #FFFFFF */
         .s3d-hbtn{border-color:var(--s3d-ink)}
         .s3d-chip,.s3d-fix,.s3d-est,.s3d-prod{border-color:var(--s3d-ink)}
       }
       @media (forced-colors:active){
         .s3d-hud{background:Canvas;border:1px solid CanvasText;
           -webkit-backdrop-filter:none;backdrop-filter:none;forced-color-adjust:none;color:CanvasText}
+        .s3d-hud-pos{color:CanvasText}
         .s3d-hbtn{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
         .s3d-hbtn.is-primary{background:Highlight;color:HighlightText}
         .s3d-chip.is-active{background:Highlight;color:HighlightText;border-color:Highlight}
@@ -592,7 +692,7 @@ function markup() {
       .s3d-dim{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;
         letter-spacing:.04em;text-transform:uppercase;color:var(--s3d-mauve-ink)}
       .s3d-dim input,.s3d-dim select{width:88px;min-height:44px;padding:6px 10px;
-        border:1px solid var(--s3d-line);border-radius:11px;font:inherit;font-size:15px;
+        border:1px solid var(--s3d-line-input);border-radius:11px;font:inherit;font-size:15px;
         font-weight:600;letter-spacing:0;text-transform:none;
         background:var(--s3d-surface);color:var(--s3d-ink)}
       .s3d-dim select{width:auto}
@@ -604,7 +704,7 @@ function markup() {
         letter-spacing:.01em;cursor:pointer;color:var(--s3d-ink)}          /* 13.01:1 */
       .s3d-chip:hover{border-color:var(--s3d-amber-500)}
       .s3d-chip.is-active{border-color:var(--s3d-teal-700);background:var(--s3d-teal-700);
-        color:#FFFFFF;font-weight:600}                                     /* 5.45:1 */
+        color:#FFFFFF;font-weight:600}                                     /* 5.78:1 */
       .s3d-chip:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
       .s3d-chip .s3d-mark{margin-left:6px;font-weight:700;color:var(--s3d-teal-700)}
       .s3d-chip.is-active .s3d-mark{color:#FFFFFF}
@@ -650,7 +750,7 @@ function markup() {
       .s3d-est-head{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between}
       .s3d-est-total{font-family:var(--font-display,'Anton',system-ui,sans-serif);
         font-size:30px;line-height:1.1;letter-spacing:-.01em;
-        color:var(--s3d-teal-700);font-variant-numeric:tabular-nums}         /* 5.45:1 on #FFF */
+        color:var(--s3d-teal-700);font-variant-numeric:tabular-nums}         /* 5.78:1 on #FFF */
       .s3d-est-res{display:inline-flex;align-items:center;gap:8px;min-height:44px;font-size:14px;cursor:pointer}
       .s3d-est-list{list-style:none;margin:12px 0 0;padding:0;font-size:13px}
       .s3d-est-list li{display:flex;flex-wrap:wrap;gap:4px 10px;justify-content:space-between;
@@ -659,7 +759,7 @@ function markup() {
       .s3d-est-note{margin:12px 0 0;font-size:12px;line-height:1.5;color:var(--s3d-mauve-ink)}
 
       .s3d-save{display:flex;flex-wrap:wrap;gap:8px}
-      .s3d-save input{flex:1 1 200px;min-height:44px;padding:6px 14px;border:1px solid var(--s3d-line);
+      .s3d-save input{flex:1 1 200px;min-height:44px;padding:6px 14px;border:1px solid var(--s3d-line-input);
         border-radius:11px;font:inherit;background:var(--s3d-surface);color:var(--s3d-ink)}
       .s3d-save input:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:1px}
       .s3d-btn{min-height:44px;padding:10px 22px;border:1px solid var(--s3d-line);
@@ -682,7 +782,7 @@ function markup() {
       <div class="room3d-stage s3d-stage" id="s3d-stage">
         <div class="room3d-loading" id="s3d-loading"><span class="spinner" aria-hidden="true"></span>${esc(tt("soba3d.loading", "Učitavanje 3D prikaza…"))}</div>
         <span class="s3d-hint" id="s3d-hint" aria-hidden="true">${esc(tt("soba3d.hint", "Povucite za okretanje. Dodirnite opremu pa je povucite po podu."))}</span>
-        <div class="s3d-hud" id="s3d-hud" hidden role="group" aria-label="${esc(tt("soba3d.hudLabel", "Odabrana oprema"))}"></div>
+        <div class="s3d-hud glass glass-interactive" id="s3d-hud" hidden role="group" aria-label="${esc(tt("soba3d.hudLabel", "Odabrana oprema"))}"></div>
       </div>
       <p class="s3d-help">${esc(tt("soba3d.moveHint", "Povucite opremu po podu da je premjestite."))}
         ${esc(tt("soba3d.helpTouch", "Na dodirnom zaslonu prvo je dodirnite, pa povucite."))}

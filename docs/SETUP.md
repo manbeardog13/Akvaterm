@@ -240,15 +240,19 @@ refresh — the same workflow the ASC reference project uses. Python's
 
 Smoke-test checklist:
 
-0. **Type and identity.** The header wordmark reads AKVA in teal (`--accent`, i.e. `--teal-700`)
-   and TERM in burnt amber (`--brand-warm`, i.e. `--amber-ink`) — the exact hexes live once in
-   the `:root` block of `css/styles.css` and nowhere else. Headings are set in Anton (a heavy
-   condensed face) and body text in Figtree.
-   If headings look like Arial Narrow, `vendor/fonts/fonts.css` is not linked from `index.html`,
-   or the `woff2` files did not deploy. Then open a Croatian heading — "3D SOBA", "SAVJETNIK",
-   anything with `Č Š Ž Đ` — and confirm the diacritics are drawn and **not clipped at the top**.
-   Tofu boxes mean the `latin-ext` files are missing; a shaved caron means something upstream
-   gained an `overflow: hidden`.
+0. **Type and identity.** The header wordmark reads **AKVA in navy `#00008C` and TERM in red
+   `#d6252e`**, italic, in the **text** face (Figtree) — *not* teal/amber and *not* Anton. That is
+   correct and deliberate: the logo is exempt from the Iris palette by standing operator
+   instruction ("keep the logo original in font and color"), and its two hexes live in
+   `--logo-navy` / `--logo-red` in the `:root` block of `css/styles.css`. **If you see a teal/amber
+   wordmark, that is the bug** — an earlier version of this checklist described exactly that and
+   was wrong. Everything *around* the logo is Iris: headings in Anton (a heavy condensed face),
+   body text in Figtree.
+   If headings look like Arial Narrow, `vendor/fonts/fonts.css` is not reaching the browser
+   (`index.html` links it directly, immediately above `css/styles.css`), or the `woff2` files did
+   not deploy. Then open a Croatian heading — "3D SOBA", "SAVJETNIK", anything with `Č Š Ž Đ` — and
+   confirm the diacritics are drawn and **not clipped at the top**. Tofu boxes mean the `latin-ext`
+   files are missing; a shaved caron means something upstream gained an `overflow: hidden`.
 1. **Katalog** loads with the demo products (works even with empty config).
 2. **Savjetnik** — ask "Koje pločice imate do 30 €/m²?" — Terma should stream
    an answer and show product cards. The cards come from the `search_products`
@@ -289,15 +293,21 @@ Four things about this repo that a deploy must get right:
    two files to save 9 KB breaks the licence. `vendor/models/` is CC0, so its
    `PROVENANCE.md` is a courtesy record rather than an obligation, but keep it:
    it is where every measured bounding box and scale vector lives.
-3. **Bump the cache version on every ship.** `APP_V` in `js/app.js` and
-   `FALLBACK_VERSION` in `service-worker.js` must move together, or returning
-   visitors keep the old shell. The worker logs a console warning on drift.
+3. **Bump the cache version on every ship — one line.** `APP_V` in `js/app.js` is now the *only*
+   version literal: the page registers `./service-worker.js?v=${APP_V}`, the worker reads that
+   query as its `VERSION`, and the cache name is `akv-${VERSION}`. Bump `APP_V`, ship, done —
+   returning visitors get the new shell and the two can no longer drift.
+   `FALLBACK_VERSION` in `service-worker.js` is only what a registration *without* the query would
+   fall back to; keep it equal to `APP_V` so that path lands in the same cache. The worker still
+   logs a console warning on drift, which should now never appear.
 4. **First load is bigger than it looks, on purpose.** The precached shell is
-   ~600 KB including the four webfont files. three.js (2.2 MB) and the 3D model
+   ~800 KB including the four webfont files (~85 KB with `fonts.css`) — re-measure rather than
+   trusting that figure, it moves with every module edit. three.js (2.2 MB) and the 3D model
    library (804 KB) are *not* in it: they are fetched in the background once the
    network goes quiet, in that order, and skipped entirely for visitors on
    `Save-Data` or a 2G-class connection. Those visitors still get the 3D room —
-   they just pay for it when they open it.
+   they just pay for it when they open it. `vendor/supabase/` (259 KB) is in neither the shell nor
+   the pre-warm: it downloads only if you complete step D, on first online use.
 
 ---
 
@@ -336,9 +346,16 @@ Four things about this repo that a deploy must get right:
   `supabase secrets set GEMINI_API_KEY=...`.
 - **Headings render in a plain narrow sans, or Croatian letters show as boxes**
   — the vendored fonts are not reaching the browser. Check that
-  `vendor/fonts/fonts.css` is linked from `index.html` and that all four
-  `woff2` files return 200. Boxes specifically (tofu) mean the two
-  `*-latin-ext-*.woff2` files are missing: `č ć ž š đ` live only in those.
+  `vendor/fonts/fonts.css` is linked from `index.html` **above** `css/styles.css`
+  (it is, as shipped) and that all four `woff2` files return 200. Boxes
+  specifically (tofu) mean the two `*-latin-ext-*.woff2` files are missing:
+  `č ć ž š đ` live only in those.
+- **The 3D fixtures are grey/untextured and the console shows CSP violations for
+  `blob:` URLs** — `index.html`'s CSP lost `blob:` from `img-src` **or** from
+  `connect-src`. Both are required: `GLTFLoader` wraps every embedded texture in
+  a Blob, and Chrome fetches it on the ImageBitmap path (a *connect*) while other
+  engines load it as an *image*. Drop either directive and four of the CC0 models
+  render with no colour map.
 - **A caron looks shaved off the top of a heading** — some ancestor gained an
   `overflow: hidden`. Anton's Croatian diacritics are taller than the font's
   own declared ascender, so their ink sits outside the line box by design; no

@@ -20,8 +20,10 @@
 // sampled teal/amber palette, Anton + Figtree from vendor/fonts/, and a single
 // liquid-glass surface — the chat dock. The STYLES block near the bottom of
 // this file carries the measured contrast ratio for every colour pair it
-// introduces, plus the four mandatory degradation paths. Read the comment
-// block above STYLES before changing any colour here.
+// introduces, plus the five mandatory degradation paths — the four automatic
+// ones AND the manual html[data-transparency="reduced"] switch js/app.js owns,
+// which is the only one iOS Safari users ever get. Read the comment block above
+// STYLES before changing any colour here.
 // ============================================================================
 
 import {
@@ -488,7 +490,10 @@ function renderOffline() {
 //
 // GLASS BUDGET: exactly ONE backdrop-filter surface in this view (.sv-log).
 // With the standing nav + tab bar that is 3 on screen, the documented ceiling.
-// Cards, chips, consent and contact panels are deliberately opaque.
+// Cards, chips, consent and contact panels are deliberately opaque — which is
+// also why the degradation blocks at the bottom name only .sv-log (plus the bot
+// bubble, whose translucent white plate is sampled off it): there is no second
+// glass surface in this view for them to have missed.
 //
 // SAFARI: -webkit-backdrop-filter silently drops the whole declaration when it
 // contains var(). Those lines are written with LITERAL values; the unprefixed
@@ -507,7 +512,7 @@ const STYLES = `
     --sv-teal-ink:var(--teal-700,#0D707D);     /* derived: 5.78:1 on #FFF | 5.17:1 on --paper | 5.26:1 on the bot bubble | #FFF on it 5.78:1 */
     --sv-teal-deep:var(--teal-800,#0B5A65);    /* derived: #FFF on it 7.88:1 */
     --sv-amber-ink:var(--amber-ink,#935616);   /* derived: 5.86:1 on #FFF | 5.23:1 on --paper | 4.76:1 on the amber wash */
-    --sv-muted:var(--mauve-600,#756168);       /* derived: 5.73:1 on #FFF | 5.12:1 on --paper | 5.21:1 on the bot bubble */
+    --sv-muted:var(--mauve-600,#756168);       /* derived: 5.73:1 on #FFF | 5.12:1 on --paper | 5.20:1 on the bot bubble */
 
     /* --- surfaces (opaque, so their contrast is deterministic) ------------- */
     --sv-surface:var(--surface,#FFFFFF);
@@ -732,25 +737,68 @@ const STYLES = `
   .sv-contact-actions .sv-btn-primary{color:#fff}
   .sv-contact .sv-contact-meta{margin:12px 0 0;font-size:.75rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--sv-muted)}
 
-  /* ====================== the four degradation paths ======================
-     1. no backdrop-filter   2. reduced transparency
-     3. increased contrast / forced colors   4. reduced motion
-     All three "no glass" paths land on the SAME opaque tint, so the layout
-     never shifts — only the translucency goes. */
+  /* ====================== the five degradation paths ======================
+     1. no backdrop-filter            2. OS reduced transparency
+     3. MANUAL "Smanji prozirnost"    4. increased contrast / forced colors
+     5. reduced motion
+
+     Every "no glass" path lands on the SAME opaque tint --sv-glass-solid
+     #F4FAFB, so the layout never shifts — only the translucency goes. Measured
+     on that tint (sRGB relative luminance, WCAG 2.x), so the ledger above holds
+     unchanged on every one of them:
+
+       --sv-ink   #313131 on #F4FAFB  12.34:1
+       --sv-muted #756168 on #F4FAFB   5.43:1
+
+     and on the bot bubble, which these paths make fully opaque #FFFFFF:
+
+       --sv-ink   #313131 on #FFFFFF  13.01:1
+       --sv-muted #756168 on #FFFFFF   5.73:1
+
+     Each of those beats the translucent case it replaces, surface for surface:
+     ink on the panel 12.34:1 vs 7.31:1, ink on the bubble 13.01:1 vs 11.81:1,
+     muted on the bubble 5.73:1 vs 5.20:1. That is the point — degrading the
+     glass never costs contrast, so no path needs its own ledger.
+
+     .sv-log is the ONLY backdrop-filter surface in this view (see GLASS BUDGET
+     above), so it is the only surface these lists have to name. */
 
   /* 1 — engine cannot blur (older Firefox, blur disabled, low-power modes). */
   @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
     .sv-wrap .sv-log{background:var(--sv-glass-solid);box-shadow:inset 0 0 0 1px var(--sv-line-teal),var(--sv-shadow)}
   }
-  /* 2 — the OS says translucency hurts this user. */
+  /* 2 — the OS says translucency hurts this user.
+     Gated on html:not([data-transparency="full"]) exactly as css/styles.css's
+     own path 2 is: data-transparency="full" is how a user says "I know, keep
+     the glass", and it must win over the OS hint. Ungated (as this shipped),
+     the shell bars came back as live glass for that user while this panel
+     stayed pinned solid — the two halves of the same screen disagreeing. */
   @media (prefers-reduced-transparency:reduce){
-    .sv-wrap .sv-log{
+    html:not([data-transparency="full"]) .sv-wrap .sv-log{
       background:var(--sv-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none;
       box-shadow:inset 0 0 0 1px var(--sv-line-teal),var(--sv-shadow);
     }
-    .sv-wrap .sv-msg.is-bot{background:#fff}
+    html:not([data-transparency="full"]) .sv-wrap .sv-msg.is-bot{background:#fff}
   }
-  /* 3a — the OS asks for more contrast: drop the glass, harden the hairlines. */
+  /* 3 — MANUAL escape hatch: html[data-transparency="reduced"], written by
+     applyTransparency() in js/app.js from the "Smanji prozirnost" switch in the
+     Više menu.
+
+     NOT a duplicate of path 2, and not optional. Safari never reports
+     prefers-reduced-transparency and iOS Safari is the bulk of this audience,
+     so path 2 never fires for them — this rule is the ONLY way those users can
+     turn the blur off. Before it existed the switch solidified the top bar and
+     the tab bar (css/styles.css has always had this path) and left the chat
+     dock blurred, which reads as a broken switch rather than a partial one.
+
+     Unconditional by design: an explicit "reduced" is a decision, not a hint,
+     so nothing gates it. Mirrors the equivalent block in css/styles.css. */
+  html[data-transparency="reduced"] .sv-wrap .sv-log{
+    background:var(--sv-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none;
+    box-shadow:inset 0 0 0 1px var(--sv-line-teal),var(--sv-shadow);
+  }
+  html[data-transparency="reduced"] .sv-wrap .sv-msg.is-bot{background:#fff}
+  /* 4a — the OS asks for more contrast: drop the glass, harden the hairlines. */
   @media (prefers-contrast:more){
     .sv-wrap .sv-log{
       background:var(--sv-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none;
@@ -761,7 +809,7 @@ const STYLES = `
     .sv-wrap .sv-card-meta,.sv-wrap .sv-disclaimer,.sv-wrap .sv-contact-meta,
     .sv-wrap .sv-kicker,.sv-wrap .sv-msg.is-thinking{color:var(--sv-ink)}
   }
-  /* 3b — Windows High Contrast: hand every colour back to the OS. */
+  /* 4b — Windows High Contrast: hand every colour back to the OS. */
   @media (forced-colors:active){
     .sv-wrap .sv-log,.sv-wrap .sv-msg,.sv-wrap .sv-card,.sv-wrap .sv-chip,.sv-wrap .sv-btn,
     .sv-wrap .sv-consent,.sv-wrap .sv-offline,.sv-wrap .sv-contact,.sv-wrap .sv-head{
@@ -774,7 +822,7 @@ const STYLES = `
     .sv-wrap .sv-msg.is-me{background:Canvas;color:CanvasText}
     .sv-wrap .sv-dot{forced-color-adjust:none}   /* the swatches ARE the information */
   }
-  /* 4 — motion. Entrance is opt-in; everything else is turned off explicitly. */
+  /* 5 — motion. Entrance is opt-in; everything else is turned off explicitly. */
   @media (prefers-reduced-motion:no-preference){
     .sv-msg{animation:svIn .18s cubic-bezier(.25,1,.5,1)}
     @keyframes svIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}

@@ -82,8 +82,13 @@ export async function render(container) {
     btn.addEventListener("click", async () => {
       if (btn.dataset.armed !== "1") {
         btn.dataset.armed = "1";
-        // --brown-700 fill, white label: 7.50:1. The Iris palette has no red,
-        // so the destructive cue is the darkest warm ground, not a hue swap.
+        // .akv-btn-danger fills with --danger (= --red-warm #B92C1C) and
+        // labels it white: 6.10:1, AA at any size. The sampled Iris palette
+        // carries no red of its own, so css/styles.css:119-123 derives this one
+        // by rotating --amber-600's hue 30.6 -> 6 at unchanged S/L — a warm red
+        // that cannot be mistaken for the heat amber.
+        // (An earlier note here claimed a --brown-700 fill at 7.50:1. That
+        // ratio is real for #83440F, but this button has never painted it.)
         btn.classList.add("akv-btn-danger");
         btn.textContent = tf("diz.confirmDelete", "Potvrdi brisanje");
         const timer = setTimeout(() => {

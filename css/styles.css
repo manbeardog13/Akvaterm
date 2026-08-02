@@ -1,10 +1,18 @@
 /* Vendored Anton (display) + Figtree (text). SIL OFL 1.1, files under
    /vendor/fonts/, provenance + Croatian cmap proof in vendor/fonts/PROVENANCE.md.
-   Imported rather than duplicated so the @font-face blocks, their
-   unicode-ranges and the .t-* scale have exactly ONE definition in the tree.
-   Nothing here or there touches fonts.googleapis.com / fonts.gstatic.com.
-   @import must stay first — any rule above it makes the browser drop it. */
-@import "../vendor/fonts/fonts.css";
+   The @font-face blocks, their unicode-ranges and the .t-* scale have exactly
+   ONE definition in the tree — vendor/fonts/fonts.css — and index.html <link>s
+   that file DIRECTLY, immediately above this one.
+
+   It is deliberately NOT @imported here any more. An @import made the browser
+   discover fonts.css only after this 89 KB sheet had been fetched and parsed,
+   which put the first font byte three serialised round trips deep and hid the
+   woff2 URLs from the preload scanner; index.html now also carries
+   <link rel="preload"> for the two latin-ext faces that carry the Croatian
+   diacritics. Do not reintroduce the @import: it would re-serialise the
+   request and duplicate the fetch.
+
+   Nothing here or there touches fonts.googleapis.com / fonts.gstatic.com. */
 
 /* ============================================================================
    Akvaterm Platform — design system "Iris" (css/styles.css)
@@ -487,9 +495,34 @@ small{font-size:12.5px}
    alone. They are also deliberately NOT part of the rebindable ink set, so the
    glass guard rails never recolour the logo the way they recolour body text.
 
-   Contrast, computed: navy #00008C on --paper #F2F2F2 = 15.3:1; red #d6252e on
-   --paper = 4.55:1. Both clear AA as normal text, and the wordmark is always
-   set large and bold, so both hold comfortably on the glass bar too. */
+   CONTRAST — recomputed with the WCAG 2.x relative-luminance formula, because
+   the figures previously written here (15.3:1 and 4.55:1) were both wrong and a
+   false ledger is worse than none. Relative luminances: navy 0.018935,
+   red 0.158158, --paper #F2F2F2 0.887935, topbar-at-rest #F4F8F9 0.932065,
+   glass-over-pure-black #BEC3C4 0.539629.
+
+     --logo-navy #00008C on --paper  #F2F2F2            13.61:1
+     --logo-navy #00008C on the top bar at rest #F4F8F9 14.25:1
+     --logo-navy #00008C on glass over pure black       8.55:1
+     --logo-red  #d6252e on --paper  #F2F2F2            4.51:1
+     --logo-red  #d6252e on the top bar at rest #F4F8F9 4.72:1
+     --logo-red  #d6252e on glass over pure black       2.83:1   <- see below
+
+   So navy clears AA everywhere. Red clears AA as normal text on both static
+   grounds, but on the worst-case glass — the tint at --glass-alpha-text over a
+   PURE BLACK backdrop, which is reachable because the designer's --dark canvas
+   stage scrolls under the sticky bar — it falls to 2.83:1 and misses even the
+   3:1 large-text threshold that .topbar .brand's 22px/800 would otherwise earn.
+
+   That is NOT fixed by recolouring, and must not be: the operator instruction
+   above is binding, and WCAG 2.x SC 1.4.3 exempts it anyway — "text that is
+   part of a logo or brand name has no minimum contrast requirement". It is
+   recorded here so the number is known rather than assumed. The two colours
+   are also deliberately outside the rebindable ink set, so the glass guard
+   rails below never recolour the logo the way they recolour body text.
+
+   If a future change puts NON-logo text in --logo-red, that text owes a ratio
+   and this exemption does not travel with the token. */
 :root{
   --logo-navy:#00008C;                 /* AKVA half — protected brand colour */
   --logo-red:#d6252e;                  /* TERM half — protected brand colour */
@@ -540,13 +573,51 @@ small{font-size:12.5px}
 
      .glass        general panel, md blur, text-safe (--ink is legible)
      .glass-sm     same guarantee, small blur + small radius — compact panels
-     .glass-strong alpha .78 — the ONLY glass that also permits --glass-ink-muted
+     .glass-strong alpha .88 — for a panel over the busiest content
      .glass-chip   pill control; text-safe, so 12–13px labels are allowed
      .glass-hud    dark glass for overlays on the canvas stage / dark grounds
      .glass-deco   ornament only; putting text on this is a bug
 
-   Modifiers: .glass-interactive (lift + warm amber rim on hover),
-              .glass-grain (adds film grain — a third paint layer, use once).
+   Modifier: .glass-interactive (lift + warm amber rim on hover).
+
+   ---------------------------------------------------------------------------
+   ADOPTION — which view surface each recipe is FOR. Audited 2026-08-02: only
+   .glass-hud (js/views/dizajner.js) and .sheet-backdrop (js/qrshare.js) were
+   actually being emitted; every other view had hand-rolled a near-copy, so the
+   shared recipes rendered nowhere and .glass-interactive's amber hover rim —
+   the one detail that makes this glass read as this brand — was dead code.
+   The recipes are kept, not deleted, because each has a real destination; the
+   destinations are named here so the claim is checkable rather than aspirational:
+
+     .glass              -> js/views/savjetnik.js  .sv-log      (chat dock)
+     .glass-strong       -> js/views/katalog.js    .akv-rail    (pattern rail)
+     .glass-chip         -> js/views/katalog.js    .akv-chip,
+                            js/views/soba3d.js     .s3d-chip,
+                            js/views/dizajner.js   .diz-hud-btn
+     .glass-deco         -> js/views/katalog.js    .akv-pcard, .akv-eqwrap
+                            (both already paint --glass-bg-deco by hand)
+     .glass-interactive  -> the one floating panel per view that has a hover
+                            state: .sv-log, .akv-rail, .diz-hud
+     .glass-sm           -> the compact variant of .glass; no view needs it
+                            separately today, and it is 4 declarations riding
+                            the shared ::before/::after machinery, so it stays
+                            as the size axis of the recipe above rather than as
+                            a surface of its own.
+     .sheet-header       -> js/qrshare.js .akv-qr-sheet, which is
+                            overflow-y:auto and therefore actually has
+                            something to keep pinned.
+
+   Those are cross-file changes and belong to the view owners, NOT to this
+   sheet. Until they land, a recipe here that no view emits must not be counted
+   as covered — see the degradation-path header at the bottom of this file,
+   which now separates SHIPPED surfaces from AVAILABLE recipes.
+
+   REMOVED in the same pass, because they had no destination at all rather than
+   an unclaimed one: .glass-grain (film grain; the only "busiest backdrop" in
+   the app is the canvas HUD and .glass-hud explicitly forbids a third paint
+   layer there), .action-bar (no view has a sticky bottom action bar; the
+   product page ships none) and .stage-hint (superseded — dizajner.js ships
+   .diz-hud and soba3d.js ships .s3d-hint, which is deliberately SOLID).
 
    SAFARI: -webkit-backdrop-filter is written with LITERAL values on every rule
    below. Safari silently drops the declaration when it contains a var(), which
@@ -566,7 +637,7 @@ small{font-size:12.5px}
    glass panel. A view agent never has to know the numbers above; it only has
    to avoid inventing a colour of its own. */
 .glass,.glass-sm,.glass-strong,.glass-chip,
-.topbar,.tabbar,.action-bar,.sheet-header{
+.topbar,.tabbar,.sheet-header{
   --muted:var(--glass-ink-muted);
   --ink-2:var(--glass-ink-muted);
   --accent-ink:var(--accent-on-glass);
@@ -644,14 +715,6 @@ small{font-size:12.5px}
 }
 /* Content must sit above the sheen or the sheen washes the text out. */
 .glass>*,.glass-sm>*,.glass-strong>*{position:relative;z-index:2}
-
-/* Film grain — a third paint layer. One surface per screen at most. */
-.glass-grain::after{
-  background-image:
-    linear-gradient(135deg,rgba(255,255,255,.40) 0%,rgba(255,255,255,.08) 26%,rgba(255,255,255,0) 56%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.20'/%3E%3C/svg%3E");
-  background-blend-mode:screen,overlay;
-}
 
 /* Interactive glass — the WARM edge. Cool surface, amber rim: the reference
    image's teal-in-a-golden-field, expressed as a state. Only opacity,
@@ -741,9 +804,30 @@ main,#main{
 }
 @media(min-width:720px){main,#main{padding:26px 24px 44px}}
 
-/* Page / view transitions — the router replays these after each navigation */
+/* Page / view transitions — the router replays these after each navigation.
+
+   NO `filter` IN viewFade. It used to run `from{filter:blur(7px)} to{blur(0)}`,
+   and because js/app.js:457 only removes-and-re-adds `.view-enter` (it never
+   drops the class) with animation-fill-mode:both, #main settled PERMANENTLY on
+   `filter: blur(0px)` — which is not `none`. Any filter value other than none
+   makes the element a BACKDROP ROOT, so every glass surface a view paints
+   inside #main could no longer sample the page behind it: not body::before's
+   ambient wash, not the page ground, nothing — it fell back to flat tint. The
+   two shell bars looked correct throughout, because .topbar and .tabbar live
+   OUTSIDE #main, which is why the defect survived visual review. Demonstrated
+   2026-08-02 with an A/B harness: an element with an inline backdrop-filter
+   blurs its parent's backdrop under filter:none and samples nothing at all
+   under filter:blur(0px). It also animated a 7px blur across the whole view
+   subtree on every navigation, contradicting the rule stated at the bottom of
+   this sheet.
+
+   So the entrance is opacity only, and the per-child rise below carries the
+   movement. Both land on values that are identity — opacity:1, transform:none
+   — so a filled #main and its children create no backdrop root, no stacking
+   context and no containing block once the animation is done. Do not put
+   filter, backdrop-filter, mask or opacity<1 in an END frame here. */
 #main.view-enter{animation:viewFade var(--dur-2) var(--smooth) both}
-@keyframes viewFade{from{opacity:0;filter:blur(7px)}to{opacity:1;filter:blur(0)}}
+@keyframes viewFade{from{opacity:0}to{opacity:1}}
 #main.view-enter>*{animation:riseIn var(--dur-2) var(--smooth) both}
 #main.view-enter>*:nth-child(1){animation-delay:20ms}
 #main.view-enter>*:nth-child(2){animation-delay:70ms}
@@ -886,7 +970,7 @@ main,#main{
    REPLACES the bars' blur with their own opaque fallback rather than adding
    to it. :has() is unsupported in older engines; there the page simply keeps
    the bars blurred, which is the pre-existing behaviour, not a regression. */
-html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar){
+html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface){
   background-color:var(--glass-solid);
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
@@ -1011,19 +1095,11 @@ html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface,
 .icon-btn:active{transform:scale(.9)}
 .icon-btn.fav[aria-pressed="true"]{color:var(--danger-ink);border-color:var(--red-ring);background:var(--red-tint)}
 
-/* Sticky bottom action bar — glass surface #3, and only on views that use it. */
-.action-bar{
-  position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 10px);z-index:10;margin-top:20px;
-  display:flex;gap:10px;padding:12px;border-radius:var(--radius);
-  background-color:var(--glass-bg-text);
-  -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
-  backdrop-filter:var(--glass-fx-md);
-  border:1px solid var(--glass-hairline);
-  box-shadow:var(--glass-shadow-2);
-  isolation:isolate;contain:paint;
-}
-.action-bar .btn{flex:1}
-@media(min-width:720px){.action-bar{bottom:16px}}
+/* NOTE: .action-bar (a sticky bottom glass action bar) used to be defined here
+   and was emitted by no view — the product page ships its CTAs inline. It was
+   removed 2026-08-02 rather than left asserting coverage in the five
+   degradation lists below. If a view genuinely needs one, build it from .glass
+   plus position:sticky rather than reintroducing a fourth bespoke recipe. */
 
 /* ============================== Chips + filter row ====================== */
 .chip{
@@ -1228,19 +1304,13 @@ input[type="range"]::-moz-range-thumb{
 .stage-wrap{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--dark);box-shadow:var(--shadow-card)}
 .stage-canvas{display:block;width:100%;aspect-ratio:10/7;touch-action:manipulation}
 .stage-canvas canvas,canvas.stage-canvas{display:block;width:100%;height:100%}
-/* Canvas HUD — the .glass-hud recipe, applied. One at a time. */
-.stage-hint{
-  --ink:var(--glass-on-dark);--muted:var(--glass-on-dark-muted);
-  position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:2;
-  max-width:calc(100% - 24px);padding:7px 14px;border-radius:var(--radius-pill);
-  background-color:var(--glass-bg-dark);color:var(--glass-on-dark);
-  font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:var(--track-meta);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
-  -webkit-backdrop-filter:blur(10px) saturate(160%);
-  backdrop-filter:blur(var(--glass-blur-sm)) saturate(160%);
-  box-shadow:inset 0 1px 0 0 rgba(255,255,255,.16);
-  isolation:isolate;contain:paint;
-}
+/* NOTE: .stage-hint (a pill-shaped dark-glass caption over the canvas) used to
+   be defined here and was emitted by no view — js/views/dizajner.js ships
+   .diz-hud on the .glass-hud recipe, and js/views/soba3d.js ships .s3d-hint,
+   which is deliberately SOLID because that screen's glass budget is already
+   spent on its HUD. Removed 2026-08-02 rather than left asserting coverage in
+   the five degradation lists below. A view that wants one applies .glass-hud
+   with border-radius:var(--radius-pill). */
 .stage-toolbar{position:absolute;top:10px;right:10px;z-index:2;display:flex;gap:8px}
 .stage-toolbar .icon-btn{background:var(--glass-solid-dark);border-color:rgba(255,255,255,.14);color:var(--on-dark)}
 .stage-toolbar .icon-btn:hover{background:var(--dark-2)}
@@ -1449,23 +1519,36 @@ input[type="range"]::-moz-range-thumb{
 
 /* ==========================================================================
    DEGRADATION PATHS — five of them, all landing on the same opaque surfaces.
-   Every selector list below must name every glass surface in the sheet; a
-   surface missing from one of these lists is a surface that stays blurred for
-   a user who asked it not to be.
+   Every selector list below must name every glass surface THIS SHEET defines;
+   a surface missing from one of these lists is a surface that stays blurred
+   for a user who asked it not to be.
 
-   The glass surfaces are, exhaustively:
+   The glass surfaces this sheet defines are, exhaustively:
      .glass .glass-sm .glass-strong .glass-deco .glass-chip .glass-hud
      .topbar .topbar__surface .tabbar .tabbar__surface
-     .action-bar .stage-hint .sheet-header .sheet-backdrop
+     .sheet-header .sheet-backdrop
+
+   READ THIS BEFORE TREATING THE LISTS AS PROOF OF COVERAGE. Naming a class
+   here degrades it IF a view emits it. As of 2026-08-02 the only ones any view
+   actually emits are .topbar/.topbar__surface and .tabbar/.tabbar__surface
+   (js/app.js), .glass-hud (js/views/dizajner.js) and .sheet-backdrop
+   (js/qrshare.js). The rest are AVAILABLE RECIPES with named destinations —
+   see the ADOPTION block in the LIQUID GLASS section — not shipped surfaces,
+   and this list must not be read as evidence that the app's glass is fully
+   degraded. It is not: js/views/katalog.js, js/views/savjetnik.js and
+   js/views/soba3d.js each hand-rolled their own glass and each owns its own
+   degradation paths. Three classes that were named here and existed nowhere at
+   all — .action-bar, .stage-hint, .glass-grain — were deleted rather than left
+   inflating this list.
    ========================================================================== */
 
 /* 1. The engine cannot do backdrop-filter at all. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .glass,.glass-sm,.glass-strong,.glass-deco,.glass-chip,
-  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar,.sheet-header{
+  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.sheet-header{
     background-color:var(--glass-solid);
   }
-  .glass-hud,.stage-hint{background-color:var(--glass-solid-dark)}
+  .glass-hud{background-color:var(--glass-solid-dark)}
   .sheet-backdrop{background:rgba(27,18,11,.72)}
   .glass::after,.glass-sm::after,.glass-strong::after{display:none}
 }
@@ -1476,12 +1559,12 @@ input[type="range"]::-moz-range-thumb{
       choice can win over the OS hint — see the handoff note on js/app.js. */
 @media (prefers-reduced-transparency:reduce){
   html:not([data-transparency="full"]) :is(.glass,.glass-sm,.glass-strong,.glass-deco,.glass-chip,
-  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar,.sheet-header){
+  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.sheet-header){
     background-color:var(--glass-solid);
     -webkit-backdrop-filter:none;backdrop-filter:none;
     box-shadow:var(--glass-shadow-1);
   }
-  html:not([data-transparency="full"]) :is(.glass-hud,.stage-hint){
+  html:not([data-transparency="full"]) .glass-hud{
     background-color:var(--glass-solid-dark);
     -webkit-backdrop-filter:none;backdrop-filter:none;
   }
@@ -1503,12 +1586,12 @@ input[type="range"]::-moz-range-thumb{
       side of that contract. Keyed SOLELY off data-transparency — app.js's
       data-glass="off" compatibility mirror can now be deleted. */
 html[data-transparency="reduced"] :is(.glass,.glass-sm,.glass-strong,.glass-deco,.glass-chip,
-.topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar,.sheet-header){
+.topbar,.topbar__surface,.tabbar,.tabbar__surface,.sheet-header){
   background-color:var(--glass-solid);
   -webkit-backdrop-filter:none;backdrop-filter:none;
   box-shadow:var(--glass-shadow-1);
 }
-html[data-transparency="reduced"] :is(.glass-hud,.stage-hint){
+html[data-transparency="reduced"] .glass-hud{
   background-color:var(--glass-solid-dark);
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
@@ -1526,12 +1609,12 @@ html[data-transparency="reduced"] .glass-chip.is-on{background-color:var(--accen
 /* 4. High contrast / forced colours. */
 @media (prefers-contrast:more){
   .glass,.glass-sm,.glass-strong,.glass-deco,.glass-chip,
-  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar,.sheet-header{
+  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.sheet-header{
     background-color:var(--glass-solid);
     -webkit-backdrop-filter:none;backdrop-filter:none;
     border:1px solid var(--ink);
   }
-  .glass-hud,.stage-hint{background-color:var(--glass-solid-dark);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid var(--paper)}
+  .glass-hud{background-color:var(--glass-solid-dark);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid var(--paper)}
   .glass::before,.glass::after,.glass-sm::before,.glass-sm::after,.glass-strong::before,.glass-strong::after{display:none}
   /* Faint is decorative at 2.49:1; at this setting it must not be visible-ish
      noise either — promote it to the informational tier. */
@@ -1540,7 +1623,7 @@ html[data-transparency="reduced"] .glass-chip.is-on{background-color:var(--accen
 }
 @media (forced-colors:active){
   .glass,.glass-sm,.glass-strong,.glass-deco,.glass-chip,.glass-hud,
-  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.action-bar,.sheet-header,.stage-hint{
+  .topbar,.topbar__surface,.tabbar,.tabbar__surface,.sheet-header{
     background:Canvas;color:CanvasText;border:1px solid CanvasText;
     -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;
   }
@@ -1549,7 +1632,9 @@ html[data-transparency="reduced"] .glass-chip.is-on{background-color:var(--accen
   body::before{display:none}
 }
 
-/* 5. Motion. blur() is never animated anywhere in this sheet; these rules kill
+/* 5. Motion. blur() is never animated anywhere in this sheet — a claim that was
+      FALSE until 2026-08-02, when viewFade's 7px blur-in over the whole view
+      subtree was removed (see the note on #main.view-enter). These rules kill
       the transforms and the shimmer. iteration-count 1 is essential: without
       it, infinite animations replay their .001ms frame forever and flicker. */
 @media(prefers-reduced-motion:reduce){

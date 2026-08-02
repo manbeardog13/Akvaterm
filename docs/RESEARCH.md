@@ -2,6 +2,25 @@
 
 Consolidated from four parallel research tracks: the client site, the ASC reference codebase, room-visualizer engineering, and the current Gemini API. Every claim below was verified against a cited source during research; see the workflow journal for full evidence.
 
+> **Read this as a dated snapshot, not as a description of the app.** Everything below records what
+> was *found* and *recommended* on 2026-08-01. Where the build diverged, `docs/ARCHITECTURE.md` and
+> `docs/BUILD_CONTRACTS.md` are authoritative and this file is not updated to match. The three
+> divergences worth knowing before you read on:
+>
+> - **§1 "Branding to echo"** describes the *client's own website* (navy/red, Open Sans, `#e5e5e5`).
+>   The app does **not** use that palette: it ships the sampled **Iris** system
+>   (`docs/DESIGN_SYSTEM.md`) with Anton + Figtree, and Open Sans appears nowhere. The one thing
+>   carried over verbatim is the **wordmark** — AKVA navy `#00008C` / TERM red `#d6252e` in the text
+>   face — which is exempt from the Iris palette by standing operator instruction.
+> - **§3 Stage 1** recommends photoreal scenes with authored alpha masks, quads and shading
+>   overlays. **None of that was built.** Scenes are *procedurally vector-drawn* into canvas and tile
+>   surfaces are *procedurally generated* from a seeded PRNG — no photographs, no masks, no image
+>   pipeline. Stage 2 (three.js, vendored, import map, pattern-cell texture at physical scale) did
+>   land essentially as described, plus a CC0 `.glb` fixture library the research did not anticipate.
+> - **§2** notes ASC's "service-worker CACHE version tied to an `APP_V` constant". That pattern
+>   shipped and then went one better: the page registers `./service-worker.js?v=${APP_V}`, so there
+>   is exactly one version literal rather than two kept in step by hand.
+
 ## 1. The client — and a premise correction
 
 **Akvaterm d.o.o.** (akvaterm.hr) is a family-run **mechanical-installations contractor** in Dubrovnik (Bokeljska 12), active since 1991, run by Boris and Juraj Dujmović. Four service lines: **Vodoinstalacija, Solarni sistemi, Klimatizacija, Centralno grijanje**. Partner brands: Horvatić, Termostroj, Viessmann, Daikin, Riello, Mitsubishi, Wilo, Grundfos.

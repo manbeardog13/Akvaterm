@@ -32,7 +32,19 @@ Vizualni identitet je izveden iz predloška koji je naručitelj dostavio. **Svak
 očitana je iz same slike čitačem piksela**, nijedna nije procijenjena: hladni tirkiz `#139EB1`
 (šarenica), topli jantar `#EAA651` i duboka smeđa `#68340F` (polje), blijedoplava `#C0D8F2`,
 topli neutral `#A6979C`. To je ujedno i značenje imena tvrtke — *akva* (voda, tirkiz) i *term*
-(toplina, jantar). Prijašnji identitet (mornarsko plava `#00008C` / crvena `#d6252e`) je povučen.
+(toplina, jantar).
+
+Očitani tirkiz `#139EB1` isporučuje se kao `--accent-bright` i koristi se za ispune, rubove i
+prijelaze. Za **tekst** (i kao podloga ispod bijelog teksta) koristi se izvedeni `--accent`
+`#0D707D`, jer očitani ton daje samo 2,86:1 na `--paper` i 3,20:1 s bijelim tekstom — dakle pada
+AA u oba smjera. Izvedeni ton mjeri 5,17:1 odnosno 5,78:1.
+
+> **Znak (logotip) je izuzet iz palete.** Uputa naručitelja od 2026-08-02: *„keep the logo original
+> in font and color."* AKVA ostaje mornarsko plava `#00008C`, TERM ostaje crvena `#d6252e`, u
+> **tekstualnom** rezu (Figtree) kurzivom debljine 800 — **ne** u Antonu i ne u tirkizno-jantarnoj
+> paleti. Te dvije boje žive u zasebnim `--logo-*` tokenima i namjerno su izvan skupa boja koje
+> staklo prebojava. **Nisu ostatak povučenog identiteta — ne diraj ih.** Iris paleta vrijedi za sve
+> oko znaka, ne za znak. Detalji i izmjerene vrijednosti: `docs/DESIGN_SYSTEM.md`.
 
 Tipografija je **Anton** (naslovi) + **Figtree** (tekst), oboje lokalno isporučeno pod
 `vendor/fonts/`. Predložak je imenovao *Montelisu* i *Magi Sans*; **te su porodice komercijalne,
@@ -43,16 +55,23 @@ tablice svake isporučene datoteke — vidi `vendor/fonts/PROVENANCE.md`.
 
 Površine su **tekuće staklo** (*liquid glass*): prozirni, zamućeni paneli s hladnim tirkiznim
 tonom i toplim jantarnim rubnim svjetlom. Čitljivost je iznad efekta — svaki par teksta i podloge
-izmjeren je, a ne procijenjen, i zadovoljava WCAG AA (≥ 4,5:1). Staklo ima **četiri** puta
-degradacije i svaki od njih vodi na istu neprozirnu plohu, pa se raspored nikad ne pomiče:
+izmjeren je, a ne procijenjen, i zadovoljava WCAG AA (≥ 4,5:1), mjereno prema **najgorem slučaju**
+kompozita (ploha nad potpuno crnom podlogom), ne prema onome što je iza nje danas. Staklo ima
+**pet** puteva degradacije i svaki vodi na istu neprozirnu plohu, pa se raspored nikad ne pomiče:
 
-| uvjet | ponašanje |
-| --- | --- |
-| `@supports not (backdrop-filter)` | neprozirna tonirana ploha |
-| `prefers-reduced-transparency: reduce` | neprozirno, bez zamućenja |
-| `prefers-contrast: more` | neprozirno + pojačani obrubi |
-| `forced-colors: active` | sve boje prepuštene sustavu (`Canvas` / `CanvasText` / `Highlight`) |
-| `prefers-reduced-motion: reduce` | bez animacija i prijelaza |
+| # | uvjet | ponašanje |
+| --- | --- | --- |
+| 1 | `@supports not (backdrop-filter)` | neprozirna tonirana ploha |
+| 2 | `@media (prefers-reduced-transparency: reduce)` | neprozirno, bez zamućenja |
+| 3 | **`html[data-transparency="reduced"]` — ručni prekidač** | neprozirno, bez zamućenja |
+| 4 | `prefers-contrast: more` / `forced-colors: active` | neprozirno + pojačani obrubi / boje sustava |
+| 5 | `prefers-reduced-motion: reduce` | bez animacija i prijelaza |
+
+**Put 3 nije višak.** Safari nikad ne prijavljuje `prefers-reduced-transparency`, a iOS je većina
+ove publike — bez ručnog prekidača („Smanji prozirnost" u izborniku Više) ta cijela skupina
+korisnika nema načina isključiti zamućenje. Put 2 je pritom pisan kao
+`html:not([data-transparency="full"])`, da izričit izbor *„zadrži staklo"* nadjača postavku
+sustava.
 
 Zamućenje se **nikad ne animira**, a na zaslonu su najviše 2–3 staklene plohe istovremeno
 (gornja traka + donja traka kartica su stalne; modalni prozor ih zamjenjuje, ne dodaje).
@@ -66,10 +85,16 @@ Bez build koraka: čisti HTML/CSS/JS (ES moduli), PWA. three.js, supabase-js, QR
 vanjske domene u izvođenju. Sve teksture pločica i sve 2D scene generiraju se proceduralno
 (deterministički, besšavno, u stvarnom mjerilu) — nema foto-ovisnosti.
 
-Service worker precachira ljusku aplikacije **uključujući četiri woff2 datoteke** (~79 KB — premale
-da bi se odgađale, a njihov izostanak vidljivo preslaguje stranicu). three.js (2,2 MB) i knjižnica
-3D modela (804 KB) namjerno **nisu** u ljusci: dohvaćaju se u pozadini u dvije faze kad se mreža
-smiri, a preskaču se posve na `Save-Data` ili 2G vezi.
+Service worker precachira ljusku aplikacije (31 unos, ≈ 800 KB) **uključujući četiri woff2
+datoteke** (~79 KB — premale da bi se odgađale, a njihov izostanak vidljivo preslaguje stranicu).
+Namjerno **nisu** u ljusci tri stvari: three.js (2,2 MB) i knjižnica 3D modela (804 KB), koje se
+dohvaćaju u pozadini u dvije redoslijedom vezane faze kad se mreža smiri i preskaču posve na
+`Save-Data` ili 2G vezi; te `vendor/supabase/` (259 KB), koji se učitava samo ako je `js/config.js`
+popunjen, pa se ne precachira ni ne dohvaća unaprijed.
+
+Verzija predmemorije ima **jedan jedini literal**: `APP_V` u `js/app.js`. Stranica registrira
+`./service-worker.js?v=${APP_V}`, worker taj upit čita kao svoju `VERSION`, a ime predmemorije je
+`akv-${VERSION}` — dakle izvedeno, ne prepisano, i ne može se raziću.
 
 Podaci: Supabase (Postgres + RLS + Edge Functions) služi AI savjetnici; **prijava korisnika
 zasad nije izvedena**, pa se favoriti i dizajni čuvaju lokalno (localStorage), a dizajn se između

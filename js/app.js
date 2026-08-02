@@ -32,8 +32,16 @@
 // "simplify" the surface span away.
 //
 // No colour literal appears in this file. The wordmark is plain
-// `.wordmark > .akva/.term` markup and css/styles.css decides that AKVA is
-// --teal-600 and TERM is --amber-600 in the display face.
+// `.wordmark > .akva/.term` markup and css/styles.css decides how it is painted.
+//
+// What it decides, verified against the shipped rule and in the browser: AKVA is
+// --logo-navy #00008C and TERM is --logo-red #d6252e, set in the TEXT face
+// (Figtree) italic 800 — NOT teal/amber, and NOT the Anton display face. The
+// logo is EXEMPT from the Iris palette by standing operator instruction
+// (2026-08-02, "keep the logo original in font and color"), which is why those
+// two values live in dedicated --logo-* tokens outside the rebindable ink set.
+// This comment previously claimed --teal-600 / --amber-600 "in the display
+// face"; that described a repaint that was never applied and is corrected here.
 //
 // CSS CONTRACT — the class names this file emits, which css/styles.css must
 // style. Changing a name here without changing it there yields an unstyled bar,
@@ -46,7 +54,7 @@
 //   .tabbar__surface        absolute inset:0, border-radius:inherit, the glass
 //   .tabbar__item           one tab; also on the "Više" button
 //   [aria-current="page"]   set alongside .active on the active tab
-//   .brand.wordmark > .akva / .term      the two-colour display wordmark
+//   .brand.wordmark > .akva / .term      the two-colour wordmark (text face)
 //   .menu-pop .menu-item                 a row in the "Više" popover
 //   .menu-pop .menu-sep                  separator above the switch
 //   .menu-toggle / .menu-toggle-text / .menu-item-label / .menu-item-hint /
@@ -64,9 +72,16 @@
 import { t, LANG } from "./i18n.js";
 import { initSupabase } from "./supabaseClient.js";
 
-// Bumped on every ship; the service worker's CACHE name is `akv-${APP_V}`
-// ("akv-v1") and its SHELL list must cover every shipped file.
-export const APP_V = "v1";
+// THE version literal. Bumped on every ship, and there is exactly one of it:
+// the service worker is registered below as `./service-worker.js?v=${APP_V}`,
+// reads that query back as its VERSION, and derives `CACHE = "akv-" + VERSION`.
+// So the cache name follows this line automatically — it is "akv-v2" today —
+// and the two cannot drift the way they did when service-worker.js carried its
+// own literal. service-worker.js's FALLBACK_VERSION is now only what a
+// registration WITHOUT the query would fall back to; keep it equal to this
+// string anyway, so a hand-registered worker lands in the same cache.
+// The worker's SHELL list must still cover every shipped file.
+export const APP_V = "v2";
 
 document.documentElement.lang = LANG;
 
@@ -223,8 +238,12 @@ const NAV = [
 // ---- App frame (built once) -------------------------------------------------
 // The wordmark carries NO colour of its own: `.wordmark > .akva/.term` is the
 // same markup index.html's splash already uses, and css/styles.css is the one
-// place that decides AKVA is --teal-600, TERM is --amber-600 and both are set
-// in the display face. That is what lets a palette change be a one-file change.
+// place that decides AKVA is --logo-navy and TERM is --logo-red, both set in
+// the text face. That is what lets a palette change be a one-file change — and
+// what lets the logo sit OUT of that change, which is the point: it is exempt
+// from the Iris palette by operator instruction. Emitting the two spans and
+// nothing else is what keeps that decision in one file. Do not add a colour or
+// a font-family here.
 //
 // `.topbar__surface` / `.tabbar__surface` are the absolutely positioned glass
 // panes described in the file header — empty, aria-hidden, purely presentational.
@@ -470,9 +489,14 @@ function revealApp() {
 // ---- Boot -------------------------------------------------------------------
 initSupabase();   // no-op in the offline demo; fire-and-forget when configured
 window.addEventListener("hashchange", route);
+// Registered WITH ?v=${APP_V}: that query is the worker's only source of
+// VERSION, so `akv-${APP_V}` is the cache name by construction rather than by
+// two literals agreeing. It also makes the script URL change on every bump,
+// which is what guarantees the browser fetches the new worker rather than
+// byte-comparing the old one. Scope is unaffected — it comes from the path.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    navigator.serviceWorker.register(`./service-worker.js?v=${APP_V}`).catch(() => {});
   });
 }
 route();

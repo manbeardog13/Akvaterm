@@ -113,9 +113,17 @@ Assignments always resolve through `buildPatternCell`; 2D and 3D share it.
 
 ## Visual identity — the "Iris" design system
 
-**Superseded:** the navy `#00008C` / red `#d6252e` / Open Sans identity described here previously
-is retired. `docs/DESIGN_SYSTEM.md` is now the authority on colour and type; this section states
-only what is binding between modules.
+**Superseded, with one carve-out:** the Open Sans identity described here previously is retired,
+and so is the navy/red palette **for the UI**. `docs/DESIGN_SYSTEM.md` is now the authority on
+colour and type; this section states only what is binding between modules.
+
+**The carve-out is the wordmark, and it is binding.** Operator instruction, 2026-08-02: *"keep the
+logo original in font and color."* The AKVA | TERM mark keeps navy `#00008C` and red `#d6252e`, set
+in the **text** face (Figtree) italic 800 — **not** Anton, not teal/amber. Those two values live in
+`--logo-navy` / `--logo-red` in `css/styles.css` and are deliberately **outside the rebindable ink
+set**, so the glass guard rails cannot recolour them the way they recolour body text. Any module
+that paints the wordmark, and any future palette sweep that greps for those two hexes, must leave
+them alone: they are protected brand, not residue. Measured ratios are in `docs/DESIGN_SYSTEM.md`.
 
 Palette tokens live once in `css/styles.css` `:root` and are referenced everywhere else through
 `var()` — the ASC hardcoded-literal lesson still applies, and it applies to a view's scoped
@@ -125,10 +133,32 @@ adjusted by eye.** Any shade not in that set is *derived* and ships with its com
 ratio in a comment beside it.
 
 Type: `vendor/fonts/fonts.css` defines `--font-display` (Anton) and `--font-text` (Figtree) and
-the `.t-*` role classes. It must be linked from `index.html` **before** `css/styles.css`. Nothing
-may reference `fonts.googleapis.com` or `fonts.gstatic.com` at runtime. Both `latin` and
-`latin-ext` slices of both families must be deployed: the Croatian diacritics live only in
-`latin-ext`.
+the `.t-*` role classes. It must be linked from `index.html` **before** `css/styles.css` — and as
+of this pass it **is**: `index.html` carries `<link rel="stylesheet" href="vendor/fonts/fonts.css">`
+immediately above the `css/styles.css` link, and the old `@import` at the top of `css/styles.css`
+is gone. Do not reintroduce the `@import`: it put the woff2 URLs three serialised round trips deep
+and out of reach of the preload scanner, so the render-blocking splash painted its wordmark in the
+fallback stack and reflowed. `index.html` also preloads the two `latin-ext` faces (`as="font"
+type="font/woff2" crossorigin` — `crossorigin` is required even same-origin, or the preload is
+discarded and the face fetched twice). Nothing may reference `fonts.googleapis.com` or
+`fonts.gstatic.com` at runtime. Both `latin` and `latin-ext` slices of both families must be
+deployed: the Croatian diacritics live only in `latin-ext`.
+
+**Content-Security-Policy** ships as a `<meta>` in `index.html` (GitHub Pages cannot set headers).
+The parts other modules must not break:
+
+- `script-src 'self'` + one `sha256-` per inline script. **Editing either inline script without
+  recomputing its hash stops the app booting.** `blob:` is deliberately *not* here.
+- `style-src 'self' 'unsafe-inline'` — views build scoped `<style>` blocks by design. This is
+  precisely why model-supplied colours must be validated as `#rrggbb` at the DOM boundary: CSS is
+  the one context `esc()` does not neutralise.
+- `font-src 'self'` — no off-origin font request exists.
+- `img-src 'self' data: blob:` and `connect-src 'self' blob: https://*.supabase.co`. **`blob:` is
+  load-bearing for the 3D room:** `GLTFLoader` wraps every bufferView-backed texture in a Blob and
+  loads it through a `blob:` URL (an `<img>` load, or a `fetch` on Chrome's ImageBitmap path — hence
+  both directives). Without it four sourced CC0 models rendered with no colour map and logged a CSP
+  violation each. It widens the policy to nothing remote: a `blob:` URL is same-origin and created
+  by this document, and it is not in `script-src`, so it cannot become an execution vector.
 
 Binding rules for any module that paints:
 
@@ -139,10 +169,19 @@ Binding rules for any module that paints:
 - **Glass budget:** at most 2–3 `backdrop-filter` surfaces on screen. The top bar and the tab bar
   are the standing pair; a floating panel or modal *replaces* one rather than adding a fourth.
   `blur()` is never animated.
-- **Four degradation paths ship on every glass surface**, all landing on the same opaque tint so
-  nothing reflows: `@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:…))`,
-  `prefers-reduced-transparency: reduce`, `prefers-contrast: more` + `forced-colors: active`, and
-  `prefers-reduced-motion: reduce`.
+- **Five degradation paths ship on every glass surface**, all landing on the same opaque tint so
+  nothing reflows: (1) `@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:…))`,
+  (2) `@media (prefers-reduced-transparency: reduce)`, (3) **`html[data-transparency="reduced"]`**,
+  (4) `prefers-contrast: more` + `forced-colors: active`, (5) `prefers-reduced-motion: reduce`.
+  - Path 3 is the **manual** switch `js/app.js` writes from "Smanji prozirnost" in the Više menu,
+    and it is **required, not a duplicate of path 2**: Safari never reports
+    `prefers-reduced-transparency` and iOS is the bulk of this audience, so path 3 is the only one
+    those users ever get. This applies to glass declared inside a view's own scoped `<style>`
+    exactly as it applies to `css/styles.css` — a view that ships only the media queries has left
+    every iOS user with a switch that half works.
+  - Path 2 must be gated `html:not([data-transparency="full"]) …`. `data-transparency="full"` is a
+    user explicitly asking to keep the glass, and an explicit choice outranks an OS hint; a surface
+    that leaves path 2 ungated stays pinned solid while the rest of the screen turns back to glass.
 - **Safari:** write `-webkit-backdrop-filter` with **literal** values (it drops the declaration
   when it contains `var()`), and put it *before* the unprefixed property — Chrome treats the two
   as aliases, so last-one-wins, and this ordering leaves every engine that understands the
@@ -179,13 +218,18 @@ mobile, top nav on desktop. Header wordmark AKVA | TERM. Croatian labels: Katalo
   background in two ordered stages once the network has been quiet — three.js first, because a
   `.glb` is useless without a loader — skipped entirely on `Save-Data`/2G, capped at two
   attempts per stage, and fetched four at a time so the fill cannot saturate the connection.
-  `vendor/supabase/` is loaded only when `js/config.js` is filled in. Any such omission must be
-  stated in the service-worker header comment, so the deviation is deliberate and readable rather
-  than an oversight.
-  The CACHE name is **derived, never restated**: `CACHE = "akv-" + VERSION`, where `VERSION`
-  comes from the registration query (`./service-worker.js?v=${APP_V}`) and falls back to
-  `FALLBACK_VERSION` in the worker. Until the page registers with `?v=`, `FALLBACK_VERSION` and
-  `APP_V` in `js/app.js` must be bumped together — `activate()` logs a console warning when they
-  drift, which is a diagnostic, not a gate.
+  `vendor/supabase/` (9 `.mjs`, 258 794 B) is the **third** such omission: it is imported only when
+  `js/config.js` carries credentials, so it is neither precached nor pre-warmed — it is
+  runtime-cached on first online use, and its absence degrades to local-only rather than failing.
+  Any such omission must be stated in the service-worker header comment, so the deviation is
+  deliberate and readable rather than an oversight; all three are stated there today.
+  The CACHE name is **derived, never restated**: `CACHE = "akv-" + VERSION`, where `VERSION` comes
+  from the registration query. **That binding is now live:** `js/app.js` registers
+  `./service-worker.js?v=${APP_V}`, so `APP_V` is the single version literal in the codebase and
+  the cache name (`akv-v2` today) follows it by construction — the two can no longer drift.
+  `FALLBACK_VERSION` in the worker is no longer a second source of truth; it is only what a
+  registration *without* the query would fall back to, and it is kept equal to `APP_V` so that path
+  lands in the same cache. `activate()` still runs the drift check against the `APP_V` literal — a
+  diagnostic, not a gate — which is now permanently silent and therefore meaningful when it speaks.
 - No console.error left in happy paths; typed feel: helpers return null/[] not throws (except
   TermaUnavailable).

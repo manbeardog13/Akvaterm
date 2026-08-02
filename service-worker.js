@@ -4,9 +4,10 @@
    offline. Live data always comes from Supabase online; the seed catalog under
    data/ is precached so the demo runs fully offline.
 
-   Four things are worth knowing before editing this file:
-   1. VERSION is read from the registration query (?v=…) when the page supplies
-      one, so the cache name has a single source of truth. See "Versioning".
+   Five things are worth knowing before editing this file:
+   1. VERSION is read from the registration query (?v=…), which js/app.js now
+      supplies, so APP_V is the single source of truth for the cache name.
+      See "Versioning".
    2. Precaching is best-effort but no longer silent: a SHELL entry that fails
       is reported. See "Install".
    3. The four vendored woff2 faces ARE in SHELL. They are ~79 KB total and
@@ -15,6 +16,16 @@
    4. vendor/three/ and vendor/models/ are deliberately NOT in SHELL — they are
       fetched lazily on the first 3D open and pre-warmed in the background in
       two ordered stages once the network goes quiet. See "3D pre-warm".
+   5. vendor/supabase/ (9 .mjs files, 258 794 B; 260 695 B counting its
+      PROVENANCE.md) is the THIRD deliberate omission from SHELL, and unlike
+      the other two it is not pre-warmed either. js/supabaseClient.js imports it
+      only when js/config.js carries credentials, so precaching it would make
+      every offline/demo install pay 253 KB for a library it never loads. It is
+      runtime-cached by the generic same-origin handler on its first online use,
+      and its absence degrades to local-only (localStorage) rather than to a
+      failure — which is the app's documented zero-config mode anyway.
+      docs/BUILD_CONTRACTS.md requires every such omission to be stated here;
+      this item is that statement.
 
    There is NO cross-origin dependency left. Fonts are vendored under
    vendor/fonts/ and supabase-js under vendor/supabase/, so the worker only
@@ -25,23 +36,31 @@
    The cache name and APP_V in js/app.js used to be two literals kept in step
    by comments alone, so a forgotten bump shipped silently.
 
-   Now the cache name is DERIVED, never restated: CACHE = "akv-" + VERSION.
-   VERSION comes from the registration URL when the page provides one —
-   register with `./service-worker.js?v=${APP_V}` and the two can no longer
-   drift, because there is only one literal left in the codebase. That single
-   line in the page is the intended end state; this file works either way.
+   Now the cache name is DERIVED, never restated: CACHE = "akv-" + VERSION,
+   and VERSION comes from the registration URL. THAT LANDED: js/app.js registers
+   `./service-worker.js?v=${APP_V}`, so APP_V is the only version literal in the
+   codebase and the cache name follows it by construction. FALLBACK_VERSION
+   below is no longer a second source of truth — it is what a registration
+   without the query (a hand-registered worker, a stale cached index.html
+   running an older app.js) would fall back to. Keep it equal to APP_V anyway,
+   so that path lands in the same cache instead of orphaning one.
 
-   Until that lands, activate() runs a best-effort drift check against the
-   APP_V literal in js/app.js and warns in the console on a mismatch (see
-   checkVersionDrift). Never fatal: a failed check leaves activation untouched.
+   activate() still runs a best-effort drift check against the APP_V literal in
+   js/app.js (see checkVersionDrift). With the ?v= registration in place it is
+   permanently silent — which is the point: it now only speaks when something is
+   genuinely wrong (a hand-registered worker, or a bad deploy pairing a new
+   app.js with a cached old shell), instead of crying wolf on every activation.
+   Never fatal: a failed check leaves activation untouched.
 
    A page may also postMessage {type:"akv:version"} to read this worker's
    version back (optionally passing its own as `v` for a logged comparison). */
-const FALLBACK_VERSION = "v2";           // used when the registration carries no ?v=
+const FALLBACK_VERSION = "v2";           // only for a registration carrying no ?v= — keep == APP_V
 const VERSION = new URL(self.location.href).searchParams.get("v") || FALLBACK_VERSION;
 const CACHE = `akv-${VERSION}`;          // never write this name out by hand
 
-/* Every shipped runtime file except vendor/three and vendor/models (see below).
+/* Every shipped runtime file except the THREE deliberate omissions —
+   vendor/three/, vendor/models/ (both below, under "3D pre-warm") and
+   vendor/supabase/ (header item 5, config-gated and not pre-warmed).
    service-worker.js itself is intentionally absent — the browser's update
    machinery fetches it, and a cached copy of the worker fights that. Verified
    entry-by-entry over HTTP against the served tree; keep it that way when
@@ -111,9 +130,11 @@ const SHELL = [
    (docs/BUILD_CONTRACTS.md), covering two directories.
 
    ── Stage 1: vendor/three (2302788 B / 2.2 MB across seven files) ────────
-   That is roughly 3x the whole precached shell (SHELL measured 773717 B over
-   HTTP, fonts included — that figure moves as the app's own modules change;
-   the 2.2 MB does not, because three.js is pinned). Putting it in SHELL would
+   That is roughly 3x the whole precached shell (SHELL measured 798684 B over
+   HTTP on 2026-08-02, fonts included — re-measure rather than trusting that
+   number, it moves with every edit to the app's own modules and has already
+   drifted once from a documented 773717; the 2.2 MB does not move, because
+   three.js is pinned). Putting it in SHELL would
    make every install, including the many users who never open the 3D tab, pay
    2.2 MB before the worker is ready.
 
@@ -347,8 +368,12 @@ self.addEventListener("activate", (e) => {
 /* Read the APP_V literal out of js/app.js and compare it with this worker's
    VERSION. It is a diagnostic, not a gate: any failure (offline, refactored
    declaration, no match) is silent, and nothing about caching depends on the
-   result. Redundant once the page registers with ?v=${APP_V}, at which point
-   the two literals become one. */
+   result.
+
+   Now that js/app.js registers with ?v=${APP_V} this can only fire when the
+   app.js on the network disagrees with the app.js that registered this worker
+   — i.e. a genuinely skewed deploy, or a worker registered by hand without the
+   query. It is deliberately KEPT rather than deleted for exactly that case. */
 async function checkVersionDrift() {
   try {
     const res = await fetch("./js/app.js", { cache: "no-cache" })

@@ -18,10 +18,19 @@ import { esc, tf, ensureStyles, pickParam, priceLabel, formatLabel, catLabel, sw
 // surface: .akv-rail, the pattern switcher floating over the tile preview. Nav +
 // tab bar are the standing pair, so a product page shows three glass surfaces at
 // most, which is the top of the budget. Everything else here (spec panel, swatch
-// frame, inquiry box) is opaque or a plain translucent tint. Rail text is --ink
-// only: over a pure-black tile the 0.64 tint composites to #A3A3A3, where
-// #313131 measures 5.17:1, while --teal-700 would be 2.12:1. The active chip is
-// therefore an OPAQUE --teal-700 fill with white (5.33:1), not tinted glass.
+// frame, inquiry box) is opaque or a plain translucent tint.
+//
+// Rail contrast, recomputed against the alpha css/styles.css actually ships
+// (--glass-alpha-text .78 — an earlier draft of this note assumed 0.64 and a
+// #A3A3A3 composite, which the app never rendered). The rail's worst case is
+// the tint over a PURE BLACK tile, and brightness(1.06) cannot lift black, so
+// nothing is darker: hsl(187 44% 97%) #F4FAFB @ .78 over #000000 = #BEC3C4.
+// On that surface --ink #313131 measures 7.31:1 and --teal-700 #0D707D only
+// 3.25:1 — which is why rail text is --ink ONLY and the active chip is an
+// OPAQUE --teal-700 fill carrying white at 5.78:1, not tinted glass. All three
+// figures are computed, not carried over; the styles themselves live in
+// katalog.js (.akv-rail, .akv-chip) and degrade through the five paths there,
+// including the manual html[data-transparency="reduced"] switch iOS depends on.
 
 const PATTERN_FALLBACK = { grid: "Ravno", runningBond: "Pomaknuto", herringbone: "Riblja kost", diagonal: "Dijagonalno" };
 const KIND_LABELS = {

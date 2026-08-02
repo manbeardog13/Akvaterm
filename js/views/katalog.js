@@ -85,20 +85,25 @@ const COLOR_ORDER = ["bijela", "bez", "siva", "antracit", "kadulja", "terakota",
 // Every ratio below was computed against the values css/styles.css actually
 // ships, not against the fallbacks in this file. The composited surfaces the
 // text lands on:
-//   chip glass  --glass-bg-text (hsl(187 44% 97%) @ .62) over --paper   #F3F7F8
-//               ... same tint over --sky-200, the darkest ambient wash  #E0EDF8
-//   rail glass  same tint over a PURE BLACK tile — the true worst case  #979B9C
+//   chip glass  --glass-bg-text (hsl(187 44% 97%) @ .78) over --paper   #F4F8F9
+//               ... same tint over --sky-200, the darkest ambient wash  #E9F3F9
+//   rail glass  same tint over a PURE BLACK tile — the true worst case  #BEC3C4
 //   card frame  --glass-bg-deco (@ .30) over --paper, ornament only     #F3F4F5
 //   washes      keramika #E1DEDF · sanitarije #D7E4F2 · armature #D3E6E9
 //               klima #D2E6EB · grijanje #F1E4D5
+// The three glass composites are recomputed above at the alpha css/styles.css
+// ACTUALLY ships (--glass-alpha-text:.78, styles.css:317), not the .62 an
+// earlier draft of this file assumed. .78 is lighter than .62 on every ground,
+// so every glass row below moved UP; none of them moved down.
 // All 42 pairs clear 4.5:1 — nothing here leans on the 3:1 large-text
-// allowance. The tight ones (everything else is 5.7:1 or better):
-//   rail label/chips   --ink        on rail over a black tile      4.64:1
-//   chip count/empty   --mauve-600  on chip glass over --sky-200   4.81:1
-//   chip "Očisti"      --teal-700   on chip glass over --sky-200   4.86:1
+// allowance. The tight ones, tightest first (everything not listed is 5.7:1
+// or better):
 //   resume eyebrow     --amber-500  on --brown-800                 4.83:1
+//   chip count/empty   --mauve-600  on chip glass over --sky-200   5.09:1
 //   eyebrows/counts    --mauve-600  on --paper                     5.12:1
+//   chip "Očisti"      --teal-700   on chip glass over --sky-200   5.14:1
 //   back link          --teal-700   on --paper                     5.17:1
+//   rail label/chips   --ink        on rail over a black tile      7.31:1
 //   card meta / price / fav   --mauve-600 / --teal-700 / --amber-ink on
 //                             --surface        5.73 / 5.78 / 5.86:1
 //   category tiles     --ink        on the five washes        9.74-10.41:1
@@ -111,14 +116,22 @@ const COLOR_ORDER = ["bijela", "bez", "siva", "antracit", "kadulja", "terakota",
 //     wash comes from size and tracking, never from colour.
 //   * the glass research's 0.505 alpha floor was solved for ink #14181C. Iris
 //     ink is #313131, whose floor is 0.600 — 0.58 would give only 4.28:1.
-//     css/styles.css reached the same conclusion independently and ships 0.62,
-//     which is what every text-bearing glass surface here uses. Small text on
-//     low-alpha glass is never allowed: the product card is decorative glass at
-//     alpha .30 and its text sits on an OPAQUE --surface scrim.
+//     That floor carries --ink ALONE. css/styles.css:255-273 rejects it for the
+//     shipped glass because the standing bars carry four tiers, and at .62 over
+//     a dark backdrop the coloured tiers collapse (--muted 2.04:1); it ships
+//     --glass-alpha-text .78, where the worst case #BEC3C4 gives --ink 7.31:1,
+//     --glass-ink-muted 4.57:1, --accent-on-glass 4.55:1. .78 is what every
+//     text-bearing glass surface here resolves to, and the fallbacks below
+//     encode it so an unresolved token cannot silently reintroduce .62.
+//     Small text on low-alpha glass is never allowed: the product card is
+//     decorative glass at alpha .30 and its text sits on an OPAQUE --surface
+//     scrim.
 //   * the chips are the one place a muted tier sits on glass, which the
 //     foundation sheet forbids on .glass. It is sound here because the backdrop
 //     is BOUNDED — a chip only ever floats over the page ground, never over
-//     arbitrary content — so the worst case is a real #E0EDF8, not black.
+//     arbitrary content — so the worst case is a real #E9F3F9, not black.
+//     (.akv-chip:hover lifts to --glass-bg-strong .88 -> #EEF6FA, lighter
+//     still, so hover cannot be the tight case.)
 //
 // -------- GLASS BUDGET -------------------------------------------------------
 // .topbar + .tabbar are the standing pair of backdrop-filter surfaces. These
@@ -159,10 +172,14 @@ const CATALOG_CSS = `
   --akv-danger:var(--danger,#B92C1C);
 
   /* Glass. The tint colour is the sheet's teal-cast near-white
-     hsl(187 44% 97%) = --glass-solid #F4FAFB; .30 is ornament-only and .62 is
-     the alpha proven for --ink against a pure-black backdrop. */
+     hsl(187 44% 97%) = --glass-solid #F4FAFB. Alphas MIRROR css/styles.css
+     exactly — .30 ornament-only (--glass-alpha-deco), .78 for every
+     text-bearing surface (--glass-alpha-text), .88 on hover
+     (--glass-alpha-strong). A fallback that undershoots the shipped alpha is
+     not a safe default: it darkens the composite the whole ledger above is
+     measured against. */
   --akv-glass-deco:var(--glass-bg-deco,rgba(244,250,251,.30));
-  --akv-glass-ui:var(--glass-bg-text,rgba(244,250,251,.62));
+  --akv-glass-ui:var(--glass-bg-text,rgba(244,250,251,.78));
   --akv-solid:var(--glass-solid,#F4FAFB);    /* every degradation lands here  */
   --akv-placeholder:#E1DEDF;                 /* --mauve-400 at .22 over paper */
 
@@ -277,8 +294,10 @@ const CATALOG_CSS = `
 
 /* ---- product grid -------------------------------------------------------- */
 .akv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:16px}
-/* Decorative glass (alpha .28): the tile texture reads through it instead of
-   competing with it. No backdrop-filter — see the GLASS BUDGET note. */
+/* Decorative glass (--glass-alpha-deco, .30): the tile texture reads through
+   it instead of competing with it. Ornament only — every word on this card
+   sits on the opaque .akv-pbody scrim below.
+   No backdrop-filter — see the GLASS BUDGET note. */
 .akv-pcard{
   position:relative;padding:0;overflow:hidden;border-radius:var(--akv-r);
   background:var(--akv-glass-deco);
@@ -305,10 +324,17 @@ const CATALOG_CSS = `
 .akv-pmeta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .akv-pname{display:block}
 .akv-price{margin-top:2px;font-family:var(--akv-fam-text);font-weight:700;font-size:.9375rem;letter-spacing:.01em;color:var(--akv-teal-ink)}
+/* font-family is set explicitly: form controls do NOT inherit it, so without
+   this line the button falls back to the UA default (Arial in Chrome) — the
+   one bare system stack inside the Iris UI. Same reason .akv-btn and .akv-chip
+   set it. The glyph is ♡/♥ (U+2661/U+2665), which Figtree does not carry, so
+   the browser still font-fallbacks for the heart itself; what this fixes is
+   the metrics/stack the control resolves to. */
 .akv-fav{
   position:absolute;top:10px;right:10px;z-index:3;
   min-width:var(--tap,44px);min-height:var(--tap,44px);border:none;border-radius:var(--akv-r-pill);
-  background:var(--akv-scrim);color:var(--akv-amber-ink);
+  background:var(--akv-scrim);color:var(--akv-amber-ink);          /* 5.86:1 on --surface */
+  font-family:var(--akv-fam-text);
   font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
   box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
   transition:background-color 200ms var(--akv-ease),color 200ms var(--akv-ease),transform 200ms var(--akv-ease);
@@ -329,9 +355,9 @@ const CATALOG_CSS = `
   background:var(--akv-paper);padding-right:6px;color:var(--akv-mauve-ink);   /* 5.12:1 */
 }
 /* Transparent glass chip: a .glass-chip in colour and shape with the blur
-   removed (budget). Worst case surface is the tint over the palette's darkest
-   ambient, --sky-200 -> #E0EDF8, where --ink is 10.93:1, --mauve-600 4.81:1
-   and --teal-700 4.86:1. */
+   removed (budget). Worst case surface is the shipped .78 tint over the
+   palette's darkest ambient, --sky-200 -> #E9F3F9, where --ink is 11.56:1,
+   --mauve-600 5.09:1 and --teal-700 5.14:1. */
 .akv-chip{
   flex:0 0 auto;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;
   border:1px solid var(--akv-hairline-2);border-radius:var(--akv-r-pill);
@@ -345,7 +371,7 @@ const CATALOG_CSS = `
 /* Cool surface, warm edge — the same hover gesture .glass-chip uses. */
 @media (hover:hover) and (pointer:fine){
   .akv-chip:hover{
-    background:var(--glass-bg-strong,rgba(244,250,251,.78));
+    background:var(--glass-bg-strong,rgba(244,250,251,.88));
     box-shadow:inset 0 1px 0 0 var(--akv-rim-warm);
   }
 }
@@ -358,7 +384,7 @@ const CATALOG_CSS = `
    the old opacity .6 measured 3.77:1 and opacity .42 measured 2.36:1. */
 .akv-chip .n{font-variant-numeric:tabular-nums;font-weight:500;font-size:.75rem;color:var(--akv-mauve-ink)}
 .akv-chip[aria-pressed="true"] .n{color:#fff}
-.akv-chip.is-empty{color:var(--akv-mauve-ink);border-style:dashed}   /* 4.81:1 worst case */
+.akv-chip.is-empty{color:var(--akv-mauve-ink);border-style:dashed}   /* 5.09:1 worst case */
 /* An active chip must stay white-on-dark when hovered, so it darkens too. */
 @media (hover:hover) and (pointer:fine){
   .akv-chip.on:hover,.akv-chip[aria-pressed="true"]:hover{
@@ -490,7 +516,13 @@ const CATALOG_CSS = `
 .akv-dactions{display:flex;gap:8px;flex-wrap:wrap}
 .akv-btn-danger{background:var(--akv-danger);border-color:var(--akv-danger);color:#fff}  /* 6.10:1 */
 
-/* =========================== DEGRADATIONS ================================= */
+/* =========================== DEGRADATIONS =================================
+   FIVE paths, matching the DEGRADATION PATHS block at css/styles.css:1516
+   one for one, all landing on the same opaque --akv-solid #F4FAFB. Every tier
+   this file puts on glass
+   clears AA there: --ink 12.33:1, --mauve-600 5.43:1, --teal-700 5.48:1,
+   --amber-ink 5.56:1, and #FFF on the --teal-700 pressed fill 5.78:1.
+   Path 3 is the manual one and it is the only path iOS ever gets. */
 /* 1. Engine cannot do backdrop-filter at all — the rail becomes opaque. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .akv-rail{background:var(--akv-solid)}
@@ -498,23 +530,41 @@ const CATALOG_CSS = `
   .akv-pcard{background:var(--akv-solid)}
   .akv-cat-card::after{display:none}
 }
-/* 2. OS transparency reduction (Chromium/Edge honour it; Safari does not
-      expose it, hence the manual [data-glass="off"] switch below). */
+/* 2. OS transparency reduction. Chromium/Edge/Firefox honour it; Safari does
+      NOT expose it, which is why path 3 below exists and is not redundant.
+      Gated on html:not([data-transparency="full"]) exactly as
+      css/styles.css:1557 is, so a user who explicitly chose to KEEP the glass
+      wins over an OS that asked for solid surfaces. Without the gate this
+      block would pin the catalogue solid while app.js hands the shell bars
+      back their blur — the two halves of the same screen disagreeing. */
 @media (prefers-reduced-transparency:reduce){
-  .akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-eqwrap{
+  html:not([data-transparency="full"]) :is(.akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-eqwrap){
     background:var(--akv-solid);
     -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--akv-sh-1);
   }
-  .akv-chip.on,.akv-chip[aria-pressed="true"],.akv-rail .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
-  .akv-cat-card::after{display:none}
+  html:not([data-transparency="full"]) :is(.akv-chip.on,.akv-chip[aria-pressed="true"],.akv-rail .akv-chip[aria-pressed="true"]){background:var(--akv-teal-ink)}
+  html:not([data-transparency="full"]) .akv-cat-card::after{display:none}
 }
-[data-glass="off"] .akv-rail,[data-glass="off"] .akv-chip,[data-glass="off"] .akv-pcard,[data-glass="off"] .akv-eqwrap{
+/* 3. MANUAL ESCAPE HATCH — html[data-transparency="reduced"].
+      REQUIRED, not a nicety. iOS Safari never reports
+      prefers-reduced-transparency and iOS is the bulk of this audience, so
+      path 2 never fires there and this switch is the ONLY way that install
+      base can turn the blur off. js/app.js:165-173 (applyTransparency) owns
+      the toggle ("Smanji prozirnost") and writes html.dataset.transparency;
+      nothing in the tree writes data-glass, so the selector this block used to
+      carry matched nothing and the catalogue rail, chips and cards stayed
+      blurred on iOS no matter what the user chose. Keyed SOLELY off
+      data-transparency, the way css/styles.css:1582 says it must be.
+      The .akv-rail .akv-chip pair is spelled out inside :is() because the base
+      rule for it is (0,2,0); :is() takes the specificity of its most specific
+      argument, so the whole selector lands at (0,3,1) and outranks it. */
+html[data-transparency="reduced"] :is(.akv-rail,.akv-chip,.akv-rail .akv-chip,.akv-pcard,.akv-eqwrap){
   background:var(--akv-solid);
   -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--akv-sh-1);
 }
-[data-glass="off"] .akv-chip.on,[data-glass="off"] .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
-[data-glass="off"] .akv-cat-card::after{display:none}
-/* 3. High contrast / forced colours. The .akv-rail .akv-chip pairs are spelled
+html[data-transparency="reduced"] :is(.akv-chip.on,.akv-chip[aria-pressed="true"],.akv-rail .akv-chip[aria-pressed="true"]){background:var(--akv-teal-ink)}
+html[data-transparency="reduced"] .akv-cat-card::after{display:none}
+/* 4. High contrast / forced colours. The .akv-rail .akv-chip pairs are spelled
       out because the base rule for them is (0,2,0) and would otherwise outrank
       a bare .akv-chip override here. */
 @media (prefers-contrast:more){
@@ -541,7 +591,7 @@ const CATALOG_CSS = `
   .akv-fav[aria-pressed="true"]{background:Highlight;color:HighlightText}
   .akv-chip[aria-pressed="true"] .n{color:HighlightText}
 }
-/* 4. Motion. Blur radius is never animated anywhere above; this only stills
+/* 5. Motion. Blur radius is never animated anywhere above; this only stills
       the transform/colour transitions. */
 @media (prefers-reduced-motion:reduce){
   .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after{

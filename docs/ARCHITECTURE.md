@@ -18,8 +18,8 @@ style analysis, and AI virtual staging. Demo catalog is synthetic until the clie
 | Layer | Choice |
 | --- | --- |
 | Frontend | Static HTML/CSS/JS PWA, **no build step**, ES modules, hash-routed SPA |
-| Design system | **Iris** — palette pixel-sampled from the operator's reference (teal `#139EB1` / amber `#EAA651` / brown `#68340F`), liquid-glass surfaces with four degradation paths. ASC's structural discipline (tap targets, `-ink` variants, one depth cue) kept; ASC's navy/red identity retired. See `docs/DESIGN_SYSTEM.md` |
-| Type | Anton (display) + Figtree (text), vendored woff2 under `/vendor/fonts/`, SIL OFL 1.1. The reference's Montelisa/Magi Sans are commercial, unlicensed here, and were substituted — the note is in the README so it cannot be lost |
+| Design system | **Iris** — palette pixel-sampled from the operator's reference (teal `#139EB1` / amber `#EAA651` / brown `#68340F`), liquid-glass surfaces with **five** degradation paths. ASC's structural discipline (tap targets, `-ink` variants, one depth cue) kept; the navy/red identity is retired **for the UI but not for the wordmark**, which keeps navy `#00008C` / red `#d6252e` in the text face by standing operator instruction. See `docs/DESIGN_SYSTEM.md` |
+| Type | Anton (display) + Figtree (text), vendored woff2 under `/vendor/fonts/`, SIL OFL 1.1, linked from `index.html` before `css/styles.css` and preloaded for the two `latin-ext` slices. The reference's Montelisa/Magi Sans are commercial, unlicensed here, not shipped, and were substituted by Anton/Figtree respectively — recorded in the README and `docs/DESIGN_SYSTEM.md` so it cannot be lost |
 | Hosting target | GitHub Pages-compatible (local `http-server -c-1` during development) |
 | Data | Supabase: Postgres + RLS, Auth, Realtime, Storage (product images), Edge Functions |
 | 3D | three.js r185 vendored under `/vendor/three/`, import map, lazy-loaded; 25 CC0 `.glb` fixtures under `/vendor/models/` |
@@ -41,7 +41,7 @@ file tree.
 Akvaterm/
 ├── index.html              app shell (import map, splash, mounts app)
 ├── manifest.webmanifest    PWA
-├── service-worker.js       offline shell, CACHE tied to APP_V
+├── service-worker.js       offline shell; CACHE = "akv-" + the ?v= APP_V app.js registers with
 ├── css/styles.css          the Iris design system (single generation, tokenized accent, glass)
 ├── js/
 │   ├── config.js           Supabase URL + anon key + app URL (operator-edited; empty = demo mode)
@@ -101,15 +101,21 @@ found no CC0 model of either (the searches and their result counts are in that s
 
 | | bytes | when it is fetched |
 | --- | ---: | --- |
-| Precached shell (31 entries) | 773 717 | at install |
+| Precached shell (31 entries) | ≈ 799 000 | at install |
 | — of which the 4 woff2 faces + `fonts.css` | 85 193 | (part of the shell) |
 | `vendor/three/` (7 files) | 2 302 788 | lazily on first 3D open; pre-warmed on idle, stage 1 |
 | `vendor/models/` (25 files) | 823 008 | lazily on first 3D open; pre-warmed on idle, stage 2 |
+| `vendor/supabase/` (9 `.mjs`) | 258 794 | **never precached, never pre-warmed** — imported only when `js/config.js` carries credentials, then runtime-cached |
 
-Measured over HTTP against the served tree, not estimated. The shell figure drifts as the app's
-own modules change; the two vendored figures do not, because those files are pinned. An earlier
-version of this document said "~143 KB of same-origin assets" — that predated the vendored fonts,
-models and three.js addons and is no longer true.
+Measured over HTTP against the served tree (last re-measured 2026-08-02 by reading the populated
+`akv-v2` cache back), not estimated. **Treat the shell figure as a snapshot and re-measure rather
+than trusting it:** it moves with every edit to the app's own modules, and it has already drifted
+once — this table said 773 717 while the served tree measured 798 684. The three vendored figures
+do not drift, because those files are pinned. An earlier version of this document said "~143 KB of
+same-origin assets" — that predated the vendored fonts, models and three.js addons.
+
+The 31 shell entries are the 30 URLs listed in `SHELL` plus `"./"`, which the worker caches
+separately from `"./index.html"` so a navigation to the bare origin resolves offline.
 
 ## Domain model
 
@@ -168,11 +174,18 @@ models and three.js addons and is no longer true.
   it. "Looks like it passes" is not a measurement.
 - **Glass never outranks legibility.** Every text-on-glass pair is checked against the glass's
   worst-case composite (the panel over a pure-black backdrop), not against the page background it
-  happens to sit on today. All four degradation paths — `@supports not (backdrop-filter)`,
-  `prefers-reduced-transparency`, `prefers-contrast` / `forced-colors`, `prefers-reduced-motion` —
-  ship on every glass surface, and `blur()` is never animated. At most 2–3 backdrop-filtered
-  surfaces on screen: the top bar and the tab bar are the standing pair, and a modal *replaces* a
-  panel rather than adding one.
+  happens to sit on today. All **five** degradation paths — `@supports not (backdrop-filter)`,
+  `prefers-reduced-transparency`, the manual `html[data-transparency="reduced"]` switch,
+  `prefers-contrast` / `forced-colors`, `prefers-reduced-motion` — ship on every glass surface,
+  including glass declared inside a view's own scoped `<style>`, and `blur()` is never animated.
+  The manual switch is **not** redundant with the OS media query: Safari never reports
+  `prefers-reduced-transparency`, so it is the only path iOS users get. At most 2–3
+  backdrop-filtered surfaces on screen: the top bar and the tab bar are the standing pair, and a
+  modal *replaces* a panel rather than adding one.
+- **The wordmark is exempt from the palette.** Standing operator instruction, 2026-08-02: *"keep
+  the logo original in font and color."* AKVA stays navy `#00008C`, TERM stays red `#d6252e`, italic
+  800 in the **text** face — not Anton, not teal/amber. The two values live in `--logo-*` tokens
+  outside the rebindable ink set. A palette sweep that finds those hexes must leave them alone.
 - **Anton is a clipping hazard in Croatian.** Measured on the vendored face: caps ink reaches
   0.8594em, but `Č Š Ž Ć Đ` reach 1.1094em ascent + 0.0156em descent. That is taller than the
   font's declared ascender, so the ink leaves the line box at *any* line-height — line-height
@@ -202,7 +215,9 @@ models and three.js addons and is no longer true.
    `DragControls`/`TransformControls`, for reasons read out of the r185 source and recorded at the
    top of `js/room3d.js`.
 9. ✅ Re-identification to the **Iris** design system: sampled palette, vendored Anton + Figtree,
-   liquid glass with four degradation paths. The navy/red identity is retired everywhere.
+   liquid glass with five degradation paths. The navy/red identity is retired from the UI —
+   **except the wordmark**, which keeps it by standing operator instruction (see above). An earlier
+   version of this line said "retired everywhere", which was never true of the logo.
 
 Next up, in order: an auth flow (unblocks 3 and 6 together), then a quote surface on top of the
 `quotes` table.

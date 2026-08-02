@@ -1,15 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <!-- Akvaterm app icon — echoes the AKVA|TERM wordmark: navy tile, white
        italic A + T, the red divider bar standing in for the wordmark split.
-       Kept to three flat colours so it stays legible at 16 px. -->
+       Kept to three flat colours so it stays legible at 16 px.
+
+       (An XML comment may not contain a double hyphen, so the CSS custom
+       properties below are named without their leading dashes.)
+
+       THE COLOURS ARE THE PROTECTED BRAND AND ARE EXEMPT FROM THE IRIS
+       PALETTE. Operator instruction, 2026-08-02: "keep the logo original in
+       font and color". #00008C is the token css/styles.css calls logo-navy and
+       #d6252e is logo-red — the same two literals that sheet names and
+       protects. A palette sweep that greps for them must find them commented
+       here and leave them alone. Do not repaint this tile teal/amber.
+
+       THE LETTERS ARE OUTLINES, NOT TEXT. They used to be text elements with
+       font-family="'Open Sans',…". An SVG consumed as a favicon, as a manifest
+       icon, or through an img element is rendered in an isolated context that
+       resolves no font-face rule and, in several engines, no installed family
+       either — so the A and the T fell back to whatever that renderer happened
+       to default to, and the mark was a different shape in the tab, on the
+       home screen and in the app switcher. Converting them to path data makes
+       the file self-contained: identical everywhere, no font dependency, and
+       no remaining reference to the retired Open Sans anywhere in the tree.
+
+       GEOMETRY, so the shapes can be edited without re-deriving them.
+       Cap height 176, baseline y=350, both letters slanted by the SAME
+       skewX(-12) the divider bar uses — that shared slant is the italic. Stem
+       width 38 = 21.6% of cap height, which is the stem/cap ratio of an
+       extra-bold grotesque (Open Sans ExtraBold is 21.4%), so the weight reads
+       as the wordmark's 800 rather than as a synthetic bold.
+       The A is one path with fill-rule="evenodd": the outer boundary plus the
+       counter triangle above the crossbar. Its inner edges are the outer edges
+       offset 38 horizontally, which is why the counter apex lands exactly on
+       x=0 at y=-117.33. -->
   <title>Akvaterm</title>
+
   <rect width="512" height="512" rx="116" fill="#00008C"/>
+
+  <!-- The divider bar — the wordmark's AKVA|TERM split. -->
   <g transform="translate(258,264) skewX(-12)">
     <rect x="-16" y="-104" width="32" height="208" rx="16" fill="#d6252e"/>
   </g>
-  <g font-family="'Open Sans','Segoe UI',Arial,Helvetica,sans-serif" font-weight="800"
-     font-style="italic" font-size="252" fill="#ffffff" text-anchor="middle">
-    <text x="142" y="352">A</text>
-    <text x="382" y="352">T</text>
-  </g>
+
+  <!-- A -->
+  <path transform="translate(128,350) skewX(-12)" fill="#ffffff" fill-rule="evenodd"
+        d="M -76 0 L -19 -176 L 19 -176 L 76 0 L 38 0 L 23.43 -45 L -23.43 -45 L -38 0 Z
+           M -18.97 -76 L 18.97 -76 L 0 -117.33 Z"/>
+
+  <!-- T -->
+  <path transform="translate(362,350) skewX(-12)" fill="#ffffff"
+        d="M -66 -176 L 66 -176 L 66 -138 L 19 -138 L 19 0 L -19 0 L -19 -138 L -66 -138 Z"/>
 </svg>
