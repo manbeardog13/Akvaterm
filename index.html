@@ -37,15 +37,21 @@
      to nothing remote — a blob: URL is same-origin and app-created by
      construction, and it is NOT added to script-src, so it cannot become an
      execution vector.
-     cdn.jsdelivr.net is ONLY the transitional supabase-js fallback in
-     js/supabaseClient.js — remove it here once that library is vendored under
-     /vendor/, as docs/BUILD_CONTRACTS.md requires. -->
+     cdn.jsdelivr.net WAS the transitional supabase-js fallback, and this
+     comment used to say "remove it here once that library is vendored under
+     /vendor/". That condition is met: vendor/supabase/ pins 2.111.0
+     byte-for-byte and js/supabaseClient.js now states "No CDN fallback,
+     deliberately" and imports only the local copy. So the permission is gone.
+     It was granting a remote script origin that nothing had loaded from since
+     the library was vendored — a standing hole with no user. Do not re-add it;
+     a CDN specifier means different bytes can execute in this origin from one
+     load to the next, which is exactly what docs/BUILD_CONTRACTS.md forbids. -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-K96dW/qdVwhxO5zu3CQgALmdSf3zeqEwMvhbDWy9eeg=' https://cdn.jsdelivr.net;
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-/pTiG39rD4qSBze8AT+tI8Rzpo90u71j5pdj4F5R2YY=';
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -89,10 +95,12 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 
-<!-- Brand type is VENDORED: Anton (display) + Figtree (text), SIL OFL 1.1,
-     under /vendor/fonts/. There is no runtime CDN — the retired Open Sans
-     <link> to fonts.googleapis.com is gone, and the CSP above no longer
-     permits it.
+<!-- Brand type is VENDORED: Sora (display) + Inter (text), SIL OFL 1.1, under
+     /vendor/fonts/ — the house pairing, see docs/HOUSE_STANDARD.md. Figtree is
+     still vendored but only carries the WORDMARK (--font-wordmark), which is
+     exempt from the type change; Anton is retained solely to keep that change
+     revertible. There is no runtime CDN — the retired Open Sans <link> to
+     fonts.googleapis.com is gone, and the CSP above no longer permits it.
 
      The two preloads are the latin-ext slices, and only those two: latin-ext
      is what carries č ć ž š đ Č Ć Ž Š Đ, so it is the slice Croatian copy
@@ -107,14 +115,34 @@
      font-src 'self' in the CSP above already permits them; crossorigin is
      REQUIRED on a font preload even same-origin, or the preload is discarded
      and the face is fetched twice. -->
-<link rel="preload" href="vendor/fonts/anton-latin-ext-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="vendor/fonts/figtree-latin-ext-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<!-- UPDATED 2026-08-02 WITH THE HOUSE TYPE CHANGE (docs/HOUSE_STANDARD.md).
+     These preloaded Anton and Figtree, which are no longer the app's faces —
+     so the two slices being warmed were ones nothing renders, while Sora and
+     Inter were discovered late and swapped in after first paint. That is
+     precisely the reflow the paragraph above exists to prevent, reintroduced
+     by a font change that did not look like it touched this file.
+     Figtree is deliberately NOT preloaded now: it survives only for the
+     wordmark, which is 8 characters and already painted by the splash. -->
+<link rel="preload" href="vendor/fonts/sora-latin-ext-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/inter-latin-ext-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 
 <!-- iOS 26 samples the html/body background colour to tint its own chrome, and
      a root with no background makes it sample whatever paints behind. Declared
      here as well as in css/styles.css so the value exists even if the
      stylesheet is slow or fails; both say --paper #F2F2F2. -->
-<style>html,body{background:#F2F2F2}html{color-scheme:light}</style>
+<!-- color-scheme is "light dark", NOT "light". It used to be light-only, which
+     was true when the app was light-only; now that there is a dark theme,
+     pinning it here would tell the browser to render its OWN surfaces — form
+     controls, scrollbars, the tap-highlight — in light colours on top of a
+     dark app. The visible symptom is a white scrollbar down the side of a dark
+     screen. The paired background values match --paper in each theme. -->
+<style>
+  html,body{background:#F2F2F2}
+  html{color-scheme:light dark}
+  @media (prefers-color-scheme: dark){ html,body{background:#14100E} }
+  html[data-theme="light"],html[data-theme="light"] body{background:#F2F2F2}
+  html[data-theme="dark"],html[data-theme="dark"] body{background:#14100E}
+</style>
 
 <!-- fonts.css MUST stay above css/styles.css: it declares the @font-face
      blocks and the --font-display / --font-text tokens that styles.css
@@ -147,6 +175,17 @@
      which is where the Iris palette belongs. -->
 <div id="splash" aria-hidden="true">
   <div class="sp-core">
+    <!-- The tile field. Nine tiles on a grout gap, laid in a diagonal wave and
+         washing cool to warm, then lifting to hand the screen to the wordmark.
+         It is Akvaterm's own gesture in the most literal sense available: this
+         company lays tile, and a diagonal is the order tile is actually laid
+         in. Nothing here resembles ASC's entrance, which is a lava sweep for
+         an automotive brand.
+         Purely decorative and aria-hidden with the veil; the nine <i> elements
+         carry no meaning and are never read out. -->
+    <div class="sp-tiles" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
     <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>
     <div class="sp-rule"><i></i></div>
   </div>
@@ -171,10 +210,24 @@
    the user behind the veil. Service-worker registration lives in js/app.js —
    one registration only.
 
-   MIN_MS is 900, not 700: css/styles.css lands the last frame of the entrance
-   choreography at 880 ms, and a splash that begins fading through its own
-   animation reads as a glitch rather than as a hand-off. Total time to a live
-   app is ~900 ms plus a 380 ms cross-fade the app's entrance plays underneath.
+   MIN_MS TRACKS THE CHOREOGRAPHY IN css/styles.css AND MUST BE UPDATED WITH
+   IT. A splash that begins fading through its own animation reads as a glitch
+   rather than as a hand-off, so this number is the last frame plus a beat.
+
+   The entrance is three acts (see "Branded splash" in css/styles.css):
+     0.00 - 0.56   nine tiles land on a diagonal wave
+     0.26 - 0.72   they wash teal -> amber along the same diagonal
+     0.70 - 0.96   the field settles and lifts out
+     0.76 - 1.18   the wordmark rises through it
+     0.90 - 1.37   the rule draws underneath, teal into amber
+     1.32 - 1.56   the warm end blooms
+   Last frame lands at 1560 ms, so MIN_MS is 1600. Total time to a live app is
+   ~1.6 s plus a 380 ms cross-fade the app's entrance plays underneath.
+
+   WAIT_MS must stay ABOVE MIN_MS. It starts the "slow load" shimmer, and a
+   value below the choreography would fire the patience state during the
+   entrance on every single launch — telling every user the app is struggling
+   while it is in fact on time.
 
    html.splashing IS the hand-off. While it is set, #main's entrance animations
    hold at frame 0 — animation-play-state:paused freezes the delay clock too —
@@ -189,7 +242,7 @@
    watchdog — because the one unacceptable outcome is a stripped veil over an
    app frozen invisible at frame 0. */
 (function () {
-  var MIN_MS = 900, WAIT_MS = 1600, WATCHDOG_MS = 4000, t0 = Date.now(), done = false;
+  var MIN_MS = 1600, WAIT_MS = 2600, WATCHDOG_MS = 4600, t0 = Date.now(), done = false;
   var root = document.documentElement;
 
   root.classList.add("splashing");

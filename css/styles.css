@@ -806,21 +806,66 @@ small{font-size:12.5px}
    as sitting low when its bounding box is centred. Static, so the exit's
    translate has a single origin to move from. */
 .sp-core{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px;transform:translateY(-3vh)}
-/* No overflow:hidden anywhere on this path — Anton's carons must be free. */
-.sp-mark{font-size:clamp(34px,9vw,54px);line-height:1.1;animation:spMark 480ms var(--snap) 40ms both}
+
+/* ---- ACT ONE: the tile field --------------------------------------------
+   Nine tiles land in a DIAGONAL wave, then wash cool to warm, then lift out
+   of the way. The diagonal is not a decorative choice: tile is set from a
+   corner along the diagonal, so the order the squares arrive in is the order
+   a tiler actually works in. That, plus teal turning amber, is the whole
+   company in one gesture — surfaces, and water becoming heat.
+
+   ONLY OPACITY AND TRANSFORM ANIMATE. The cool-to-warm change is NOT an
+   animated background-color: each tile carries a second amber layer stacked
+   on top whose OPACITY is what moves. Animating background-color on nine
+   elements repaints them every frame; cross-fading two static layers is a
+   compositor job. Same reason nothing here touches blur or box-shadow.
+
+   Stagger is by DIAGONAL INDEX d = row + col (0..4 on a 3x3), so the five
+   groups below are the five diagonals, not nine separate delays. */
+.sp-tiles{
+  display:grid;grid-template-columns:repeat(3,22px);gap:5px;
+  animation:spTilesOut 260ms var(--smooth) 700ms both;
+}
+.sp-tiles i{
+  position:relative;display:block;width:22px;height:22px;
+  border-radius:5px;background:var(--teal-300);
+  animation:spTileIn 360ms var(--snap) both;
+}
+/* The warm half of the identity, cross-faded in over the cool one. */
+.sp-tiles i::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  background:var(--accent-2);opacity:0;
+  animation:spTileWarm 260ms var(--smooth) both;
+}
+/* d=0 */ .sp-tiles i:nth-child(1){animation-delay:0ms}
+/* d=1 */ .sp-tiles i:nth-child(2),.sp-tiles i:nth-child(4){animation-delay:50ms}
+/* d=2 */ .sp-tiles i:nth-child(3),.sp-tiles i:nth-child(5),.sp-tiles i:nth-child(7){animation-delay:100ms}
+/* d=3 */ .sp-tiles i:nth-child(6),.sp-tiles i:nth-child(8){animation-delay:150ms}
+/* d=4 */ .sp-tiles i:nth-child(9){animation-delay:200ms}
+/* The wash follows the same diagonal 260 ms behind the landing, so a tile is
+   always fully placed before it warms. */
+.sp-tiles i:nth-child(1)::after{animation-delay:260ms}
+.sp-tiles i:nth-child(2)::after,.sp-tiles i:nth-child(4)::after{animation-delay:310ms}
+.sp-tiles i:nth-child(3)::after,.sp-tiles i:nth-child(5)::after,.sp-tiles i:nth-child(7)::after{animation-delay:360ms}
+.sp-tiles i:nth-child(6)::after,.sp-tiles i:nth-child(8)::after{animation-delay:410ms}
+.sp-tiles i:nth-child(9)::after{animation-delay:460ms}
+
+/* ---- ACT TWO: the wordmark ---------------------------------------------- */
+/* No overflow:hidden anywhere on this path — the carons must be free. */
+.sp-mark{font-size:clamp(34px,9vw,54px);line-height:1.1;animation:spMark 420ms var(--snap) 760ms both}
 /* The track: a hairline the fill runs along, so the gesture has somewhere to
    go before it gets there. --r-pill on a 3px bar is a 1.5px cap. */
 .sp-rule{
   /* Named once so the patience state can restore it without repeating it. */
   --sp-fill:linear-gradient(90deg,var(--teal-300),var(--accent-bright) 34%,var(--amber-600) 76%,var(--accent-2));
   position:relative;width:min(212px,54vw);height:3px;border-radius:var(--r-pill);
-  background:var(--line);animation:spRule 360ms var(--snap) 220ms both;
+  background:var(--line);animation:spRule 300ms var(--snap) 900ms both;
 }
 /* The fill sweeps teal -> amber: the whole identity in one 212px gesture. */
 .sp-rule i{
   display:block;height:100%;width:100%;border-radius:inherit;transform-origin:left;
   background:var(--sp-fill);
-  animation:spFill 600ms var(--smooth) 280ms both;
+  animation:spFill 420ms var(--smooth) 950ms both;
 }
 /* The heat bloom at the warm end, arriving as the draw lands. closest-side on
    a 26px box keeps it a soft halo rather than a lamp. */
@@ -828,8 +873,14 @@ small{font-size:12.5px}
   content:"";position:absolute;top:50%;right:-13px;width:26px;height:26px;
   transform:translateY(-50%);pointer-events:none;
   background:radial-gradient(closest-side,var(--accent-2-ring),transparent);
-  animation:spBloom 260ms var(--smooth) 620ms both;
+  animation:spBloom 240ms var(--smooth) 1320ms both;
 }
+@keyframes spTileIn{from{opacity:0;transform:translateY(-9px) scale(.72)}}
+@keyframes spTileWarm{to{opacity:1}}
+/* The field does not just fade: it settles DOWN a few pixels as it goes, so
+   the wordmark rising through it reads as one exchange rather than two
+   unrelated fades. */
+@keyframes spTilesOut{to{opacity:0;transform:translateY(6px) scale(.94)}}
 @keyframes spMark{from{opacity:0;transform:translateY(14px) scale(.965)}}
 @keyframes spRule{from{opacity:0;transform:scaleX(.34)}}
 @keyframes spFill{from{transform:scaleX(0)}}
@@ -861,7 +912,13 @@ html.splashing #main.view-enter>*{animation-play-state:paused}
    animation:none under this query, which is also why the pause above becomes
    a no-op rather than a freeze. */
 @media(prefers-reduced-motion:reduce){
-  .sp-mark,.sp-rule,.sp-rule i,.sp-rule::after,#splash.wait .sp-rule i{animation:none!important}
+  .sp-mark,.sp-rule,.sp-rule i,.sp-rule::after,#splash.wait .sp-rule i,
+  .sp-tiles,.sp-tiles i,.sp-tiles i::after{animation:none!important}
+  /* The tile field is pure motion — a laying gesture. With motion refused it
+     has nothing left to say, and nine squares sitting above the wordmark for a
+     second would read as an unfinished load rather than as a brand mark. So it
+     is removed outright rather than shown still. */
+  .sp-tiles{display:none}
   /* …and the patience state stops being a shimmer, so it must not keep the
      shimmer's teal-amber-teal gradient either: put the identity back. */
   #splash.wait .sp-rule i{background:var(--sp-fill)}

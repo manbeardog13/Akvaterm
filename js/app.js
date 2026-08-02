@@ -218,6 +218,11 @@ const ROUTES = [
   // "Nastavi kao gost". The app is usable signed out, by design, and on the
   // public demo there is no backend to sign in to at all.
   { pattern: /^\/prijava$/,            load: () => import("./views/prijava.js") },
+  // Credits. Not decoration: two of the vendored 3D models are CC-BY 3.0, and
+  // that licence's one condition is that the author is credited somewhere a
+  // person can actually reach. A credits view with no route pointing at it
+  // satisfies nothing — see the header of js/views/zasluge.js.
+  { pattern: /^\/zasluge$/,            load: () => import("./views/zasluge.js") },
 ];
 
 // Tab-bar / top-nav glyphs. Inline SVG (no icon font, no sprite fetch) drawn on
@@ -249,6 +254,9 @@ const ICONS = {
   sun: SVG(`<circle cx="12" cy="12" r="4.1"/><path d="M12 2.6v2.3M12 19.1v2.3M4.36 4.36l1.63 1.63M18.01 18.01l1.63 1.63M2.6 12h2.3M19.1 12h2.3M4.36 19.64l1.63-1.63M18.01 5.99l1.63-1.63"/>`),
   moon: SVG(`<path d="M20.4 13.4A8.3 8.3 0 0 1 10.6 3.6a8.4 8.4 0 1 0 9.8 9.8z"/>`),
   close: SVG(`<path d="M6 6l12 12M18 6L6 18"/>`),
+  // Zasluge — an award ribbon, the one glyph that reads as "credit given"
+  // rather than "information" or "settings".
+  zasluge: SVG(`<circle cx="12" cy="9" r="5.4"/><path d="M8.6 13.4L7.2 20.6l4.8-2.5 4.8 2.5-1.4-7.2"/>`),
 };
 
 const NAV = [
@@ -314,6 +322,7 @@ function mountFrame() {
         ${sideLink({ route: "/favoriti", key: "nav.favoriti", fb: "Favoriti", icon: "favoriti" })}
         ${sideLink({ route: "/dizajni", key: "nav.dizajni", fb: "Moji dizajni", icon: "dizajni" })}
         ${sideLink({ route: "/prijava", key: "nav.prijava", fb: "Prijava", icon: "prijava" })}
+        ${sideLink({ route: "/zasluge", key: "nav.zasluge", fb: "Zasluge", icon: "zasluge" })}
       </nav>
       <div class="sb-foot">
         <button type="button" class="sb-item sb-theme" id="themeToggle" aria-pressed="false">
