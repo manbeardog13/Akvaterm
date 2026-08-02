@@ -427,7 +427,7 @@ function themeIsDark() {
 function setThemeColor(dark) {
   let m = document.querySelector('meta[name="theme-color"]');
   if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
-  m.setAttribute("content", dark ? "#14100E" : "#F2F2F2");
+  m.setAttribute("content", dark ? "#1C1E23" : "#F2F2F2");
 }
 
 function applyTheme() {
@@ -722,7 +722,23 @@ async function route() {
   // Wired AFTER mountFrame(), and once: mountFrame() returns early when the
   // frame already exists, so these elements are built exactly one time and
   // their listeners must be attached exactly one time with them.
-  if (!frameWired) { frameWired = true; wireSide(); wireTheme(); }
+  if (!frameWired) {
+    frameWired = true;
+    wireSide();
+    wireTheme();
+    // Terma's dock. Mounted ONCE, into the app frame rather than into a view,
+    // because it is deliberately the one element that outlives a navigation:
+    // an answer still streaming must survive the page the user moved to while
+    // waiting for it, and the conversation must still be there when they come
+    // back. It wires its own route visibility off hashchange, so nothing here
+    // has to know which routes it hides on.
+    //
+    // Lazy-imported and fire-and-forget: it is not on the first-paint path, and
+    // a failure to load it must never take the app down with it.
+    import("./aidock.js")
+      .then((m) => m.mount())
+      .catch((err) => console.warn("[app] Terma dock unavailable:", err?.message || err));
+  }
   setActiveNav(path);
   closeMore();
   sideClose();

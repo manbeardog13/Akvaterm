@@ -622,9 +622,9 @@ small{font-size:12.5px}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme:dark;
-    --paper:#14100E; --surface:#1C1815; --panel:#262120; --panel-2:#201B19;
-    --ink:#F2EFEC; --ink-2:#C9C0BB; --muted:#A79C97;
-    --line:rgba(242,239,236,.12); --line-input:rgba(242,239,236,.30);
+    --paper:#1C1E23; --surface:#25282E; --panel:#31353C; --panel-2:#2A2E34;
+    --ink:#F1F2F4; --ink-2:#C9CDD4; --muted:#A3A9B3;
+    --line:rgba(241,242,244,.13); --line-input:rgba(241,242,244,.32);
     --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
     --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
     --glass-wash:rgba(255,255,255,.06);
@@ -647,11 +647,11 @@ small{font-size:12.5px}
          --danger-on-glass  #FFA79A   6.36:1
        The light theme's on-glass inks are all DARK (#5C4B51, #0B5863, …) and
        measure under 2:1 here, so every one of them is re-pointed. */
-    --glass-bg-text:hsl(24 14% 13% / .90);
-    --glass-bg-strong:hsl(24 14% 13% / .94);
-    --glass-bg-deco:hsl(24 14% 13% / .40);
-    --glass-solid:#26201D; --glass-solid-deep:#1E1917;
-    --glass-ink:#F2EFEC; --glass-ink-muted:#BDB5B8;
+    --glass-bg-text:hsl(222 11% 17% / .90);
+    --glass-bg-strong:hsl(222 11% 17% / .94);
+    --glass-bg-deco:hsl(222 11% 17% / .40);
+    --glass-solid:#272A30; --glass-solid-deep:#1F2227;
+    --glass-ink:#F1F2F4; --glass-ink-muted:#BCC1C9;
     --accent-on-glass:#7FE0EA; --warm-on-glass:#F0B860;
     --ok-on-glass:#6FD79A; --danger-on-glass:#FFA79A;
     --glass-rim-top:rgba(255,255,255,.10);
@@ -663,9 +663,9 @@ small{font-size:12.5px}
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --paper:#14100E; --surface:#1C1815; --panel:#262120; --panel-2:#201B19;
-  --ink:#F2EFEC; --ink-2:#C9C0BB; --muted:#A79C97;
-  --line:rgba(242,239,236,.12); --line-input:rgba(242,239,236,.30);
+  --paper:#1C1E23; --surface:#25282E; --panel:#31353C; --panel-2:#2A2E34;
+  --ink:#F1F2F4; --ink-2:#C9CDD4; --muted:#A3A9B3;
+  --line:rgba(241,242,244,.13); --line-input:rgba(241,242,244,.32);
   --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
   --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
   --glass-tint:24 18%; --glass-wash:rgba(255,255,255,.06);

@@ -224,9 +224,45 @@ const CSS = `
   overflow:clip;
   font-family:var(--font-text);
 }
+/* ---- TERMA'S OWN PALETTE — the LOGO's colours ----------------------------
+   Operator instruction, 2026-08-02: "have Terma AI coloured in the colours of
+   the logo". So the tab does not use ASC's violet: it uses AKVA navy and TERM
+   red, which is also why the water/heat loop works without inventing anything
+   — the identity is already a cool half and a warm half, and the animation is
+   just those two halves in sequence.
+
+   THE TAB IS GLASS AND MOSTLY TRANSPARENT, so its colours are measured against
+   the PAGE showing through it, not against a fill of its own:
+     --aid-water #00008C on --paper #F2F2F2   13.61:1   (the protected navy)
+     --aid-heat  #d6252e on --paper #F2F2F2    4.51:1   (the protected red)
+   In dark mode the navy is invisible (1.11:1 on #14100E), the same problem the
+   wordmark itself has, and it is solved the same way css/styles.css solves it:
+   the cool half moves to a light tint of itself rather than being dropped. The
+   red is kept, at 6.21:1 on the dark ground.
+     --aid-water #7FB2FF on --paper #14100E    8.42:1
+     --aid-heat  #FF5A63 on --paper #14100E    6.21:1
+   These are the FILL of an engraved word whose legibility comes from its two
+   shadows, so even mid-loop — when the fill is --aid-dry, i.e. nothing — the
+   word is still readable. That is what makes an animated fill safe here. */
+.ai-dock{
+  --aid-water:#00008C;
+  --aid-heat:#d6252e;
+  --aid-dry:rgba(0,0,0,0);
+  --aid-tab-glass:rgba(255,255,255,.34);
+  --aid-tab-rim:rgba(20,16,14,.16);
+  --aid-tab-ink:var(--ink);
+  --aid-emboss-hi:rgba(20,16,14,.34);
+  --aid-emboss-lo:rgba(255,255,255,.82);
+}
 :root[data-theme="dark"] .ai-dock{
   --aid-rim:rgba(196,181,253,.55);
   --aid-lift:0 34px 80px -26px rgba(0,0,0,.85);
+  --aid-water:#7FB2FF;
+  --aid-heat:#FF5A63;
+  --aid-tab-glass:rgba(255,255,255,.07);
+  --aid-tab-rim:rgba(242,239,236,.18);
+  --aid-emboss-hi:rgba(0,0,0,.55);
+  --aid-emboss-lo:rgba(255,255,255,.16);
 }
 /* Required as well as the attribute rule, not instead of it: applyTheme() in
    js/app.js only writes data-theme once the user has picked a side, so with no
@@ -235,6 +271,12 @@ const CSS = `
   :root:not([data-theme="light"]) .ai-dock{
     --aid-rim:rgba(196,181,253,.55);
     --aid-lift:0 34px 80px -26px rgba(0,0,0,.85);
+    --aid-water:#7FB2FF;
+    --aid-heat:#FF5A63;
+    --aid-tab-glass:rgba(255,255,255,.07);
+    --aid-tab-rim:rgba(242,239,236,.18);
+    --aid-emboss-hi:rgba(0,0,0,.55);
+    --aid-emboss-lo:rgba(255,255,255,.16);
   }
 }
 .ai-dock[hidden]{display:none}
@@ -243,58 +285,125 @@ const CSS = `
 /* 34x92 on a 17px left radius — 17 is exactly half the width, so the exposed
    edge is a true semicircle and the tab reads as a tucked-in tab rather than a
    rounded rectangle that happens to be at the edge. */
+/* ---- THE CLOSED TAB ------------------------------------------------------
+   Operator instruction, 2026-08-02: "a small, 20% smaller liquid glass side
+   card that has Terma engraved in that liquid glass (the letters are all
+   connected at the bottom) and also by default transparent ... an animated
+   loop effect where the engraved letters get filled with water, and then that
+   water gets dried out by heat".
+
+   So this is no longer a solid violet slab with an icon on it. It is glass:
+   the page reads through it, and the only thing with any weight is the word.
+   27x74 is the previous 34x92 at 80%.
+
+   HOW THE ENGRAVING WORKS. There is no image and no font trickery: the word is
+   real text, and the engraved look is two text-shadows — a light one below and
+   a dark one above — which is the classic letterpress recipe and the only one
+   that survives a transparent background, because it needs no fill of its own.
+   The letters are "connected at the bottom" by ::after, a hairline running the
+   length of the word along its baseline edge, so the five glyphs read as one
+   cut mark rather than five separate ones.
+
+   HOW THE WATER AND THE HEAT WORK. The fill is a gradient clipped to the glyph
+   shapes (background-clip:text) and moved with background-position — teal
+   climbing the letters, turning amber, then leaving them empty again. It is a
+   paint-only animation on a 27x74 box, and background-position is the same
+   technique css/styles.css already uses for the splash's patience shimmer, so
+   it is a precedent in this repo rather than a new idea. It is NOT a filter and
+   NOT a blur: nothing here forces a re-composite of the page behind the glass.
+
+   The gradient is read bottom-to-top, and the stops ARE the choreography:
+     0%   empty        the letters are just cut glass
+     28%  teal         water has risen through them        (AKVA)
+     52%  teal->amber  the heat arrives                    (TERM)
+     76%  amber fading the water is being driven off
+     100% empty        dry, and the loop begins again
+*/
 .ai-tab{
   position:absolute;top:41%;right:env(safe-area-inset-right,0px);z-index:40;
-  width:34px;height:92px;border:0;padding:0;
-  border-radius:17px 0 0 17px;
+  width:27px;height:74px;border:0;padding:0;
+  border-radius:14px 0 0 14px;
   display:grid;place-items:center;
-  background:linear-gradient(152deg,#a78bfa,#8b5cf6 46%,#6d28d9);
-  color:#fff;cursor:pointer;pointer-events:auto;
+  /* GLASS, not a fill. The tint is a whisper so the page shows through; the
+     blur is what makes it a surface rather than a hole. */
+  background:var(--aid-tab-glass);
+  color:var(--aid-tab-ink);cursor:pointer;pointer-events:auto;
   -webkit-tap-highlight-color:transparent;
-  /* The rim is FIRST so it sits tight against the edge, under the drop shadow.
-     It is what carries the tab's boundary past 3:1 in both themes [C3]. */
   box-shadow:
-    0 0 0 1px var(--aid-rim),
-    -7px 12px 28px -10px rgba(96,42,196,.72),
-    inset 0 1px 0 rgba(255,255,255,.22),
-    inset 1px 0 0 rgba(255,255,255,.12);
-  /* One transform property, driven by two variables, so the hover nudge, the
-     press and the open-state exit compose instead of overwriting each other. */
+    0 0 0 1px var(--aid-tab-rim),
+    -6px 10px 22px -12px rgba(20,16,14,.45),
+    inset 0 1px 0 rgba(255,255,255,.40),
+    inset 1px 0 0 rgba(255,255,255,.22);
   transform:translateX(var(--aid-tx,0)) scale(var(--aid-ts,1));
-  transition:transform .55s var(--aid-glide),opacity .4s var(--smooth);
+  transition:transform .55s var(--aid-glide),opacity .4s var(--smooth),
+             visibility 0s linear .55s,background .3s var(--smooth);
 }
-.ai-tab>svg{position:relative;z-index:2}
-/* The thin bright bar down the inner edge. A real element, not ::before:
-   both pseudo-elements are spent on the two glows, which have to cross-fade by
-   opacity because animating box-shadow is not allowed here. */
-.ai-tab-bar{
-  position:absolute;left:6px;top:12px;bottom:12px;width:2px;z-index:2;
-  border-radius:2px;opacity:.5;
-  background:linear-gradient(#fff,rgba(255,255,255,.2));
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .ai-tab{-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%)}
 }
-/* Breathing violet glow (at rest) and magenta glow (on hover). Both carry a
-   STATIC box-shadow and are faded with opacity only. */
-.ai-tab::before,.ai-tab::after{
-  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+
+.ai-tab-word{
+  position:relative;
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-family:var(--font-display,system-ui,sans-serif);
+  font-weight:600;font-size:12.5px;letter-spacing:.16em;
+  /* The cut. Transparent glyphs carrying the moving fill, with the two shadows
+     doing the engraving; -webkit- prefixes are required on iOS. */
+  color:transparent;
+  background-image:linear-gradient(to top,
+    var(--aid-dry) 0%, var(--aid-dry) 8%,
+    var(--aid-water) 28%, var(--aid-water) 44%,
+    var(--aid-heat) 60%, var(--aid-heat) 70%,
+    var(--aid-dry) 88%, var(--aid-dry) 100%);
+  background-size:100% 340%;
+  background-position:0 0;
+  -webkit-background-clip:text;background-clip:text;
+  text-shadow:0 1px 0 var(--aid-emboss-lo),0 -1px 0 var(--aid-emboss-hi);
+  animation:aiTermaFill 7.5s var(--smooth) infinite;
 }
-.ai-tab::after{
-  box-shadow:-7px 12px 34px -8px rgba(150,96,255,.9);
-  opacity:.35;animation:aiTabBreathe 3.4s var(--smooth) infinite;
+/* The bar that joins the letters at the bottom. It runs along the word's inner
+   edge (the tab is vertical, so "bottom" is the left side of the rotated text)
+   and carries the same fill, one beat behind, so the water appears to come
+   from it rather than to appear inside each letter independently. */
+.ai-tab-word::after{
+  content:"";position:absolute;left:-3px;top:2px;bottom:2px;width:1.5px;
+  border-radius:2px;
+  background-image:linear-gradient(to top,
+    var(--aid-dry) 0%, var(--aid-dry) 8%,
+    var(--aid-water) 28%, var(--aid-water) 44%,
+    var(--aid-heat) 60%, var(--aid-heat) 70%,
+    var(--aid-dry) 88%, var(--aid-dry) 100%);
+  background-size:100% 340%;
+  animation:aiTermaFill 7.5s var(--smooth) .18s infinite;
 }
-.ai-tab::before{
-  box-shadow:-9px 14px 32px -8px rgba(224,64,208,.72);
-  opacity:0;transition:opacity .4s var(--smooth);
+@keyframes aiTermaFill{
+  from{background-position:0 100%}
+  to{background-position:0 -240%}
 }
-@media(any-hover:hover){
-  .ai-tab:hover{--aid-tx:-4px}
-  .ai-tab:hover::before{opacity:1}
-  .ai-tab:hover::after{opacity:0}
-}
+
+@media(any-hover:hover){ .ai-tab:hover{--aid-tx:-4px} }
 .ai-tab:active{--aid-ts:.95}
-.ai-tab:focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
-.ai-dock[data-open="true"] .ai-tab{--aid-tx:130%;opacity:0;pointer-events:none;animation:none}
-.ai-dock[data-open="true"] .ai-tab::after{animation:none}
-@keyframes aiTabBreathe{50%{opacity:.85}}
+/* The ring is drawn OUTSIDE the tab, i.e. on the PAGE, so it must be measured
+   against the page — not against the panel. It was a light violet chosen
+   against the dark panel and measured 1.6:1 on --paper. --ink is the one token
+   guaranteed to carry on the page ground in both themes. */
+.ai-tab:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+/* visibility, not opacity alone: an opacity:0 button is still focusable and
+   still in the tab order, so a keyboard user could land on an invisible
+   control that closes the panel with no visible cause. Delayed to the end of
+   the slide by the transition above so the exit is still seen. */
+.ai-dock[data-open="true"] .ai-tab{
+  --aid-tx:130%;opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .55s var(--aid-glide),opacity .4s var(--smooth),visibility 0s linear .55s;
+}
+.ai-dock[data-open="true"] .ai-tab-word,
+.ai-dock[data-open="true"] .ai-tab-word::after{animation:none}
+/* The loop is ambient decoration on a control that is always on screen. Motion
+   sensitivity is exactly the case it must yield to; the word stays legible
+   because the engraving is shadows, not the fill. */
+@media(prefers-reduced-motion:reduce){
+  .ai-tab-word,.ai-tab-word::after{animation:none;background-position:0 42%}
+}
 
 /* ----------------------------------------------------------------- panel */
 .ai-panel{
@@ -573,7 +682,10 @@ function markup(configured) {
   return '' +
     '<button type="button" class="ai-tab" id="aiTab" aria-expanded="false" aria-controls="aiPanel" ' +
       'aria-label="' + esc(tf('aid.open', 'Otvorite Termu — AI savjetnicu')) + '">' +
-      '<span class="ai-tab-bar" aria-hidden="true"></span>' + ICON_SPARK +
+      // The word is the whole control. aria-hidden because the button already
+      // carries a fuller accessible name above — announcing "Terma" twice, once
+      // as a name and once as content, is worse than not announcing it.
+      '<span class="ai-tab-word" aria-hidden="true">Terma</span>' +
     '</button>' +
     // role="dialog" WITHOUT aria-modal: the dock is deliberately non-modal, as
     // ASC decided. Nothing goes inert, there is no scrim, and the page under it
@@ -624,6 +736,13 @@ let history = [];         // [{role,content}] — the dock's OWN turn list
 let aborter = null;       // AbortController of the in-flight stream
 let listeners = [];       // [[target,type,handler]] for exact removal
 let open_ = false;
+
+/** Enable or disable every suggestion chip together. Null-guarded because it
+ *  runs from ask()'s finally, which can outlive unmount(). */
+function setChipsDisabled(off) {
+  if (!els || !els.chips) return;
+  for (const b of els.chips.querySelectorAll('[data-chip]')) b.disabled = Boolean(off);
+}
 
 const on = (target, type, handler, opts) => {
   target.addEventListener(type, handler, opts);
@@ -723,6 +842,29 @@ export function mount(host) {
     e.stopPropagation();
     close();
   });
+
+  // CLICK OUTSIDE CLOSES. Operator instruction, 2026-08-02: "her disappearance
+  // should occur whenever I click anywhere outside the Terma AI".
+  //
+  // pointerdown, not click: the dock is non-modal, so the thing the user
+  // pressed is a live control and its own click handler must still run. Closing
+  // on pointerdown lets the press land on whatever is underneath in the same
+  // gesture rather than being spent on dismissing.
+  //
+  // Capture phase, so a handler that stops propagation on its way up cannot
+  // strand the panel open.
+  //
+  // NOTHING IS DISCARDED HERE. close() only hides; the transcript, the input
+  // text and the server-side session handle all live in module state and are
+  // untouched, which is the other half of the same instruction: "if user
+  // accidentally presses outside and tries to come back to it, Terma has to
+  // remember where it was and not have user start a new". Only the explicit
+  // "Novi razgovor" control clears anything.
+  on(document, 'pointerdown', (e) => {
+    if (!open_ || !dock) return;
+    if (dock.contains(e.target)) return;   // inside the panel, or the tab
+    close();
+  }, true);
 
   // The dock wires its OWN route visibility rather than requiring a call from
   // js/app.js. hashchange fires for every navigation this router makes (it is a
@@ -830,6 +972,14 @@ export async function ask(text) {
   say(tf('aid.hint.thinking', 'Terma razmišlja…'), true);
   announce(tf('aid.hint.thinking', 'Terma razmišlja…'));
   els.send.disabled = true;
+  // The chips go with it. Without this they stay enabled, styled as live and
+  // clickable, while ask() returns '' immediately for the whole in-flight
+  // window and the delegated handler swallows the result -- so the press
+  // animates, nothing happens, and there is no error to explain why. The typed
+  // path was already covered because its implicit submission fires at the
+  // disabled default button; the chips were the one reachable way to press a
+  // control that does nothing.
+  setChipsDisabled(true);
   aborter = new AbortController();
 
   let acc = '';
@@ -869,6 +1019,7 @@ export async function ask(text) {
   } finally {
     aborter = null;
     if (els && els.send) els.send.disabled = !isConfigured();
+    setChipsDisabled(!isConfigured());
   }
 }
 
