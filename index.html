@@ -87,12 +87,12 @@
      The inline script below owns its dismissal; js/app.js asks for it once the
      first view has painted and never removes this element itself.
 
-     The wordmark is the identity in four syllables: AKVA in teal (--accent,
-     the sampled iris darkened to 5.17:1 on --paper) and TERM in amber
-     (--brand-warm, 5.23:1) — water and heat, which is what the company name
-     already says. Set in Anton; .sp-mark carries line-height 1.1 and sits in
-     no clipped box, because Anton's Croatian carons reach 1.100em.
-     The rule beneath it sweeps teal -> amber. -->
+     The wordmark is Akvaterm's own identity and is EXEMPT from the Iris
+     palette by operator instruction: AKVA in navy (--logo-navy #00008C), TERM
+     in red (--logo-red #d6252e), italic 800 in the text face — not Anton, not
+     teal/amber. css/styles.css owns those protected tokens; do not restyle the
+     logo when the palette changes. The rule beneath it sweeps teal -> amber,
+     which is where the Iris palette belongs. -->
 <div id="splash" aria-hidden="true">
   <div class="sp-core">
     <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>

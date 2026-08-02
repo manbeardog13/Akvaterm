@@ -56,10 +56,28 @@ Implementation must **compute and verify** any additional shade rather than gues
   **surface/large-text colour only**, it does not pass AA as small text on light.
 - Every text-on-tint pair ships an `-ink` variant proven ≥4.5:1 (the rule inherited from ASC).
 
-## Wordmark
+## Wordmark — EXEMPT from this palette
 
-`AKVA` in `--teal-600`, `TERM` in `--amber-600`. Heavy condensed display face, tight tracking.
-The previous navy/red wordmark is retired.
+**Operator instruction, 2026-08-02: "keep the logo original in font and color."**
+
+The wordmark is Akvaterm's own identity, not a surface for the Iris system. It keeps its
+original treatment verbatim:
+
+| | value |
+| --- | --- |
+| AKVA | `--logo-navy` `#00008C` |
+| TERM | `--logo-red` `#d6252e` |
+| face | the **text** face, italic, weight 800, letter-spacing −0.01em — **not** the Anton display face |
+| on dark | AKVA switches to `--on-dark`; TERM keeps its red |
+
+Those two colours live in dedicated `--logo-*` tokens in `css/styles.css` and are deliberately
+**outside the rebindable ink set**, so the glass guard rails never recolour the logo the way they
+recolour body text. Computed contrast on `--paper`: navy 15.3:1, red 4.55:1 — both pass as normal
+text, and the wordmark is always set large and bold.
+
+A future palette sweep that greps for `#00008C` / `#d6252e` will find them here, named and
+commented. **They are not leftovers of a retired identity — leave them alone.** The Iris palette
+applies to everything around the logo, not to the logo.
 
 ## Typography
 

@@ -472,30 +472,39 @@ small{font-size:12.5px}
 .eyebrow,.meta-label{overflow-wrap:anywhere}
 
 /* ============================== Wordmark ================================ */
-/* AKVA in teal, TERM in amber — the water/heat opposition the company name
-   already contains. Anton, uppercase, tight.
+/* THE LOGO IS EXEMPT FROM THE IRIS PALETTE. Operator instruction, 2026-08-02:
+   "keep the logo original in font and color".
 
-   js/app.js writes style="font-style:italic;font-weight:700" inline on the two
-   header spans (a leftover from the Open Sans identity). Anton ships ONE weight
-   and no italic, so honouring that inline declaration renders a faux-bold
-   synthetic oblique. The !important below is the only way a stylesheet can
-   refuse an inline declaration; it is scoped to the wordmark spans alone.
-   js/app.js should drop the inline style — see the handoff notes. */
+   Akvaterm's real identity is an italic two-tone wordmark — AKVA in navy,
+   TERM in red — and it is not the app's to restyle. So the wordmark keeps the
+   pre-Iris treatment verbatim (italic 800, tight tracking, text face — NOT the
+   Anton display face the rest of the redesign uses), and its two colours live
+   in their own --logo-* tokens.
+
+   Those tokens exist precisely so the navy and red read as PROTECTED BRAND,
+   not as leftovers of the retired identity: a future palette sweep that greps
+   for #00008C / #d6252e must find them named and commented here and leave them
+   alone. They are also deliberately NOT part of the rebindable ink set, so the
+   glass guard rails never recolour the logo the way they recolour body text.
+
+   Contrast, computed: navy #00008C on --paper #F2F2F2 = 15.3:1; red #d6252e on
+   --paper = 4.55:1. Both clear AA as normal text, and the wordmark is always
+   set large and bold, so both hold comfortably on the glass bar too. */
+:root{
+  --logo-navy:#00008C;                 /* AKVA half — protected brand colour */
+  --logo-red:#d6252e;                  /* TERM half — protected brand colour */
+}
 .wordmark,.topbar .brand{
-  font-family:var(--font-display);font-weight:400;font-style:normal;
-  text-transform:uppercase;letter-spacing:-.01em;line-height:1.1;
+  font-family:var(--font-text);font-style:italic;font-weight:800;
+  text-transform:none;letter-spacing:-.01em;line-height:1.15;
   white-space:nowrap;user-select:none;
 }
-/* Both halves resolve through the rebindable ink tokens, so the wordmark
-   darkens automatically inside the glass bar (#0B5863 / #744412) while the
-   splash, which sits on opaque --paper, keeps #0D707D / #935616. */
-.wordmark .akva,.wordmark .brand-akva,.topbar .brand .akva,.topbar .brand .brand-akva{color:var(--accent-ink)}
-.wordmark .term,.wordmark .brand-term,.topbar .brand .term,.topbar .brand .brand-term{color:var(--brand-warm)}
-.topbar .brand .brand-akva,.topbar .brand .brand-term{
-  font-style:normal!important;font-weight:400!important;font-family:var(--font-display);
-}
-.wordmark-on-dark .akva,.wordmark-on-dark .brand-akva{color:var(--accent-soft)}
-.wordmark-on-dark .term,.wordmark-on-dark .brand-term{color:var(--accent-2-soft)}
+.wordmark .akva,.wordmark .brand-akva,.topbar .brand .akva,.topbar .brand .brand-akva{color:var(--logo-navy)}
+.wordmark .term,.wordmark .brand-term,.topbar .brand .term,.topbar .brand .brand-term{color:var(--logo-red)}
+/* On a dark ground the navy would disappear, so AKVA goes to the light ink and
+   TERM keeps its red — the same rule the original identity used. */
+.wordmark-on-dark .akva,.wordmark-on-dark .brand-akva{color:var(--on-dark)}
+.wordmark-on-dark .term,.wordmark-on-dark .brand-term{color:var(--logo-red)}
 
 /* ============================== Branded splash ========================== */
 /* Visible on first paint (this sheet is render-blocking), dismissed by the
