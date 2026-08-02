@@ -625,19 +625,42 @@ export function releasePrototypes() {
   protoRefs = Math.max(0, protoRefs - 1);
   if (protoRefs > 0) return;
   for (const p of protoCache.values()) {
-    p.then((proto) => disposeObject(proto.root, true)).catch(() => { /* never loaded */ });
+    p.then((proto) => {
+      // The cache is GIVING UP ownership here, so it lifts its own claim and
+      // then frees through the ordinary walk. That is the whole protocol, and
+      // it is why disposeObject() has no override: `shared` is a claim of
+      // ownership, not advice a caller may overrule, so only the claimant can
+      // drop it. Clearing it on the prototype cannot strand a clone — the
+      // refcount is zero, so by definition no consumer is still drawing one.
+      proto.root.traverse((o) => { if (o.userData) o.userData.shared = false; });
+      disposeObject(proto.root);
+    }).catch(() => { /* never loaded */ });
   }
   protoCache.clear();
   gltfLoader = null;
 }
 
-/** @param {boolean} force  dispose even resources flagged as shared. */
-export function disposeObject(root, force = false) {
+/**
+ * Free the geometry, materials and maps a subtree OWNS.
+ *
+ * There is deliberately no way to override the `shared` guard, and there used
+ * to be: a `force` flag, which js/room3d.js still passes at teardown. Forcing
+ * frees the geometry, materials and maps the prototype cache still owns and
+ * still hands to every other live consumer — a mounted Dizajner scene, an
+ * in-flight thumbnail render — which is exactly what the refcount three lines
+ * below that call exists to prevent. It is a use-after-free that never throws:
+ * three re-uploads silently from the JS-side attribute arrays and
+ * texture.source.data, so it surfaces as resource churn and, once the cache has
+ * moved on, as a fixture that renders as nothing at all — never as an error
+ * anyone could trace back to here. An extra argument at an old call site is now
+ * simply ignored, which is the point: the guard cannot be defeated by accident.
+ */
+export function disposeObject(root) {
   root.traverse((obj) => {
     // Lines and points carry geometry + material too — the selection outline is
     // a LineLoop, and an isMesh-only walk would leak it on every teardown.
     if (!obj.isMesh && !obj.isLine && !obj.isPoints) return;
-    if (obj.userData.shared && !force) return;   // cloned GLB — the prototype owns it
+    if (obj.userData.shared) return;   // cloned GLB — the prototype cache owns it
     if (obj.geometry) obj.geometry.dispose();
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const m of mats) {

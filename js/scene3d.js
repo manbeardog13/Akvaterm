@@ -248,6 +248,16 @@ function configureRenderer(renderer) {
   renderer.toneMappingExposure = 0.9;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // The other half of scene.background = null (see createStage). alpha:true on
+  // the constructor only gives the drawing buffer an alpha channel; without
+  // this the buffer is still CLEARED to opaque, so the room would sit on a
+  // black card instead of on the page. Clearing to 0 is what lets the page
+  // ground show through and makes the room read as a single object.
+  //
+  // Note this runs for the thumbnail renderer too, which is correct: a snapshot
+  // with a transparent ground composites onto whatever card shows it, rather
+  // than baking in a background that will not match.
+  renderer.setClearColor(0x000000, 0);
 }
 
 /** Wall anchors and a default facing for a fixture that names a wall. */
@@ -272,7 +282,21 @@ function createStage(renderer, def, products) {
   const dims = roomOf(def);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(IRIS.paper);   // --paper #F2F2F2
+  // NO BACKGROUND. Operator instruction, 2026-08-02: "can we have the designer
+  // room made so there isn't any white background, can we just have it framed
+  // along the edges of walls, so it's basically like a single object on the
+  // page". A scene.background paints the full canvas rectangle, which is what
+  // made the room look like a photograph pasted onto a card rather than an
+  // object sitting on the page.
+  //
+  // Leaving it null is only half the job: the RENDERER still clears to opaque
+  // black unless it was constructed with alpha and told to clear to 0 — see
+  // configureRenderer(). Both halves are required, and a null background with
+  // an opaque clear is worse than either, because it produces a black card.
+  //
+  // It also makes the framing below visible as framing: with the room's own
+  // bounds filling the canvas exactly, any pixel that is not room is now page.
+  scene.background = null;
 
   // ---- The light rig ------------------------------------------------------
   // Four sources, ONE shadow map. It is the standard interior set-up, and each
@@ -297,12 +321,48 @@ function createStage(renderer, def, products) {
   //     kicks, worktop noses) and touches up-facing ones not at all.
   const ENV_FILL = 0.6;
 
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = new RoomEnvironment();
-  const envRT = pmrem.fromScene(envScene, 0.04);
-  scene.environment = envRT.texture;
-  scene.environmentIntensity = ENV_FILL;
-  if (typeof envScene.dispose === "function") envScene.dispose();
+  let pmrem = null;
+  let envRT = null;
+
+  /**
+   * Build, or REBUILD, the image-based fill.
+   *
+   * It has to be rebuildable, and that is the whole reason this is a function.
+   * Every other texture in the scene has something on the CPU behind it — a
+   * CanvasTexture keeps its canvas, a GLB map keeps its decoded image — so when
+   * a WebGL context is lost and restored three simply re-uploads them and
+   * nobody notices. This one has nothing behind it: PMREMGenerator.fromScene()
+   * RENDERS its result into a WebGLRenderTarget (vendor/three/three.module.js:
+   * 2706-2726), so once the GPU allocation is gone the pixels are gone, and
+   * scene.environment is left pointing at a texture that samples as nothing.
+   *
+   * That is not a cosmetic loss, it is THE material regression. The environment
+   * is the only thing the tuned surfaces have to reflect: js/gfx3d.js
+   * MATERIAL_TUNING deliberately corrects chrome to metalness 1, the mirror to
+   * a near-perfect reflector and the glazed ceramics to roughness 0.1, and a
+   * metal has no diffuse term at all — with no environment it returns almost
+   * nothing, and every polished surface in the room collapses to flat matte.
+   * The scene goes exactly as "plain" as it was before the tuning table existed,
+   * and stays there, because nothing else in a locked-camera view would ever
+   * rebuild it. Measured here, live, by losing and restoring the context: mean
+   * frame luminance 206.2 -> 141.4 with 34384 of 38376 sampled pixels changed,
+   * which is the same frame as forcing environmentIntensity to 0.
+   *
+   * The generator is rebuilt too, not reused: its internal targets and blur
+   * materials belong to the context that just died.
+   */
+  function buildEnvironment() {
+    scene.environment = null;
+    if (envRT) { envRT.dispose(); envRT = null; }
+    if (pmrem) { pmrem.dispose(); pmrem = null; }
+    pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new RoomEnvironment();
+    envRT = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envRT.texture;
+    scene.environmentIntensity = ENV_FILL;
+    if (typeof envScene.dispose === "function") envScene.dispose();
+  }
+  buildEnvironment();
 
   const sun = new THREE.DirectionalLight(0xfff1e0, 3.3);
   sun.castShadow = true;
@@ -315,6 +375,28 @@ function createStage(renderer, def, products) {
   // literally a second full draw of every mesh. It now runs only when something
   // has actually moved; markShadowsDirty() is called from applyRec(), which is
   // the one funnel every placement change goes through.
+  //
+  // The price of that is an invariant nothing in three enforces: the depth map
+  // is written ONCE and is thereafter assumed valid forever. It is not. What
+  // backs it is a GPU allocation, and a GPU allocation can be taken away — a
+  // lost-and-restored context, a GPU-process restart, a backing store dropped
+  // on a hidden canvas. r185 carries the GLOBAL WebGLShadowMap flags across a
+  // restore (vendor/three/three.module.js:17111-17123) but knows nothing about
+  // the PER-LIGHT flag, and that one was cleared by the first render
+  // (three.module.js:9412), so the guard at three.module.js:9219 skips the
+  // depth pass from then on, forever. The scene keeps drawing, with a shadow
+  // map that says everything is occluded: the KEY light stops reaching any
+  // surface and what is left is the flat, even, all-directions environment fill
+  // — the precise look the rig above exists to escape. Measured on the live
+  // bathroom by dropping the depth map's allocation: mean frame luminance
+  // 206.2 -> 184.3, 19721 of 38376 sampled pixels changed, unchanged by any
+  // number of further renders, and restored EXACTLY by setting needsUpdate.
+  //
+  // Nothing here can detect that. So every moment the drawing buffer may have
+  // been reallocated re-arms it instead — see the webglcontextrestored
+  // listener, resize() and snapshotTo() in mountScene(). Before that the only
+  // repair in the whole app was dragging a fixture, which is why the fault
+  // could look like it was caused, or cured, by clicking.
   sun.shadow.autoUpdate = false;
   sun.shadow.needsUpdate = true;
   scene.add(sun);
@@ -476,7 +558,10 @@ function createStage(renderer, def, products) {
     sc.updateProjectionMatrix();
   }
 
-  /** Every placement change funnels through applyRec(), which calls this. */
+  /** Re-arm the one-shot depth pass. Every placement change funnels through
+   *  applyRec(), which calls this; mountScene() calls it wherever the GPU-side
+   *  allocation behind the shadow map may have gone away. See the sun.shadow
+   *  block above for why the second caller is not optional. */
   function markShadowsDirty() { sun.shadow.needsUpdate = true; }
 
   // ---- zoom on a locked camera -------------------------------------------
@@ -506,21 +591,187 @@ function createStage(renderer, def, products) {
   // largest in data/scenes.js is 0.25.
   const MAX_SHIFT = 0.6;
 
-  let lastAspect = 1;
-  function setAspect(aspect) {
-    lastAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-    camera.fov = framedFov(baseFov, lastAspect) * zoom;
-    // k depends on the CURRENT fov, so it is recomputed here rather than cached:
-    // a narrow viewport widens the fov (framedFov) and a pinch narrows it, and
-    // in both cases the shift has to follow or the horizon would slide.
+  // ---- FRAME TO THE ROOM ---------------------------------------------------
+  // Operator instruction, 2026-08-02: "framed along the edges of walls, so it's
+  // basically like a single object on the page ... the bottom surface is fully
+  // visible, not cut off as it currently is".
+  //
+  // The authored FOV cannot do that. data/scenes.js gives each scene a fov
+  // chosen for its composition at a 4:3 reference, and framedFov() only widens
+  // it as the viewport gets NARROWER than that. At any other shape the room
+  // either floats inside a margin or, on a short stage, runs off the bottom of
+  // the frame — which is the floor being cut off, and the floor is the surface
+  // this view exists to let people tile.
+  //
+  // So the FOV is DERIVED from the room instead of authored: find the smallest
+  // vertical FOV whose frustum still contains all eight corners of the room box
+  // at the current aspect. The result is a room that touches the frame on its
+  // limiting axis and is never clipped on either.
+  //
+  // It is solved numerically rather than in closed form ON PURPOSE. A formula
+  // would have to re-derive what setViewOffset() does to the frustum — this
+  // scene shears it to fake a rise movement (see the lensShift block) — and
+  // that derivation is exactly the kind of thing that silently stops matching
+  // three's internals on an upgrade. Projecting the corners through the REAL
+  // projection matrix cannot disagree with the renderer, because it is the same
+  // matrix the renderer will use. Sixteen bisection steps on eight points runs
+  // once per resize and is far below the cost of the frame it is preparing.
+  // FIT TO THE SURFACES THAT ARE ACTUALLY DRAWN, not to the room box.
+  //
+  // This first fitted the eight corners of the full room — and it was wrong in
+  // a way that looked like the fit had simply not run: the box includes the two
+  // walls the camera stands outside of, which updateSurfaceVisibility() hides.
+  // So the frustum was being sized around a volume half of which is invisible,
+  // and the visible corner then sat in the middle of the stage with page all
+  // around it. Exactly the symptom the fit was added to remove.
+  //
+  // The three authored surfaces ARE the subject here — operator instruction:
+  // "just surfaces we are choosing the materials for and its furniture ...
+  // without the background room" — so their union is the thing to frame, and
+  // it is what "framed along the edges of walls" names.
+  //
+  // Recomputed per fit rather than cached: it is a Box3 over three planes, and
+  // a wall's visibility can change (updateSurfaceVisibility) between calls.
+  // setFromObject on the FIXTURES group is deliberately not included — that
+  // would walk every GLB vertex in the room on every resize, and the furniture
+  // stands inside these bounds anyway.
+  const _fitBox = new THREE.Box3();
+  const _fitCorners = Array.from({ length: 8 }, () => new THREE.Vector3());
+  function refreshFitCorners() {
+    _fitBox.makeEmpty();
+    for (const rec of surfaceRecs.values()) {
+      if (rec.mesh && rec.mesh.visible) _fitBox.expandByObject(rec.mesh);
+    }
+    if (_fitBox.isEmpty()) {
+      // No surfaces yet (called before they are built): fall back to the room
+      // box so the first frame is framed rather than undefined.
+      _fitBox.set(
+        new THREE.Vector3(-dims.widthM / 2, 0, -dims.depthM / 2),
+        new THREE.Vector3(dims.widthM / 2, dims.heightM, dims.depthM / 2));
+    }
+    let i = 0;
+    for (const x of [_fitBox.min.x, _fitBox.max.x]) {
+      for (const y of [_fitBox.min.y, _fitBox.max.y]) {
+        for (const z of [_fitBox.min.z, _fitBox.max.z]) _fitCorners[i++].set(x, y, z);
+      }
+    }
+  }
+  const _fitP = new THREE.Vector3();
+  // A hair of breathing room so the wall edge is not sitting on the antialiased
+  // boundary pixel. 1.2% of half-frame, i.e. under 3px on a 480px stage.
+  const FIT_MARGIN = 0.012;
+
+  /** Project the fit corners at a given fov and return their NDC extent, or
+   *  null when any corner is at or behind the camera plane — the projection is
+   *  meaningless there and a bisection on it would converge to nonsense. */
+  function extentAt(fovDeg, aspect) {
+    applyProjection(fovDeg, aspect);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const c of _fitCorners) {
+      _fitP.copy(c).applyMatrix4(camera.matrixWorldInverse);
+      if (-_fitP.z <= camera.near) return null;
+      _fitP.copy(c).project(camera);
+      minX = Math.min(minX, _fitP.x); maxX = Math.max(maxX, _fitP.x);
+      minY = Math.min(minY, _fitP.y); maxY = Math.max(maxY, _fitP.y);
+    }
+    return { minX, maxX, minY, maxY };
+  }
+
+  /** Every corner inside the frame — nothing clipped. */
+  function fitsAt(fovDeg, aspect) {
+    const e = extentAt(fovDeg, aspect);
+    if (!e) return false;
+    return Math.max(-e.minX, e.maxX) <= 1 - FIT_MARGIN
+        && Math.max(-e.minY, e.maxY) <= 1 - FIT_MARGIN;
+  }
+
+  /** The subject spans the frame's full WIDTH — it may overflow vertically. */
+  function fillsWidthAt(fovDeg, aspect) {
+    const e = extentAt(fovDeg, aspect);
+    if (!e) return false;
+    return e.minX <= -1 && e.maxX >= 1;
+  }
+
+  // The search runs from a deliberately IMPOSSIBLE lower bound, not from the
+  // authored fov. Bounding it below by framedFov() would only ever let the
+  // frame widen, and widening is the half of the problem that is already
+  // visible: at the authored fov the room sits in the middle of the stage with
+  // page all around it, which is the "white background" the operator asked to
+  // remove. Filling the frame requires TIGHTENING, so the authored value has to
+  // be free to move in both directions and the room's own bounds become the
+  // only thing deciding the framing.
+  const FIT_MIN_FOV = 4;
+
+  // How far the frame is allowed to tighten past "everything visible" in order
+  // to fill the stage. Operator instruction, 2026-08-02: "make that fill the
+  // page somehow ... if needed to cut the bottom surface a bit" — so cropping
+  // is sanctioned. 0.62 lets the frame close to about five eighths of the
+  // contain framing, which fills the stage on every shape the designer stage
+  // takes and spends the overflow on the near floor edge and the wall tops —
+  // the two places with nothing to choose. It is a FLOOR, not a target: the
+  // fill pass stops as soon as the width is covered, so a stage that is already
+  // full never tightens at all.
+  const FILL_TIGHTEN_LIMIT = 0.62;
+
+  function fitFovToRoom(aspect) {
+    refreshFitCorners();
+
+    // Nothing fits even wide open: the camera is inside the surface bounds, or
+    // the scene is authored in a way this cannot solve. Fall back to the
+    // authored framing rather than return a number that would look like a
+    // decision.
+    if (!fitsAt(MAX_FOV, aspect)) return framedFov(baseFov, aspect);
+
+    // Pass 1 — CONTAIN. The smallest fov that clips nothing. Both predicates
+    // are monotonic in fov (the camera is fixed, so a wider frustum strictly
+    // contains a narrower one), which is what makes bisection valid here.
+    // 16 steps over 4..85 settles to under 0.002 degrees.
+    let lo = FIT_MIN_FOV, hi = MAX_FOV;
+    for (let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2;
+      if (fitsAt(mid, aspect)) hi = mid; else lo = mid;
+    }
+    const containFov = hi;
+
+    // Pass 2 — FILL. Tighten until the subject spans the full width. Contain
+    // alone leaves page down both sides on any stage wider than the subject,
+    // which is the "make it fill" complaint. Width is the axis to fill because
+    // the overflow then goes vertical, where the crop lands on the near floor
+    // edge and the wall tops — the parts with nothing to choose on them.
+    let flo = FIT_MIN_FOV, fhi = containFov;
+    for (let i = 0; i < 16; i++) {
+      const mid = (flo + fhi) / 2;
+      // Smaller fov -> larger projection -> more likely to cover the width.
+      if (fillsWidthAt(mid, aspect)) flo = mid; else fhi = mid;
+    }
+    // flo is the widest fov that still fills; if nothing filled, flo stayed at
+    // FIT_MIN_FOV, and clamping is what stops that from becoming a telephoto
+    // crop of one tile.
+    const fillFov = fillsWidthAt(flo, aspect) ? flo : containFov;
+    return Math.max(fillFov, containFov * FILL_TIGHTEN_LIMIT);
+  }
+
+  /** Write fov + aspect + shear into the camera and rebuild the projection.
+   *  Split out of setAspect() so the fit search can drive the SAME code the
+   *  renderer will use — a search against a second, near-copy of this maths is
+   *  a search against the wrong frustum. */
+  function applyProjection(fovDeg, aspect) {
+    camera.fov = fovDeg;
     const k = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT,
       Math.tan(lensShift) / Math.tan((camera.fov * Math.PI) / 360)));
     if (Math.abs(k) > 1e-4) camera.setViewOffset(1, 1, 0, k / 2, 1, 1);
     else camera.clearViewOffset();
     // setViewOffset() overwrites camera.aspect with fullWidth/fullHeight, so the
     // real aspect is restored AFTER it and the projection rebuilt once more.
-    camera.aspect = lastAspect;
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+  }
+
+  let lastAspect = 1;
+  function setAspect(aspect) {
+    lastAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    applyProjection(fitFovToRoom(lastAspect) * zoom, lastAspect);
     updateSurfaceVisibility();
   }
 
@@ -741,13 +992,16 @@ function createStage(renderer, def, products) {
     fixtureRecs.length = 0;
     surfaceRecs.clear();
     surfaceOrder.length = 0;
-    // force=false: the cloned GLB meshes are flagged `shared` and belong to the
-    // prototype cache, which is refcounted and freed by releasePrototypes().
-    // Forcing here would tear geometry out from under any other live consumer.
-    disposeObject(scene, false);
+    // Frees this stage's OWN resources — the surface planes, their canvas
+    // textures, any placeholder still standing in for a model. The cloned GLB
+    // meshes are flagged `shared` and belong to the prototype cache, which is
+    // refcounted and freed by releasePrototypes(); disposing them from here
+    // would tear geometry out from under every other live consumer, which is
+    // why gfx3d.js no longer offers a way to ask for that.
+    disposeObject(scene);
     scene.environment = null;
-    envRT.dispose();
-    pmrem.dispose();
+    if (envRT) { envRT.dispose(); envRT = null; }
+    if (pmrem) { pmrem.dispose(); pmrem = null; }
   }
 
   return {
@@ -756,7 +1010,7 @@ function createStage(renderer, def, products) {
     skippedFixtures, ready, maxAniso,
     assignments,
     isBare: () => bare,
-    lensShift, markShadowsDirty,
+    lensShift, markShadowsDirty, rebuildEnvironment: buildEnvironment,
     // The zoom state lives in this closure, so the wheel and pinch handlers in
     // mountScene() have to reach it THROUGH the stage. They previously named
     // `applyZoom` and `zoom` directly, which are not in their scope: every
@@ -800,10 +1054,16 @@ export async function mountScene(el, {
   onReady,
   onSelect,
 } = {}) {
-  retainPrototypes();
   let disposed = false;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // The renderer FIRST, and the refcount only once it exists. On a device
+  // without WebGL this constructor throws, js/views/dizajner.js catches it and
+  // shows engineUnavailable() — and a retain taken above it would never be
+  // matched by the release in dispose(), because there is no handle to dispose.
+  // The count could then never fall back to zero and the prototype cache would
+  // be pinned for the rest of the session.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  retainPrototypes();
   // Capped at 2: a phone reporting devicePixelRatio 3 or 4 would otherwise cost
   // 4x to 9x the fragments of a 1x buffer for a difference nobody can see at
   // arm's length, and this stage is the most expensive thing the app draws.
@@ -1003,6 +1263,12 @@ export async function mountScene(el, {
     const w = el.clientWidth, h = el.clientHeight;
     if (!w || !h) return;
     renderer.setSize(w, h, false);
+    // setSize reallocates the drawing buffer, and the ordinary way this fires
+    // is a mount coming back from 0 x 0 — a route returning, a panel unhidden —
+    // which is exactly when a canvas is handed a brand new backing store. The
+    // depth pass is one-shot, so it is re-armed here rather than left to be
+    // discovered later, on the frame that stuck.
+    stage.markShadowsDirty();
     stage.setAspect(w / h);
     syncSurfaceOutline();
     requestRender();
@@ -1205,54 +1471,23 @@ export async function mountScene(el, {
     if (handled) e.preventDefault();
   }
 
-  // ---- zoom input ----------------------------------------------------------
-  // Wheel/trackpad on desktop, two-finger pinch on touch. The page itself can
-  // no longer zoom (viewport user-scalable=no + touch-action:pan-y), so these
-  // gestures are free to mean "camera" here without fighting the browser.
+  // ---- zoom input: REMOVED --------------------------------------------------
+  // Operator instruction, 2026-08-02: the designer is "not zoomable but user
+  // can click on each of three surfaces". A wheel dolly and a two-finger pinch
+  // used to live here.
   //
-  // preventDefault on wheel is why the listener is explicitly NOT passive: the
-  // wheel would otherwise scroll the page under the stage while the camera also
-  // dollied, which is exactly the "swimming" the operator asked to remove.
-  function onWheel(e) {
-    e.preventDefault();
-    if (stage.applyZoom(stage.getZoom() * (e.deltaY > 0 ? 1.08 : 1 / 1.08))) requestRender();
-  }
-  canvasEl.addEventListener("wheel", onWheel, { passive: false });
-
-  // Pinch: tracked from raw pointer events rather than a gesture API, because
-  // touch-action:pan-y already forbids the browser's own pinch, so the two
-  // pointers arrive here intact. A pinch is only recognised while exactly two
-  // are down, and it never starts a fixture drag — onPointerDown bails out.
-  const zoomPointers = new Map();
-  let pinchBase = 0, pinchZoomBase = 1;
-  function pinchDistance() {
-    const [a, b] = [...zoomPointers.values()];
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-  function onZoomPointerDown(e) {
-    zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (zoomPointers.size === 2) { pinchBase = pinchDistance(); pinchZoomBase = stage.getZoom(); }
-  }
-  function onZoomPointerMove(e) {
-    if (!zoomPointers.has(e.pointerId)) return;
-    zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (zoomPointers.size !== 2 || pinchBase <= 0) return;
-    // A pinch never fights a fixture drag: if one finger already grabbed a
-    // model, that gesture owns the interaction until it ends.
-    if (dragId !== null) return;
-    e.preventDefault();
-    // Fingers apart -> larger distance -> smaller FOV -> closer view.
-    if (stage.applyZoom(pinchZoomBase * (pinchBase / pinchDistance()))) requestRender();
-  }
-  function onZoomPointerUp(e) {
-    zoomPointers.delete(e.pointerId);
-    if (zoomPointers.size < 2) pinchBase = 0;
-  }
-  canvasEl.addEventListener("pointerdown", onZoomPointerDown);
-  canvasEl.addEventListener("pointermove", onZoomPointerMove);
-  canvasEl.addEventListener("pointerup", onZoomPointerUp);
-  canvasEl.addEventListener("pointercancel", onZoomPointerUp);
-  canvasEl.addEventListener("lostpointercapture", onZoomPointerUp);
+  // They are gone rather than disabled, and the reason is the framing above:
+  // fitFovToRoom() now derives the FOV so the room exactly fills the stage, so
+  // zooming has nothing left to do that is not damage. Zooming IN crops the
+  // floor, which is the surface this view exists to let people tile and the
+  // exact complaint that produced the fit; zooming OUT reveals the void outside
+  // the room, which with a transparent background is now literally the page
+  // showing through where a wall should be.
+  //
+  // stage.applyZoom() and stage.getZoom() are deliberately left on the stage
+  // handle: js/room3d.js is a separate engine and this file's own snapshot path
+  // still reads the fov, and a zoom of exactly 1 keeps that arithmetic honest
+  // rather than special-cased.
 
   canvasEl.addEventListener("pointerdown", onPointerDown);
   canvasEl.addEventListener("pointermove", onPointerMove);
@@ -1260,6 +1495,31 @@ export async function mountScene(el, {
   canvasEl.addEventListener("pointercancel", onPointerUp);
   canvasEl.addEventListener("lostpointercapture", onPointerUp);
   canvasEl.addEventListener("keydown", onKeyDown);
+
+  // A lost-and-restored context is the one event that silently undoes the
+  // lighting, and this app makes it ordinary rather than exotic: the browser
+  // caps live WebGL contexts at around 16 (see dispose() and
+  // renderSceneThumbnail(), which surrender theirs explicitly for that reason),
+  // so a session that browses saved designs while a scene is mounted is working
+  // near that limit, and a dropped context is the browser doing its job.
+  //
+  // three restores everything it CAN on its own: its listener was registered
+  // when the renderer was constructed, so it runs before this one — which is
+  // what makes rebuilding and drawing here safe — and it re-uploads every
+  // texture and buffer that still has its source data on the CPU. What it
+  // cannot restore is anything that was RENDERED rather than uploaded, because
+  // there is no source to go back to, and this scene has exactly two of those:
+  // the PMREM environment (see buildEnvironment) and the sun's one-shot depth
+  // map (see the sun.shadow block). Both are silent losses — no exception, no
+  // warning, just a scene that has quietly stopped being lit the way it was
+  // designed — and neither would ever be rebuilt on its own in a view whose
+  // camera cannot move.
+  function onContextRestored() {
+    stage.rebuildEnvironment();
+    stage.markShadowsDirty();
+    renderNow();
+  }
+  canvasEl.addEventListener("webglcontextrestored", onContextRestored);
 
   const ro = new ResizeObserver(resize);
   ro.observe(el);
@@ -1302,22 +1562,19 @@ export async function mountScene(el, {
       canvasEl.removeEventListener("pointercancel", onPointerUp);
       canvasEl.removeEventListener("lostpointercapture", onPointerUp);
       canvasEl.removeEventListener("keydown", onKeyDown);
-      // Zoom listeners — same lifetime as the drag ones, or a disposed stage
-      // keeps a wheel handler alive and leaks the whole closure with it.
-      canvasEl.removeEventListener("wheel", onWheel);
-      canvasEl.removeEventListener("pointerdown", onZoomPointerDown);
-      canvasEl.removeEventListener("pointermove", onZoomPointerMove);
-      canvasEl.removeEventListener("pointerup", onZoomPointerUp);
-      canvasEl.removeEventListener("pointercancel", onZoomPointerUp);
-      canvasEl.removeEventListener("lostpointercapture", onZoomPointerUp);
-      zoomPointers.clear();
+      canvasEl.removeEventListener("webglcontextrestored", onContextRestored);
+      // The zoom listeners that used to be removed here are gone with the
+      // gesture itself — see "zoom input: REMOVED" above.
       canvasEl.style.touchAction = "pan-y";
       selectedFixture = null;
       selectedSurface = null;
       detachOverlays();
       stage.dispose();
-      disposeObject(surfSel, true);
-      disposeObject(fixSel, true);
+      // No shared resource is reachable from either overlay: both are built
+      // here out of their own geometry and their own basic materials, so the
+      // ordinary walk frees all of it.
+      disposeObject(surfSel);
+      disposeObject(fixSel);
       releasePrototypes();
       renderer.dispose();
       // The browser caps live WebGL contexts at ~16 and the Dizajner mounts,
@@ -1396,6 +1653,11 @@ export async function mountScene(el, {
       if (!ctx) return;
       const prevPR = renderer.getPixelRatio();
       const prevSize = renderer.getSize(new THREE.Vector2());
+      // A still is the one frame that OUTLIVES the session — it is stored
+      // against a saved design and shown back in list views. Re-arm the
+      // one-shot depth pass before taking it, so a shadow map that has quietly
+      // lost its allocation cannot be baked into the record of the design.
+      stage.markShadowsDirty();
       // Render at exactly the target's pixel dimensions so the copy is 1:1 and
       // the framing matches the target's aspect instead of being stretched.
       renderer.setPixelRatio(1);
@@ -1538,7 +1800,7 @@ async function renderThumbnailNow(canvas2d, sceneId, assignments, products) {
   let renderer = null;
   let stage = null;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(1);
     renderer.setSize(cw, ch, false);
     configureRenderer(renderer);

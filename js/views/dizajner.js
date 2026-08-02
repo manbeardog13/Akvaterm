@@ -683,9 +683,11 @@ function markup() {
   /* Anton. Croatian carons (Č Š Ž) reach 1.100em in this face, so display text
      never gets a line-height under 1.05 and never sits in a clipped box —
      hence the explicit overflow:visible and the descender padding. */
+  /* Sentence case at weight 600, matching the h1 rule in css/styles.css: the
+     display face is Sora now, and uppercase belongs to the retired Anton. */
   .diz-head h1{
-    font-family:var(--font-display);font-weight:400;text-transform:uppercase;
-    font-size:clamp(2.1rem,7.5vw,3.1rem);letter-spacing:-.015em;line-height:1.06;
+    font-family:var(--font-display);font-weight:600;
+    font-size:clamp(1.75rem,6vw,2.5rem);letter-spacing:-.025em;line-height:1.18;
     margin:0 0 5px;padding-bottom:.06em;overflow:visible;color:var(--ink)}
   .diz-head p{margin:0;font-family:var(--font-text);font-weight:400;font-size:14px;
     line-height:1.5;color:var(--muted)}
@@ -762,28 +764,30 @@ function markup() {
   .diz-stage{position:relative;width:100%;aspect-ratio:${STAGE_W}/${STAGE_H};
     max-width:min(100%,max(340px,calc((100vh - 330px)*10/7)));margin:0 auto 10px;
     --diz-wipe:50%}
+  /* NO CARD. Operator instruction, 2026-08-02: "can we have the designer room
+     made so there isn't any white background, can we just have it framed along
+     the edges of walls, so it's basically like a single object on the page".
+     This used to paint --panel and a card shadow, so the room sat on a tile
+     that was itself sitting on the page — two surfaces where the brief asks for
+     none. With js/scene3d.js clearing the drawing buffer to alpha 0 and
+     fitFovToRoom() sizing the frustum to the room's own bounds, every pixel of
+     this box is now either room or page, and a background would only reappear
+     in the corners the perspective leaves empty. */
   .diz-mount{position:absolute;inset:0;border-radius:var(--diz-r);overflow:hidden;
-    background:var(--panel);box-shadow:var(--shadow-card)}
+    background:transparent}
   .diz-mount canvas{display:block;width:100%;height:100%}
-  /* THE FRAME. Operator: "the entire frame a bit more professionally framed."
-     A hairline ring plus a bevel highlight along the top edge, drawn as an
-     overlay rather than as an inset shadow on .diz-mount — an inset shadow
-     paints under the mount's CONTENT, and the WebGL canvas is content, so it
-     would have covered the ring completely. pointer-events:none keeps every
-     control underneath it live (the wipe grip, the coach button, the canvas
-     itself); it only draws. */
-  .diz-stage::after{
-    content:"";position:absolute;inset:0;z-index:6;pointer-events:none;
-    border-radius:var(--diz-r);
-    /* --line, not --hairline: measured in the browser, --hairline composites to
-       #F4F1EE on a light ground (1.01:1 against --paper) and the ring does no
-       work; --line gives #EDE7E2, 1.23:1 — a real edge that still reads as a
-       hairline. It is decoration, not a 1.4.11 boundary: the stage is bounded
-       by its own dark fill and drop shadow too. */
-    box-shadow:inset 0 0 0 1px var(--line,rgba(104,52,15,.12)),
-               inset 0 1px 0 0 var(--glass-rim-top,rgba(255,255,255,.62)),
-               inset 0 -1px 0 0 var(--glass-rim-bottom,rgba(255,255,255,.26));
-  }
+  /* THE FRAME RING IS GONE, and its removal is the same instruction that took
+     the card away: "framed along the edges of walls ... basically like a single
+     object on the page". This drew a rounded rectangle around the stage box,
+     which was right while that box was a filled card. Against a transparent
+     mount it would outline EMPTY PAGE — a border around nothing, with the room
+     floating loose inside it — which is precisely the "framed like a picture"
+     reading the brief rejects. The room's own wall edges are the frame now.
+
+     The earlier instruction it served ("the entire frame a bit more
+     professionally framed") is not being discarded: it is answered by the fit
+     instead, since a room that meets the frame exactly on its limiting axis is
+     better framed than one sitting inside a drawn border. */
   .diz-bare{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;
     border-radius:var(--diz-r);pointer-events:none;background:none;
     clip-path:inset(0 calc(100% - var(--diz-wipe)) 0 0)}

@@ -51,7 +51,7 @@
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-/pTiG39rD4qSBze8AT+tI8Rzpo90u71j5pdj4F5R2YY=';
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-MiUeQwgtJHkt/0MeIXVm7Rj8X++NDDrV+8/oC9WExN8=';
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -286,7 +286,13 @@
        - dblclick: double-tap-to-zoom.
      Passive:false is required — a passive listener cannot preventDefault. */
   function inZoomable(t) {
-    return !!(t && t.closest && t.closest("[data-zoomable],.diz-stage,.room3d-stage"));
+    /* .diz-stage was in this list while the designer had a FOV dolly. That
+       gesture is gone (js/scene3d.js, "zoom input: REMOVED") because the room
+       is now framed to fill the stage exactly, so exempting it would let
+       Safari's own pinch zoom the PAGE from inside the one place the app most
+       needs to sit still. The 3D room keeps its exemption: it is an orbit
+       sandbox and its pinch is a real camera control. */
+    return !!(t && t.closest && t.closest("[data-zoomable],.room3d-stage"));
   }
   ["gesturestart", "gesturechange", "gestureend"].forEach(function (type) {
     document.addEventListener(type, function (e) {
