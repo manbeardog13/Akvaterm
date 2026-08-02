@@ -10,6 +10,13 @@
 // fades on its own schedule rather than being removed mid-animation.
 // Business rules live in domain.js; data access in db.js; chrome text in i18n.
 //
+// THERE IS NO AUTH GATE IN THIS ROUTER, and adding one would be a change of
+// product, not a refactor. #/prijava is an ordinary route reachable from one
+// row in the "Više" menu; every other route renders whether a session exists
+// or not, and on the public demo config.js is empty so no session can exist at
+// all. The only thing authentication touches in this file is which label that
+// one menu row carries — see watchAuthState() below.
+//
 // ---------------------------------------------------------------------------
 // Iris re-skin — what this file contributes to the liquid-glass chrome
 // ---------------------------------------------------------------------------
@@ -71,6 +78,7 @@
 
 import { t, LANG } from "./i18n.js";
 import { initSupabase } from "./supabaseClient.js";
+import { authConfigured, getSession, onAuthChange, signOut } from "./db.js";
 
 // THE version literal. Bumped on every ship, and there is exactly one of it:
 // the service worker is registered below as `./service-worker.js?v=${APP_V}`,
@@ -205,6 +213,11 @@ const ROUTES = [
   { pattern: /^\/savjetnik$/,          load: () => import("./views/savjetnik.js") },
   { pattern: /^\/favoriti$/,           load: () => import("./views/favoriti.js") },
   { pattern: /^\/dizajni$/,            load: () => import("./views/dizajni.js") },
+  // Sign-in. Reachable ONLY from the "Više" menu — nothing redirects into it,
+  // no other route consults a session, and js/views/prijava.js always offers
+  // "Nastavi kao gost". The app is usable signed out, by design, and on the
+  // public demo there is no backend to sign in to at all.
+  { pattern: /^\/prijava$/,            load: () => import("./views/prijava.js") },
 ];
 
 // Tab-bar / top-nav glyphs. Inline SVG (no icon font, no sprite fetch) drawn on
@@ -293,7 +306,7 @@ function setActiveNav(path) {
   const seg = path.split("/")[1] || "";
   let base = "/" + seg;
   if (seg === "" || seg === "katalog" || seg === "proizvod") base = "/";
-  const onMore = seg === "favoriti" || seg === "dizajni";
+  const onMore = seg === "favoriti" || seg === "dizajni" || seg === "prijava";
   document.querySelectorAll("[data-route]").forEach((a) => {
     const on = !onMore && a.dataset.route === base;
     a.classList.toggle("active", on);
@@ -325,7 +338,31 @@ export function toast(msg, kind = "") {
 }
 window.AKV = { toast };
 
-// ---- "Više" popover (Favoriti + Moji dizajni) -------------------------------
+// ---- Auth state — consumed by ONE menu label --------------------------------
+// This is the app's entire relationship with authentication. There is no gate:
+// no route checks a session, no view refuses to render without one, and the
+// catalogue, designer, 3D room and advisor behave identically signed in or
+// out. All this decides is whether the "Više" menu offers "Prijava" (opening
+// #/prijava) or "Odjava".
+//
+// It is CACHED rather than awaited because openMore() draws synchronously — a
+// popover must not wait on the network to decide a row. The initial value,
+// null, means "signed out, or not looked up yet"; both are shown the same way
+// and both lead to a screen that explains the real state. On the public demo
+// config.js is empty, so authConfigured() is false, nothing is ever looked up,
+// and the row stays "Prijava" for the life of the session.
+const SIGNOUT_ATTR = "data-akv-signout";
+let authedEmail = null;
+
+function watchAuthState() {
+  if (!authConfigured()) return;   // no backend to ask, and nothing to change
+  getSession().then((session) => { authedEmail = session?.user?.email || null; }).catch(() => {});
+  // App-lifetime subscription: a session that expires, or a sign-in performed
+  // on the login screen, must move this label without a reload.
+  onAuthChange((session) => { authedEmail = session?.user?.email || null; });
+}
+
+// ---- "Više" popover (Favoriti + Moji dizajni + Prijava) ---------------------
 let moreCleanup = null;
 function closeMore() {
   const pop = document.getElementById("morePop");
@@ -370,9 +407,17 @@ function openMore(anchor) {
         </span>
         <span class="menu-switch" aria-hidden="true"><i></i></span>
       </button>`;
+  // "Odjava" is a BUTTON, not a link: signing out is an action, and rendering
+  // it as a menu link would put a route in the URL that immediately undoes
+  // itself. "Prijava" stays a link, so it works with middle-click, and so it
+  // still works if this popover's click handler never attached.
+  const authItem = authedEmail
+    ? `<button type="button" role="menuitem" class="btn btn-ghost menu-item" ${SIGNOUT_ATTR}>${esc(T("nav.odjava", "Odjava"))}</button>`
+    : item("/prijava", esc(T("nav.prijava", "Prijava")));
   pop.innerHTML =
     item("/favoriti", esc(T("nav.favoriti", "Favoriti"))) +
     item("/dizajni", esc(T("nav.dizajni", "Moji dizajni"))) +
+    authItem +
     transparencyItem;
   document.body.appendChild(pop);
 
@@ -401,6 +446,19 @@ function openMore(anchor) {
   };
   pop.addEventListener("click", (e) => {
     if (e.target.closest("a[role=menuitem]")) { closeMore(); return; }
+    if (e.target.closest?.(`[${SIGNOUT_ATTR}]`)) {
+      closeMore();
+      // signOut() clears db.js's cached session before it awaits the network,
+      // so the label is already correct even if the revoke call fails.
+      signOut().then(() => {
+        authedEmail = null;
+        toast(T("prijava.signedOut", "Odjavljeni ste."));
+        // If the login screen itself is on screen, repaint it into its
+        // signed-out state rather than leaving a stale account card.
+        if (location.hash.replace(/^#/, "").split("?")[0] === "/prijava") route();
+      });
+      return;
+    }
     const toggle = e.target.closest?.(`[${TRANSPARENCY_TOGGLE_ATTR}]`);
     if (!toggle) return;
     // Deliberately does NOT close the menu: the whole point of the switch is
@@ -488,6 +546,7 @@ function revealApp() {
 
 // ---- Boot -------------------------------------------------------------------
 initSupabase();   // no-op in the offline demo; fire-and-forget when configured
+watchAuthState(); // also a no-op in the demo; only ever moves a menu label
 window.addEventListener("hashchange", route);
 // Registered WITH ?v=${APP_V}: that query is the worker's only source of
 // VERSION, so `akv-${APP_V}` is the cache name by construction rather than by

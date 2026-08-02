@@ -71,6 +71,26 @@
 // can drive the engine without touching data/scenes.js.
 //
 // ---------------------------------------------------------------------------
+// HOW IT IS LIT AND FRAMED — the two things that decide whether a scene reads
+// as an interior photograph or as a game asset viewer.
+//
+// LIGHTING. Image-based lighting (RoomEnvironment through PMREMGenerator) is
+// the FILL, not the whole rig: at full strength it lights every surface evenly
+// from every direction, which is exactly what "flat" looks like. Over it sit a
+// warm shadow-casting KEY aimed off the camera's shoulder, a cool shallow FILL
+// from the other side, and a hemisphere BOUNCE with a black sky that lifts
+// down-facing surfaces only. The shadow frustum is fitted to the room box
+// rather than to a fixed square, which is what makes the contact shadow under a
+// bath tight enough to read as contact. The surface RESPONSE of every model —
+// glazed ceramic, chrome, mirror, matte cabinet front — is corrected once per
+// file in js/gfx3d.js MATERIAL_TUNING; see the table there for why.
+//
+// FRAMING. The camera is a SHIFT lens, never a tilted one: the optical axis is
+// forced horizontal and the author's down-tilt becomes an off-centre frustum,
+// so the room's verticals stay vertical (two-point perspective) instead of
+// keystoning. The full derivation is at the camera block in createStage().
+//
+// ---------------------------------------------------------------------------
 // INTERACTION. The camera is LOCKED — this is a designed view, not a sandbox,
 // so there is no OrbitControls here and the addon is never even imported. The
 // FIXTURES are draggable, with the identical raycast-to-floor drag the 3D room
@@ -196,6 +216,40 @@ function surfaceLayout(kind, wall, dims) {
   }
 }
 
+/**
+ * The renderer's colour and shadow pipeline. ONE function, used by both the
+ * live stage and the offscreen thumbnail, so a saved-design still and the scene
+ * it is a still OF cannot be graded differently.
+ *
+ *   outputColorSpace   sRGB is already r185's default; it is written down
+ *     because everything else here depends on it and a silent default is a bad
+ *     thing to depend on.
+ *   ACESFilmic         a filmic curve. Highlights on chrome and on a glazed
+ *     tile roll off instead of clipping to a flat white blob.
+ *   toneMappingExposure  the one global grade. It is set HERE rather than by
+ *     raising or lowering every light, so the ratio between key, fill and
+ *     environment — which is what actually models the objects — is decided once
+ *     and then exposed like a photograph. 0.95: the measured mean frame
+ *     luminance of the full bathroom is 202/255, bright without clipping (the
+ *     brightest pixel in the frame is 249, so nothing blows out).
+ *   PCFShadowMap       and NOT PCFSoftShadowMap, which was tried here and
+ *     rejected on evidence rather than taste: r185's WebGLShadowMap logs
+ *     "PCFSoftShadowMap has been deprecated. Using PCFShadowMap instead." and
+ *     silently downgrades it (vendor/three/three.module.js line 9148). Asking
+ *     for it buys nothing except a console warning on every mount. The penumbra
+ *     comes from sun.shadow.radius, and it is finer than it used to be because
+ *     the shadow frustum is now fitted to the room: radius 3 at the measured
+ *     ~240 shadow-map texels per metre is a 1.3 cm penumbra, where the old
+ *     radius 4 at ~145 texels per metre was 2.8 cm.
+ */
+function configureRenderer(renderer) {
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.9;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+}
+
 /** Wall anchors and a default facing for a fixture that names a wall. */
 function wallAnchor(wall) {
   switch (wall) {
@@ -220,22 +274,58 @@ function createStage(renderer, def, products) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(IRIS.paper);   // --paper #F2F2F2
 
-  // RoomEnvironment IBL + one shadow-casting key light: the same pair the 3D
-  // room uses, so a bath looks like the same bath in both places.
+  // ---- The light rig ------------------------------------------------------
+  // Four sources, ONE shadow map. It is the standard interior set-up, and each
+  // one is here for a stated reason:
+  //
+  //   ENVIRONMENT  RoomEnvironment through PMREMGenerator. Image-based lighting
+  //     is what gives a material somewhere to reflect, and without it chrome,
+  //     glass and glazed ceramic have nothing to be shiny WITH. It was already
+  //     here, but at full strength it was also doing all of the lighting, which
+  //     is precisely why every surface read evenly lit and flat. Demoted to a
+  //     FILL at ENV_FILL so the key below can actually model a form. This is the
+  //     ONE place that decision is made: js/gfx3d.js MATERIAL_TUNING keeps its
+  //     per-material envMapIntensity near 1.0 precisely so it stays engine
+  //     neutral, because js/room3d.js clones the same prototypes.
+  //   KEY        one directional, warm, shadow-casting, aimed off the camera's
+  //     shoulder (see the aiming block below) so the two visible walls are
+  //     raked rather than lit head-on.
+  //   FILL       one directional, cool, no shadow, from the opposite side at a
+  //     shallow angle. Opens the shadow side without flattening it.
+  //   BOUNCE     a hemisphere with a BLACK sky and a warm ground, i.e. pure
+  //     floor bounce: it lifts down-facing surfaces (bath rim underside, toe
+  //     kicks, worktop noses) and touches up-facing ones not at all.
+  const ENV_FILL = 0.6;
+
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new RoomEnvironment();
   const envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
+  scene.environmentIntensity = ENV_FILL;
   if (typeof envScene.dispose === "function") envScene.dispose();
 
-  const sun = new THREE.DirectionalLight(0xfff6ea, 2.2);
+  const sun = new THREE.DirectionalLight(0xfff1e0, 3.3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.radius = 4;
-  sun.shadow.bias = -0.0003;
+  sun.shadow.radius = 3;
+  sun.shadow.bias = -0.0002;
   sun.shadow.normalBias = 0.02;
+  // The scene is static between mutations and rendering is damage-driven, so
+  // re-rasterising the whole depth pass on every frame is pure waste — it is
+  // literally a second full draw of every mesh. It now runs only when something
+  // has actually moved; markShadowsDirty() is called from applyRec(), which is
+  // the one funnel every placement change goes through.
+  sun.shadow.autoUpdate = false;
+  sun.shadow.needsUpdate = true;
   scene.add(sun);
   scene.add(sun.target);
+
+  const fill = new THREE.DirectionalLight(0xdce8f6, 0.5);
+  scene.add(fill);
+  scene.add(fill.target);
+
+  const bounce = new THREE.HemisphereLight(0x000000, 0xf3e6d6, 0.5);
+  scene.add(bounce);
 
   const camera = new THREE.PerspectiveCamera(FALLBACK_CAMERA.fov, 1, 0.05, 120);
 
@@ -258,15 +348,9 @@ function createStage(renderer, def, products) {
   const toSceneX = (x) => x - dims.widthM / 2;
   const toSceneZ = (z) => z - dims.depthM / 2;
 
-  // ---- Lights and camera framing -------------------------------------------
+  // ---- Camera framing ------------------------------------------------------
   const { widthM: w, depthM: d, heightM: h } = dims;
   const span = Math.max(w, d);
-  sun.position.set(w * 0.8, h * 2.2 + 1.5, d * 0.6);
-  const sc = sun.shadow.camera;
-  const ext = span * 0.9 + 1;
-  sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
-  sc.near = 0.5; sc.far = h * 4 + span * 3;
-  sc.updateProjectionMatrix();
 
   const camDef = (def && def.camera) || {};
   const posM = Array.isArray(camDef.posM) ? camDef.posM : [w + 1.6, h * 0.62, d + 1.6];
@@ -280,7 +364,120 @@ function createStage(renderer, def, products) {
     toSceneX(clampPos(posM[0], w + 1.6)),
     clampPos(posM[1], h * 0.62),
     toSceneZ(clampPos(posM[2], d + 1.6)));
-  camera.lookAt(camTarget);
+
+  // TWO-POINT PERSPECTIVE — the single thing that most separates an interior
+  // PHOTOGRAPH from a game camera.
+  //
+  // A camera that is TILTED down to see the floor puts the sensor plane out of
+  // parallel with the walls, and every vertical in the room then converges: the
+  // room corner leans, the door jambs lean, the cabinet stiles lean. An
+  // interior photographer does not accept that. They keep the back of the
+  // camera vertical and RAISE OR LOWER THE LENS instead — a shift lens, or the
+  // rise movement on a view camera — which changes what is in frame without
+  // touching the perspective.
+  //
+  // That is exactly what happens below. The optical axis is forced HORIZONTAL
+  // (look at a point at the camera's own height: zero pitch, and lookAt with
+  // up = +Y never rolls, so zero roll too), and the down-tilt the scene author
+  // asked for by putting `targetM.y` below `posM.y` is converted into an
+  // off-centre frustum in setAspect(). The maths:
+  //
+  //     shift angle  theta = atan((posM.y - targetM.y) / horizontal distance)
+  //     frustum shift k     = tan(theta) / tan(fov/2)          [half-heights]
+  //
+  // and PerspectiveCamera.setViewOffset(1, 1, 0, k/2, 1, 1) shears the frustum
+  // by exactly k half-heights while leaving its width and its field of view
+  // untouched — three composes it as `top -= offsetY * height / fullHeight`
+  // with height = 2*top, so an offsetY of k/2 moves the top edge to top*(1-k).
+  //
+  // The horizon lands at the same place in frame as the equivalent tilt would
+  // have put it, so a scene's authored composition survives the change; what
+  // it loses is the keystone. Raycasting is unaffected because unproject() goes
+  // through projectionMatrixInverse, which carries the shear.
+  const horizM = Math.hypot(camTarget.x - camera.position.x, camTarget.z - camera.position.z);
+  const lensShift = horizM > 1e-4 ? Math.atan2(camera.position.y - camTarget.y, horizM) : 0;
+  camera.lookAt(horizM > 1e-4
+    ? new THREE.Vector3(camTarget.x, camera.position.y, camTarget.z)
+    : camTarget);
+
+  // ---- Aiming the key and fill --------------------------------------------
+  // Off the camera's shoulder, never on its axis. Deriving the azimuth from the
+  // VIEW direction rather than from a room axis is what makes all five scenes
+  // read as one lit series even though they are shot from four different
+  // corners: each is lit the same way relative to its own composition.
+  const KEY_AZI = (52 * Math.PI) / 180;    // degrees off the viewing axis
+  const KEY_ELEV = (42 * Math.PI) / 180;   // above the floor plane
+  const FILL_AZI = (-78 * Math.PI) / 180;
+  const FILL_ELEV = (16 * Math.PI) / 180;  // shallow, so it opens shadow without killing it
+
+  const roomMid = new THREE.Vector3(0, h * 0.42, 0);
+  const viewDir = new THREE.Vector3(
+    camera.position.x - camTarget.x, 0, camera.position.z - camTarget.z);
+  if (viewDir.lengthSq() < 1e-8) viewDir.set(1, 0, 1);
+  viewDir.normalize();
+
+  /** Unit vector at `azi` radians about +Y from `base`, raised to `elev`. */
+  function aimed(base, azi, elev) {
+    const c = Math.cos(azi), s = Math.sin(azi), ce = Math.cos(elev);
+    return new THREE.Vector3(
+      (base.x * c + base.z * s) * ce,
+      Math.sin(elev),
+      (-base.x * s + base.z * c) * ce).normalize();
+  }
+
+  // Only the DIRECTION of a directional light matters to shading; the distance
+  // exists so the shadow camera has somewhere to stand outside the room.
+  const lightR = span * 1.6 + h * 1.2 + 2;
+  sun.position.copy(aimed(viewDir, KEY_AZI, KEY_ELEV)).multiplyScalar(lightR).add(roomMid);
+  sun.target.position.copy(roomMid);
+  fill.position.copy(aimed(viewDir, FILL_AZI, FILL_ELEV)).multiplyScalar(lightR).add(roomMid);
+  fill.target.position.copy(roomMid);
+  sun.updateMatrixWorld();
+  sun.target.updateMatrixWorld();
+  fill.updateMatrixWorld();
+  fill.target.updateMatrixWorld();
+  fitShadowCamera(sun, dims);
+
+  /**
+   * Fit the orthographic shadow frustum EXACTLY to the room box.
+   *
+   * The frustum used to be a fixed square of side 2*(span*0.9 + 1): for the
+   * 2.60 x 2.80 m bathroom that is 7.04 m of shadow map spent on a room 2.8 m
+   * across, so roughly three quarters of the 1024^2 texels were rasterising
+   * empty space. Fitting it multiplies the effective resolution without costing
+   * a byte more memory, and THAT is what turns a vague smudge under a bath into
+   * a contact shadow the object appears to stand on.
+   */
+  function fitShadowCamera(light, dm) {
+    const sc = light.shadow.camera;
+    const world = new THREE.Matrix4()
+      .lookAt(light.position, light.target.position, new THREE.Vector3(0, 1, 0))
+      .setPosition(light.position);
+    const toLight = world.clone().invert();
+    const p = new THREE.Vector3();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    for (const sx of [-dm.widthM / 2, dm.widthM / 2]) {
+      for (const sy of [0, dm.heightM]) {
+        for (const sz of [-dm.depthM / 2, dm.depthM / 2]) {
+          p.set(sx, sy, sz).applyMatrix4(toLight);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+      }
+    }
+    const pad = 0.2;   // a fixture may lean a little proud of the room box
+    sc.left = minX - pad; sc.right = maxX + pad;
+    sc.bottom = minY - pad; sc.top = maxY + pad;
+    // Light space looks down -Z, so a point in front of the light has z < 0.
+    sc.near = Math.max(0.05, -maxZ - pad);
+    sc.far = -minZ + pad;
+    sc.updateProjectionMatrix();
+  }
+
+  /** Every placement change funnels through applyRec(), which calls this. */
+  function markShadowsDirty() { sun.shadow.needsUpdate = true; }
 
   // ---- zoom on a locked camera -------------------------------------------
   // Operator instruction, 2026-08-02: the app must not zoom, EXCEPT the
@@ -303,11 +500,26 @@ function createStage(renderer, def, products) {
     return true;
   }
 
+  // How far the frustum may be sheared, in half-frame-heights. Past this a
+  // shift stops reading as a rise movement and starts reading as a distortion,
+  // which is the opposite of the point. No authored scene comes close: the
+  // largest in data/scenes.js is 0.25.
+  const MAX_SHIFT = 0.6;
+
   let lastAspect = 1;
   function setAspect(aspect) {
     lastAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    camera.fov = framedFov(baseFov, lastAspect) * zoom;
+    // k depends on the CURRENT fov, so it is recomputed here rather than cached:
+    // a narrow viewport widens the fov (framedFov) and a pinch narrows it, and
+    // in both cases the shift has to follow or the horizon would slide.
+    const k = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT,
+      Math.tan(lensShift) / Math.tan((camera.fov * Math.PI) / 360)));
+    if (Math.abs(k) > 1e-4) camera.setViewOffset(1, 1, 0, k / 2, 1, 1);
+    else camera.clearViewOffset();
+    // setViewOffset() overwrites camera.aspect with fullWidth/fullHeight, so the
+    // real aspect is restored AFTER it and the projection rebuilt once more.
     camera.aspect = lastAspect;
-    camera.fov = framedFov(baseFov, camera.aspect) * zoom;
     camera.updateProjectionMatrix();
     updateSurfaceVisibility();
   }
@@ -345,6 +557,11 @@ function createStage(renderer, def, products) {
     const mat = new THREE.MeshStandardMaterial({
       color: kind === "floor" ? BARE_SURFACE_COLOR.floor : BARE_SURFACE_COLOR.wall,
       roughness: 0.9, metalness: 0,
+      // Plaster and screed reflect their surroundings less than a fired glaze
+      // does, so the room shell takes a lower share of the environment than the
+      // tiles that will be laid on it. Same reason a bare wall in a photograph
+      // never has the sheen of the tiling next to it.
+      envMapIntensity: 0.7,
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(L.sizeM[0], L.sizeM[1]), mat);
     mesh.position.set(...L.pos);
@@ -373,6 +590,7 @@ function createStage(renderer, def, products) {
   function applyRec(rec) {
     rec.group.position.set(toSceneX(rec.x), 0, toSceneZ(rec.z));
     rec.group.rotation.y = rec.rotY;
+    markShadowsDirty();
   }
 
   function buildFixture(f, index) {
@@ -461,6 +679,7 @@ function createStage(renderer, def, products) {
     if (mat.map) { mat.map.dispose(); mat.map = null; }
     mat.color.set(rec.kind === "floor" ? BARE_SURFACE_COLOR.floor : BARE_SURFACE_COLOR.wall);
     mat.roughness = 0.9;
+    mat.envMapIntensity = 0.7;
     mat.needsUpdate = true;
   }
 
@@ -483,7 +702,13 @@ function createStage(renderer, def, products) {
     if (mat.map) mat.map.dispose();
     mat.map = texture;
     mat.color.set(0xffffff);
-    mat.roughness = product.glossy ? 0.28 : 0.8;
+    // A fired glaze is close to a mirror at grazing angles and a matte body is
+    // not; the environment share follows the finish for the same reason. The
+    // TEXTURE is untouched — repeat, rotation and colour space are what keep a
+    // 600 mm tile 600 mm wide and the grout the width it was specified at, and
+    // none of that is a lighting decision.
+    mat.roughness = product.glossy ? 0.16 : 0.72;
+    mat.envMapIntensity = product.glossy ? 1.15 : 0.85;
     mat.needsUpdate = true;
     return true;
   }
@@ -531,6 +756,32 @@ function createStage(renderer, def, products) {
     skippedFixtures, ready, maxAniso,
     assignments,
     isBare: () => bare,
+    lensShift, markShadowsDirty,
+    // The zoom state lives in this closure, so the wheel and pinch handlers in
+    // mountScene() have to reach it THROUGH the stage. They previously named
+    // `applyZoom` and `zoom` directly, which are not in their scope: every
+    // wheel event and every two-finger pinch over the canvas threw
+    // "ReferenceError: applyZoom is not defined" and the documented FOV dolly
+    // had never once run. Found by dispatching a wheel event at the canvas and
+    // reading camera.fov back through inspect() — it did not move.
+    applyZoom, getZoom: () => zoom,
+    /** Plain-data view of the fitted shadow frustum, for inspect(). */
+    shadowInfo: () => ({
+      mapPx: sun.shadow.mapSize.x,
+      autoUpdate: sun.shadow.autoUpdate,
+      pending: sun.shadow.needsUpdate,
+      lightPos: [sun.position.x, sun.position.y, sun.position.z],
+      frustum: [
+        sun.shadow.camera.left, sun.shadow.camera.right,
+        sun.shadow.camera.bottom, sun.shadow.camera.top,
+        sun.shadow.camera.near, sun.shadow.camera.far,
+      ],
+      // Shadow-map texels per metre across the fitted frustum. The number this
+      // replaces was 145 for the 2.6 x 2.8 m bathroom.
+      texelsPerM: sun.shadow.mapSize.x
+        / Math.max(sun.shadow.camera.right - sun.shadow.camera.left,
+          sun.shadow.camera.top - sun.shadow.camera.bottom),
+    }),
     setAspect, setAssignment, setAssignments, setBare, paintSurface,
     settle, applyRec,
     setOnModelArrived: (fn) => { onModelArrived = fn; },
@@ -553,10 +804,11 @@ export async function mountScene(el, {
   let disposed = false;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Capped at 2: a phone reporting devicePixelRatio 3 or 4 would otherwise cost
+  // 4x to 9x the fragments of a 1x buffer for a difference nobody can see at
+  // arm's length, and this stage is the most expensive thing the app draws.
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;   // + shadow.radius = soft edges
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  configureRenderer(renderer);
 
   const canvasEl = renderer.domElement;
   canvasEl.style.display = "block";
@@ -590,10 +842,16 @@ export async function mountScene(el, {
   // Rebuilding costs 8 vertices on a click — cheaper than the tint it replaces.
   const surfSel = new THREE.Group();
   surfSel.visible = false;
+  // toneMapped:false, and this matters more than it looks. The band is UI, not
+  // a thing in the room: it must be --amber-500 #EAA651 exactly, in every scene,
+  // whatever the camera exposure is. Left tone-mapped it goes through the same
+  // ACES curve as the bath and the tiles, which lightened it to rgb(223,180,100)
+  // — measured off the rendered frame — and cost it contrast against a white
+  // tile at the exact moment it is meant to be shouting.
   const surfBand = new THREE.Mesh(
     new THREE.BufferGeometry(),
     new THREE.MeshBasicMaterial({
-      color: IRIS.amber500, transparent: true, opacity: 0.95,
+      color: IRIS.amber500, transparent: true, opacity: 0.95, toneMapped: false,
       depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     }));
   surfBand.renderOrder = 999;
@@ -628,7 +886,8 @@ export async function mountScene(el, {
   const fixQuad = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({
-      color: IRIS.teal600, transparent: true, opacity: 0.3, depthWrite: false,
+      color: IRIS.teal600, transparent: true, opacity: 0.3,
+      depthWrite: false, toneMapped: false,
     }));
   fixQuad.rotation.x = -Math.PI / 2;
   fixQuad.position.y = 0.003;
@@ -639,7 +898,7 @@ export async function mountScene(el, {
       new THREE.Vector3(-0.5, 0.004, -0.5), new THREE.Vector3(0.5, 0.004, -0.5),
       new THREE.Vector3(0.5, 0.004, 0.5), new THREE.Vector3(-0.5, 0.004, 0.5),
     ]),
-    new THREE.LineBasicMaterial({ color: IRIS.amber500, depthTest: false }));
+    new THREE.LineBasicMaterial({ color: IRIS.amber500, depthTest: false, toneMapped: false }));
   fixLoop.renderOrder = 999;
   fixLoop.raycast = () => {};
   fixSel.add(fixLoop);
@@ -956,7 +1215,7 @@ export async function mountScene(el, {
   // dollied, which is exactly the "swimming" the operator asked to remove.
   function onWheel(e) {
     e.preventDefault();
-    if (applyZoom(zoom * (e.deltaY > 0 ? 1.08 : 1 / 1.08))) requestRender();
+    if (stage.applyZoom(stage.getZoom() * (e.deltaY > 0 ? 1.08 : 1 / 1.08))) requestRender();
   }
   canvasEl.addEventListener("wheel", onWheel, { passive: false });
 
@@ -972,7 +1231,7 @@ export async function mountScene(el, {
   }
   function onZoomPointerDown(e) {
     zoomPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (zoomPointers.size === 2) { pinchBase = pinchDistance(); pinchZoomBase = zoom; }
+    if (zoomPointers.size === 2) { pinchBase = pinchDistance(); pinchZoomBase = stage.getZoom(); }
   }
   function onZoomPointerMove(e) {
     if (!zoomPointers.has(e.pointerId)) return;
@@ -983,7 +1242,7 @@ export async function mountScene(el, {
     if (dragId !== null) return;
     e.preventDefault();
     // Fingers apart -> larger distance -> smaller FOV -> closer view.
-    if (applyZoom(pinchZoomBase * (pinchBase / pinchDistance()))) requestRender();
+    if (stage.applyZoom(pinchZoomBase * (pinchBase / pinchDistance()))) requestRender();
   }
   function onZoomPointerUp(e) {
     zoomPointers.delete(e.pointerId);
@@ -1164,6 +1423,10 @@ export async function mountScene(el, {
     inspect() {
       const box = new THREE.Box3();
       stage.scene.updateMatrixWorld(true);
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(stage.camera.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(stage.camera.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(stage.camera.quaternion);
+      const DEG = 180 / Math.PI;
       return {
         sceneId: currentSceneId,
         room: { ...stage.dims },
@@ -1176,6 +1439,25 @@ export async function mountScene(el, {
           ],
           fov: stage.camera.fov,
           aspect: stage.camera.aspect,
+          // Framing diagnostics. pitch and roll are read back off the LIVE
+          // camera quaternion, not off the authored numbers, so "the verticals
+          // are vertical" is something a check can assert instead of trust.
+          // Both must be 0 for a two-point perspective.
+          pitchDeg: Math.asin(Math.max(-1, Math.min(1, fwd.y))) * DEG,
+          rollDeg: Math.atan2(right.y, up.y) * DEG,
+          lensShiftDeg: stage.lensShift * DEG,
+          viewOffset: stage.camera.view && stage.camera.view.enabled
+            ? stage.camera.view.offsetY : 0,
+          // 35 mm-equivalent focal length of the HORIZONTAL field of view.
+          focalMm: 18 / (Math.tan((stage.camera.fov * Math.PI) / 360) * stage.camera.aspect),
+        },
+        render: {
+          calls: renderer.info.render.calls,
+          triangles: renderer.info.render.triangles,
+          programs: renderer.info.programs ? renderer.info.programs.length : null,
+          pixelRatio: renderer.getPixelRatio(),
+          toneMappingExposure: renderer.toneMappingExposure,
+          shadow: stage.shadowInfo(),
         },
         skippedFixtures: stage.skippedFixtures.slice(),
         surfaces: [...stage.surfaceRecs.values()].map((r) => ({
@@ -1259,9 +1541,7 @@ async function renderThumbnailNow(canvas2d, sceneId, assignments, products) {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(1);
     renderer.setSize(cw, ch, false);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    configureRenderer(renderer);
 
     stage = createStage(renderer, def, products || []);
     stage.setAspect(cw / ch);

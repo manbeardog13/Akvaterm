@@ -544,23 +544,61 @@ const STYLES = `
     --sv-font-display:var(--font-display,'Anton','Haettenschweiler','Arial Narrow',system-ui,sans-serif);
     --sv-font-text:var(--font-text,'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
 
-    display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto;padding:12px;min-height:0;
+    /* --- CORNER LADDER -----------------------------------------------------
+       css/styles.css owns the scale (--r-xs … --r-pill); the literal after each
+       comma is the same step, so this view keeps the app's corner language even
+       before that sheet lands. Concentric nesting is the rule — a child's arc
+       is its parent's arc MINUS the padding between them. */
+    --sv-r-xs:var(--r-xs,8px);
+    --sv-r-sm:var(--r-sm,12px);
+    --sv-r-md:var(--r-md,16px);
+    --sv-r-lg:var(--r-lg,22px);
+    --sv-r-xl:var(--r-xl,28px);
+    --sv-r-pill:var(--r-pill,999px);
+
+    display:flex;flex-direction:column;gap:16px;max-width:760px;margin:0 auto;padding:12px;min-height:0;
     font-family:var(--sv-font-text);color:var(--sv-ink);
+    /* Phone bottom gutter. #main already reserves the tab bar; this adds the
+       clearance on top of it, plus the home-indicator inset again, because with
+       viewport-fit=cover the bar carries that inset too. */
+    padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);
   }
+  @media(min-width:720px){.sv-wrap{padding-bottom:12px}}
+  /* THE CHAT DOCK'S BLUR DEPENDS ON THIS LINE. css/styles.css:1022 runs the
+     shell entrance on every direct child of #main —
+       #main.view-enter>*{animation:riseIn var(--dur-2) var(--smooth) both}
+     — and riseIn ends on transform:none. fill-mode BOTH freezes the last
+     keyframe as the computed style, and a transform resolved by an animation
+     stays a MATRIX: measured here in Chrome, .sv-wrap settles on
+     transform:matrix(1,0,0,1,0,0) and keeps it. A transformed element is a
+     BACKDROP ROOT, so .sv-log — the only backdrop-filter surface in this view,
+     and the one the whole GLASS BUDGET note above is written around — had
+     nothing to sample and its blur was inert. Same class of defect
+     css/styles.css records against viewFade's filter:blur(0px).
+     BACKWARDS keeps the entrance and hands the element back to its own
+     stylesheet at the end. Specificity (1,2,0) beats the sheet's (1,1,0). The
+     root cause belongs in css/styles.css; this is the scoped repair. */
+  #main.view-enter>.sv-wrap{animation-fill-mode:backwards}
 
   /* ---------------------------------------------------------------- hero */
   /* flex-wrap, not a media query: on a 400px viewport "Novi razgovor" cannot
      share a row with the wordmark, and wrapping is the only behaviour that
      keeps the 44px tap target intact. Measured at 400px CSS width. */
   .sv-head{
-    display:flex;align-items:center;flex-wrap:wrap;gap:12px 14px;
-    background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:20px;
-    padding:14px 16px 17px;box-shadow:var(--sv-shadow);position:relative;overflow:visible;
+    display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;
+    background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:var(--sv-r-xl);
+    padding:16px 20px 18px;box-shadow:var(--sv-shadow);position:relative;overflow:visible;
   }
   .sv-head #svReset{flex:0 0 auto;margin-left:auto}
-  /* teal -> heat rule: the brand's own meaning (voda -> toplina). Decorative. */
+  /* teal -> heat rule: the brand's own meaning (voda -> toplina). Decorative.
+     The inset MUST be at least the card's own radius. The card is overflow:
+     visible (Anton caron guard), so at the bottom edge the silhouette only
+     spans [radius, width - radius]; a rule inset less than that pokes out past
+     the corner into the page. It used to sit at 16px inside a 20px radius and
+     did exactly that. 30px clears the --r-xl step with 2px to spare. */
   .sv-head::after{
-    content:"";position:absolute;left:16px;right:16px;bottom:0;height:3px;border-radius:3px;
+    content:"";position:absolute;left:30px;right:30px;bottom:0;height:3px;
+    border-radius:var(--sv-r-pill);
     background:linear-gradient(90deg,var(--sv-teal-hi),var(--sv-teal) 42%,var(--sv-amber));
   }
   /* Water -> heat, in one 52px mark. Sampled every 0.5% along the gradient and
@@ -568,7 +606,7 @@ const STYLES = `
      teal-700 end). Endpoints: teal-700 5.78:1, teal-800 7.88:1, amber-ink
      5.86:1. The glyph is Anton but caron-free, so line-height 1.06 suffices. */
   .sv-avatar{
-    flex:0 0 auto;width:52px;height:52px;border-radius:16px;display:grid;place-items:center;
+    flex:0 0 auto;width:52px;height:52px;border-radius:var(--sv-r-md);display:grid;place-items:center;
     background:linear-gradient(150deg,var(--sv-teal-ink) 0%,var(--sv-teal-deep) 45%,var(--sv-amber-ink) 100%);
     color:#fff;font-family:var(--sv-font-display);font-size:26px;line-height:1.06;
     letter-spacing:.01em;box-shadow:inset 0 1px 0 rgba(255,255,255,.34);
@@ -595,7 +633,7 @@ const STYLES = `
   /* --------------------------------------------------------- glass chat dock */
   .sv-log{
     display:flex;flex-direction:column;gap:10px;overflow-y:auto;
-    min-height:200px;max-height:52vh;padding:14px;border-radius:22px;
+    min-height:200px;max-height:52vh;padding:16px;border-radius:var(--sv-r-xl);
     background:
       linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 46%),
       var(--sv-glass-bg);
@@ -624,31 +662,35 @@ const STYLES = `
   }
 
   /* ------------------------------------------------------------- messages */
+  /* Concentric: the dock is --sv-r-xl with 16px of padding, so a bubble that
+     sits flush against its inner edge takes that difference. The one small
+     corner is the speech tail and stays small on purpose. */
   .sv-msg{
-    max-width:86%;padding:11px 15px;border-radius:16px;font-size:.9375rem;line-height:1.6;
+    max-width:86%;padding:11px 16px;border-radius:calc(var(--sv-r-xl) - 16px);
+    font-size:.9375rem;line-height:1.6;
     white-space:pre-wrap;word-break:break-word;
   }
   /* User turn: solid teal-ink fill, white text = 5.78:1 */
   .sv-msg.is-me{
     align-self:flex-end;background:var(--sv-teal-ink);color:#fff;
-    border-bottom-right-radius:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.20);
+    border-bottom-right-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.20);
   }
   /* Terma's turn: an opaque-enough white plate ON the glass. rgba(255,255,255,.82)
      over the worst-case dock composite #BEC3C4 resolves to #F3F4F4, where
      --sv-ink measures 11.81:1 and --sv-muted 5.20:1. */
   .sv-msg.is-bot{
     align-self:flex-start;background:rgba(255,255,255,.82);color:var(--sv-ink);
-    border:1px solid var(--sv-line);border-bottom-left-radius:5px;
+    border:1px solid var(--sv-line);border-bottom-left-radius:6px;
   }
   /* colour, not opacity: opacity would drag this below AA on a light surface */
   .sv-msg.is-thinking{color:var(--sv-muted);font-style:italic}   /* 5.20:1 on the bot bubble */
-  .sv-photo img,.sv-staged img{max-width:100%;border-radius:12px;display:block}
+  .sv-photo img,.sv-staged img{max-width:100%;border-radius:var(--sv-r-sm);display:block}
 
   /* AI-impresija badge — amber-500 fill, brown-800 text = 4.83:1 */
   .sv-badge{
     display:inline-block;background:var(--sv-amber);color:var(--sv-brown);
     font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    padding:3px 10px;border-radius:99px;margin-bottom:8px;
+    padding:3px 10px;border-radius:var(--sv-r-pill);margin-bottom:8px;
   }
   .sv-disclaimer{font-size:.78rem;line-height:1.5;color:var(--sv-muted);margin:8px 0 0}  /* 5.20:1 on the bot bubble */
   .sv-colors{display:flex;gap:7px;align-self:flex-start;padding:2px 6px}
@@ -658,13 +700,14 @@ const STYLES = `
   .sv-cards{display:flex;flex-direction:column;gap:9px;align-self:stretch}
   .sv-card{
     display:flex;align-items:center;gap:11px;background:var(--sv-surface);
-    border:1px solid var(--sv-line);border-radius:16px;padding:9px 11px;
+    border:1px solid var(--sv-line);border-radius:var(--sv-r-lg);padding:10px 12px;
     text-decoration:none;color:var(--sv-ink);
     transition:border-color 180ms cubic-bezier(.25,1,.5,1),transform 180ms cubic-bezier(.25,1,.5,1);
   }
   .sv-card:hover{border-color:var(--sv-line-teal)}
   .sv-card:active{transform:scale(.99)}
-  .sv-card-swatch{width:54px;height:54px;border-radius:12px;flex:0 0 auto;background:var(--sv-wash-teal);object-fit:cover}
+  /* Concentric inside the --sv-r-lg card at 10px of padding. */
+  .sv-card-swatch{width:54px;height:54px;border-radius:calc(var(--sv-r-lg) - 10px);flex:0 0 auto;background:var(--sv-wash-teal);object-fit:cover}
   .sv-card-body{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
   /* Figtree — safe to clip. Anton would lose its carons here. */
   .sv-card-name{font-weight:600;font-size:1.0625rem;letter-spacing:-.005em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -672,7 +715,7 @@ const STYLES = `
   .sv-card-price{font-size:.9375rem;font-weight:700;color:var(--sv-teal-ink);font-variant-numeric:tabular-nums}        /* 5.78:1 on #FFF */
   .sv-card-stage{
     flex:0 0 auto;min-height:44px;border:1px solid var(--sv-teal-ink);color:var(--sv-teal-ink);   /* 5.78:1 on #FFF */
-    background:transparent;border-radius:12px;padding:0 12px;cursor:pointer;
+    background:transparent;border-radius:var(--sv-r-pill);padding:0 16px;cursor:pointer;
     font-family:inherit;font-size:.8rem;font-weight:600;letter-spacing:.02em;
     transition:background-color 180ms cubic-bezier(.25,1,.5,1);
   }
@@ -682,21 +725,21 @@ const STYLES = `
   .sv-chips{display:flex;flex-wrap:wrap;gap:9px}
   .sv-chip{
     min-height:44px;border:1px solid var(--sv-line);background:var(--sv-surface);
-    border-radius:99px;padding:9px 16px;cursor:pointer;color:var(--sv-ink);
+    border-radius:var(--sv-r-pill);padding:9px 16px;cursor:pointer;color:var(--sv-ink);
     font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.4;text-align:left;
     transition:background-color 180ms cubic-bezier(.25,1,.5,1),border-color 180ms cubic-bezier(.25,1,.5,1);
   }
   .sv-chip:hover{background:var(--sv-wash-teal);border-color:var(--sv-line-teal)}  /* ink on #DCEAEC = 10.55:1 */
   .sv-inputrow{display:flex;gap:9px}
   .sv-inputrow input{
-    flex:1;min-height:44px;border:1px solid var(--sv-line);border-radius:14px;padding:0 14px;
+    flex:1;min-height:44px;border:1px solid var(--sv-line);border-radius:var(--sv-r-md);padding:0 16px;
     background:var(--sv-surface);color:var(--sv-ink);font-family:inherit;font-size:.9375rem;
   }
   .sv-inputrow input::placeholder{color:var(--sv-muted)}   /* 5.73:1 on #FFF */
   .sv-inputrow input:focus-visible{outline:2.5px solid var(--sv-teal-ink);outline-offset:2px}
   .sv-btn{
     min-height:44px;border:1px solid var(--sv-line);background:var(--sv-surface);color:var(--sv-ink);
-    border-radius:14px;padding:0 18px;cursor:pointer;
+    border-radius:var(--sv-r-pill);padding:0 20px;cursor:pointer;
     font-family:inherit;font-size:.875rem;font-weight:600;letter-spacing:.02em;
     transition:background-color 180ms cubic-bezier(.25,1,.5,1),transform 180ms cubic-bezier(.34,1.4,.5,1);
   }
@@ -710,13 +753,13 @@ const STYLES = `
   /* Amber = heat = "this costs something / read me". Opaque, never glass. */
   .sv-consent{
     align-self:stretch;background:var(--sv-wash-amber);border:1px solid var(--sv-amber-ink);
-    border-radius:16px;padding:14px;font-size:.9rem;line-height:1.55;color:var(--sv-ink);  /* 10.56:1 */
+    border-radius:var(--sv-r-lg);padding:16px;font-size:.9rem;line-height:1.55;color:var(--sv-ink);  /* 10.56:1 */
   }
   .sv-consent strong{color:var(--sv-amber-ink)}   /* 4.76:1 on #F1E6D8 */
   .sv-consent-actions{display:flex;gap:9px;margin-top:12px;flex-wrap:wrap}
 
   /* -------------------------------------------------- offline / contact */
-  .sv-offline{background:var(--sv-wash-amber);border:1px solid var(--sv-line);border-radius:20px;padding:18px;box-shadow:var(--sv-shadow)}
+  .sv-offline{background:var(--sv-wash-amber);border:1px solid var(--sv-line);border-radius:var(--sv-r-xl);padding:20px;box-shadow:var(--sv-shadow)}
   .sv-offline h2{
     margin:0 0 10px;font-family:var(--sv-font-display);font-weight:400;
     font-size:clamp(1.4rem,3.6vw,1.85rem);letter-spacing:-.01em;
@@ -724,7 +767,7 @@ const STYLES = `
     line-height:1.12;padding-top:.18em;overflow:visible;     /* Anton caron guard — "TRENUTAČNO" */
   }
   .sv-offline p{margin:0;font-size:.9375rem;line-height:1.6;color:var(--sv-ink)}   /* 10.56:1 */
-  .sv-contact{background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:20px;padding:18px;box-shadow:var(--sv-shadow)}
+  .sv-contact{background:var(--sv-surface);border:1px solid var(--sv-line);border-radius:var(--sv-r-xl);padding:20px;box-shadow:var(--sv-shadow)}
   .sv-contact h3{
     margin:0 0 8px;font-family:var(--sv-font-display);font-weight:400;
     font-size:clamp(1.2rem,3vw,1.5rem);letter-spacing:-.005em;
@@ -736,6 +779,23 @@ const STYLES = `
   .sv-contact-actions .sv-btn{display:inline-flex;align-items:center;text-decoration:none}
   .sv-contact-actions .sv-btn-primary{color:#fff}
   .sv-contact .sv-contact-meta{margin:12px 0 0;font-size:.75rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--sv-muted)}
+
+  /* ---- entrance ----------------------------------------------------------
+     Named surfaces only, and only ones that are NOT ancestors of .sv-log —
+     that is this view's single backdrop-filter surface, and an animated
+     opacity/transform on a parent would make it a backdrop root and flatten the
+     glass to a plain tint. .sv-wrap and .sv-body are therefore untouched;
+     .sv-head, .sv-offline and .sv-contact are siblings of the dock.
+     Fill mode 'backwards', not 'both': 'both' freezes the final keyframe as the
+     computed style, and a transform resolved by an animation stays a matrix
+     even where the keyframe says none — and a matrix is itself a backdrop
+     root. 'backwards' hands the element back to its own stylesheet at the end. */
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes sv-rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+    .sv-head{animation:sv-rise 420ms cubic-bezier(.25,1,.5,1) backwards}
+    .sv-offline{animation:sv-rise 420ms cubic-bezier(.25,1,.5,1) 60ms backwards}
+    .sv-contact{animation:sv-rise 420ms cubic-bezier(.25,1,.5,1) 120ms backwards}
+  }
 
   /* ====================== the five degradation paths ======================
      1. no backdrop-filter            2. OS reduced transparency

@@ -17,6 +17,10 @@
 //      the renderer's max anisotropy.
 //   4. The placement maths the drag depends on — footprint, rotated extent,
 //      travel limits, the 5 cm grid and the wall magnet.
+//   5. MATERIAL_TUNING: the PBR surface response every sourced material should
+//      have had. The CC0 kits ship ceramics, chrome, mirrors and glass all as
+//      matte dielectrics, which is why untuned scenes read flat. Applied once
+//      per file, on the prototype, so every clone inherits it for free.
 //
 // It also owns MODEL_SPECS: the per-file scale/yaw/size table. Every number in
 // it is copied from vendor/models/PROVENANCE.md, where the bounding boxes were
@@ -204,6 +208,143 @@ export const MODEL_STEMS = Object.freeze(Object.keys(MODEL_SPECS));
 /** @returns {object|null} the spec for a vendor/models file stem, or null. */
 export function modelSpec(stem) {
   return Object.prototype.hasOwnProperty.call(MODEL_SPECS, stem) ? MODEL_SPECS[stem] : null;
+}
+
+// ============================================================================
+// MATERIAL_TUNING — the PBR surface response, per material NAME
+// ============================================================================
+// This is the single biggest reason the scenes used to read flat and "gamey",
+// and it is not a matter of taste. The JSON chunk of every .glb under
+// vendor/models/ was read and every material's factors dumped. The result:
+//
+//   * The 21 Kenney-derived files author EVERY material at metalness 0 and
+//     roughness 1. A glazed ceramic bath, a chrome tap, a mirror and a shower
+//     screen are therefore all handed to the renderer as perfectly diffuse
+//     matte plastic, with no specular response to the scene environment at all.
+//   * The 5 files from the other kit (bathtub-freestanding, toilet-modern,
+//     washbasin-vanity-wall, towel-rail, door-leaf/window-*) author metalness
+//     0.4 on painted frames and ceramics — a value that is neither a dielectric
+//     (0) nor a metal (1), which under image-based lighting darkens and muddies
+//     a surface that should be bright.
+//
+// Nothing here invents geometry, replaces a model, or resizes anything. It only
+// tells the renderer what each already-named surface IS. The names below are
+// the source files' own material names, so the mapping is evidence, not taste:
+// `metalLight` is chrome, `carpetWhite` is the sanitary-ware white, `wood` is
+// the cabinet front, `glass` is glass.
+//
+// Base colours are left EXACTLY as authored, with one documented exception (the
+// mirror — see BY_STEM). Only the surface response is corrected.
+// `env` is how much of the scene environment this surface returns, RELATIVE to
+// a full-strength environment. It stays close to 1.0 on purpose. These
+// prototypes are shared with js/room3d.js, which lights its scene differently,
+// so this table may only describe the MATERIAL — using it to compensate for one
+// engine's exposure would silently blow the same chrome out in the other. A
+// mirror returns a little more than a wall does and a matte board a little
+// less; that is the whole range this column is allowed to express. How bright
+// the environment itself is, is each engine's own decision
+// (js/scene3d.js: scene.environmentIntensity).
+const MAT = (metalness, roughness, env, extra) =>
+  Object.freeze({ metalness, roughness, env, ...(extra || {}) });
+
+const BY_NAME = Object.freeze({
+  // ---- Kenney palette (authored 0 / 1 across the board) -------------------
+  // Despite the name, `carpetWhite` is the sanitary-ware white in these files:
+  // the bath shell, the WC bowl, the basin bowl, the hob panel. Glazed vitreous
+  // china is a dielectric with a hard, near-mirror glaze.
+  carpetWhite: MAT(0, 0.1, 1.0),
+  // Kenney's untitled fallback — painted/moulded white panels (shower tray,
+  // extractor body, cistern). Semi-gloss, not glazed.
+  _defaultMat: MAT(0, 0.25, 1.0),
+  // `metalLight` is the kit's LIGHT BODY colour, not a fitting: it paints the
+  // bath's acrylic apron and the fridge's door skin as well as the odd handle.
+  // Rendering it as true metal was tried and rejected on the evidence — a metal
+  // has no diffuse term, so the bath apron went black wherever the environment
+  // is dark. It is a glossy white dielectric, which is what an acrylic apron
+  // and a powder-coated appliance door both are.
+  metalLight: MAT(0, 0.22, 1.0),
+  metal: MAT(1, 0.34, 1.0),        // brushed steel: handles, trim, appliance faces
+  metalDark: MAT(1, 0.45, 1.0),    // dark anodised / cast iron: taps, hob grates, hinges
+  wood: MAT(0, 0.55, 0.8),         // cabinet FRONT — lacquered board, matte-satin
+  woodDark: MAT(0, 0.72, 0.7),     // carcass, plinth, frame — fully matte
+  glass: MAT(0, 0.08, 1.1),        // see BY_STEM: mirror / screen / appliance door differ
+
+  // ---- The other kit (authored metalness 0.4 on dielectrics) --------------
+  Material: MAT(0, 0.14, 1.0),     // textured sanitary ware (freestanding bath, WC, basin)
+  White: MAT(0, 0.45, 0.9),        // painted door and window frames
+  Metal: MAT(1, 0.3, 1.0),         // door furniture
+  restaurant: MAT(0, 0.72, 0.8),   // towel textile over a bar — no sheen at all
+  // Window glazing. The emissive is the DAYLIGHT BEYOND THE PANE, and it is a
+  // surface property only: three.js emissive does not illuminate anything else
+  // in the scene, so no light is being smuggled into the room. It exists
+  // because a window rendered as a mid-grey panel reads as a painted board.
+  Glass: MAT(0, 0.06, 1.1, { emissive: 0xdfeaf7, emissiveIntensity: 0.55 }),
+  // ac-outdoor-unit — never used by an interior scene, tuned for consistency.
+  LightGrey: MAT(0.1, 0.5, 1.0), Grey: MAT(0.1, 0.5, 1.0),
+  Black: MAT(0.1, 0.55, 1.0), Orange: MAT(0.1, 0.5, 1.0),
+});
+
+// Same material NAME, different real material, per file. Each override says
+// which file it is for and why the shared entry is wrong there.
+const BY_STEM = Object.freeze({
+  // A mirror is a mirror. This is the ONE base-colour change in the table: the
+  // source file paints the mirror plate with the kit's shared opaque green
+  // `glass`, and a green metal reads as tinted brass, not as a looking glass.
+  // Reflectance is set neutral silver so it returns the environment unmodified.
+  "bathroom-mirror": { glass: MAT(1, 0.04, 1.15, { color: 0xd8dcda }) },
+  // The shower screen has to be see-through or the enclosure is a solid block
+  // and the tiles behind it — the thing being sold — are hidden. Its two panes
+  // are their own meshes (doorLeft_1, doorRight_1, glass only), so `noShadow`
+  // costs nothing else: a 16 %-opacity pane must not stamp a solid shadow.
+  "shower-enclosure": { glass: MAT(0, 0.05, 1.1, { transparent: true, opacity: 0.16, depthWrite: false, noShadow: true }) },
+  // Oven door and fridge door glazing: dark tempered panels, so glossy but not
+  // transparent. Colour left as authored.
+  "kitchen-stove": { glass: MAT(0, 0.08, 1.05) },
+  "kitchen-fridge": { glass: MAT(0, 0.08, 1.05) },
+});
+
+/**
+ * Apply MATERIAL_TUNING to a freshly loaded prototype, in place.
+ *
+ * Runs ONCE per file, on the prototype, before any clone is taken —
+ * THREE.Object3D.clone() copies the material by reference, so every instance in
+ * every scene shares the tuned material and the per-instance cost is zero.
+ *
+ * @param {THREE.Object3D} root  the prototype wrapper
+ * @param {string} stem          vendor/models file stem, for the per-file overrides
+ */
+export function tuneMaterials(root, stem) {
+  const overrides = BY_STEM[stem] || null;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    let allNoShadow = mats.length > 0;
+    for (const m of mats) {
+      if (!m) { allNoShadow = false; continue; }
+      const tune = (overrides && overrides[m.name]) || BY_NAME[m.name] || null;
+      if (!tune) { allNoShadow = false; continue; }
+      if (typeof m.metalness === "number") m.metalness = tune.metalness;
+      if (typeof m.roughness === "number") m.roughness = tune.roughness;
+      if (typeof m.envMapIntensity === "number") m.envMapIntensity = tune.env;
+      if (tune.color !== undefined && m.color) m.color.setHex(tune.color);
+      if (tune.emissive !== undefined && m.emissive) {
+        m.emissive.setHex(tune.emissive);
+        m.emissiveIntensity = tune.emissiveIntensity;
+      }
+      if (tune.transparent) {
+        m.transparent = true;
+        m.opacity = tune.opacity;
+        m.depthWrite = tune.depthWrite !== false;
+        m.side = THREE.DoubleSide;
+      }
+      m.needsUpdate = true;
+      if (!tune.noShadow) allNoShadow = false;
+    }
+    // A mesh whose every material is a see-through pane must not cast a solid
+    // shadow. Shadow casting is per OBJECT, never per material, which is why
+    // this is decided from the whole mesh rather than inside the loop.
+    if (allNoShadow) o.castShadow = false;
+  });
 }
 
 // ============================================================================
@@ -450,11 +591,20 @@ export function loadPrototype(spec, maxAniso) {
     root.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
-      o.receiveShadow = false;          // self-shadowing on low-poly furniture is noise
+      // Receiving as well as casting is what makes a run of cabinets read as a
+      // RUN — the stove shadows the unit beside it, the vanity darkens under
+      // its own top, the bath sits in its own shadow. It was off because it was
+      // noisy against the old lighting; with shadow.normalBias set and the
+      // shadow camera fitted to the room (js/scene3d.js) it is clean, and it is
+      // most of what stopped these objects looking like flat cut-outs.
+      o.receiveShadow = true;
       o.userData.shared = true;         // disposeObject() must not free a shared resource
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) if (m && m.map) m.map.anisotropy = maxAniso;
     });
+    // AFTER the flags above: a pane tuned as see-through clears its own
+    // castShadow, and that decision must win.
+    tuneMaterials(root, String(spec.file || "").replace(/\.glb$/i, ""));
     return { root, footprint: measureFootprint(root) };
   });
 

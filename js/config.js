@@ -8,13 +8,27 @@
 // ============================================================================
 
 export const CONFIG = {
-  // e.g. "https://xyzcompany.supabase.co" — empty string = offline demo.
-  supabaseUrl: "",
-  // The project's public anon key — empty string = offline demo.
-  supabaseAnonKey: "",
-  // Public base URL of the deployed app (used for auth redirects and share
-  // links) — empty string = derive from location at call sites.
-  appUrl: "",
+  // Supabase project "Akvaterm" (ref btcqaqstfbaenurhuvym).
+  supabaseUrl: "https://btcqaqstfbaenurhuvym.supabase.co",
+
+  // PUBLISHABLE key — public BY DESIGN, and safe in this repository.
+  //
+  // Supabase's own dashboard states it verbatim: "Publishable keys can be
+  // safely shared publicly". What protects the data is Row Level Security,
+  // not the secrecy of this string — products are public-read, favourites and
+  // designs are owner-only, and every policy lives in supabase/schema.sql.
+  // If RLS were ever disabled on a table, THAT would be the breach, not this
+  // key being visible.
+  //
+  // The matching SECRET key is deliberately absent and was never copied
+  // anywhere: Edge Functions receive SUPABASE_SERVICE_ROLE_KEY from the
+  // platform automatically, so nothing in this project needs to hold it.
+  // Operator's local key store: %USERPROFILE%\.akvaterm\keys.env
+  supabaseAnonKey: "sb_publishable_hRnCKKDZ5rU4fcWD1GOHNg_7E4Nr2A0",
+
+  // Public base URL of the deployed app (auth redirects, share links).
+  appUrl: "https://manbeardog13.github.io/Akvaterm/",
+
   // Name of the Supabase Edge Function that proxies Gemini for the advisor.
   termaFunction: "terma",
 };

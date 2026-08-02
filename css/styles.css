@@ -215,9 +215,54 @@
   --grad-warm:linear-gradient(140deg,var(--amber-500),var(--amber-600) 80%);
   --on-accent:#FFFFFF;
 
-  /* Geometry — ASC scale, unchanged */
-  --gap:14px; --pad:20px; --radius:22px;
-  --radius-sm:12px; --radius-lg:28px; --radius-pill:999px;
+  /* ---------------------------------------------------------------------
+     GEOMETRY — THE RADIUS SCALE.
+
+     One ladder, six rungs plus a pill, and one rule that decides which rung
+     a surface gets: the radius scales with the ELEMENT, and an inset child
+     always sits at least one rung BELOW its parent, so corners stay
+     concentric instead of crossing.
+
+     Concentric corners have an arithmetic, not an aesthetic, definition: an
+     inset child's ideal radius is the parent's radius minus the gap between
+     them (r_child = r_parent - inset). The rungs step 4/4/6/6/6 px, so
+     "parent minus a 15-20px pad" lands two or three rungs down — which is
+     why the assignments through this sheet look the way they do rather than
+     being picked by eye. Where a child is FLUSH with its parent's edge the
+     inset is 0 and the radii must be EQUAL (.sheet-header, and anything
+     clipped by an overflow:hidden parent, which inherits by construction).
+
+       --r-xs   8px  micro marks — skeleton bars, the chat bubble's tail
+       --r-sm  12px  small nested tiles — the 56px list-row thumb
+       --r-md  16px  controls that are not pills — inputs, banners, toasts,
+                     menu items, the canvas HUD, the compact glass recipe
+       --r-lg  22px  mid surfaces — popovers, the 72px empty-state icon,
+                     chat bubbles, a card nested inside a bigger surface
+       --r-xl  28px  THE CARD TIER — card, product card, category tile, list
+                     row, glass panel, and the arch on the two standing bars
+       --r-2xl 34px  hero surfaces — designer stage, 3D stage, bottom sheet,
+                     product drawer, chat dock
+       --r-pill      every small control — buttons, chips, badges, segments
+
+     SMALL CONTROLS ARE PILLS, NOT ROUNDED RECTANGLES. 22px on a 44px chip is
+     half its height and reads as a mistake; a pill reads as intent. Anything
+     under ~40px tall that is a control gets --r-pill, and the scale is never
+     used to "slightly round" a small control.
+
+     The four legacy names are kept and REPOINTED rather than replaced,
+     because other modules resolve through them: js/views/dizajner.js maps
+     --diz-r/--diz-r-sm/--diz-pill onto --radius*, js/views/katalog.js maps
+     --akv-r* onto --glass-radius*, and js/qrshare.js reads --radius-sm
+     directly. Repointing is what carries the new generosity into those views
+     without editing a file this pass does not own.
+     --------------------------------------------------------------------- */
+  --r-xs:8px; --r-sm:12px; --r-md:16px;
+  --r-lg:22px; --r-xl:28px; --r-2xl:34px; --r-pill:999px;
+  --radius:var(--r-xl);                /* was a flat 22px                    */
+  --radius-sm:var(--r-md);             /* was 12px                           */
+  --radius-lg:var(--r-2xl);            /* was 28px                           */
+  --radius-pill:var(--r-pill);
+  --gap:14px; --pad:20px;
   --tap:44px; --maxw:1180px; --nav-h:62px;
   /* Top bar height WITHOUT the notch inset. Anything that offsets against the
      bar (sticky drawer, chat dock) must add env(safe-area-inset-top) itself,
@@ -225,9 +270,25 @@
      viewport-fit=cover. */
   --topbar-h:58px;
 
-  /* Elevation — warm shadows built on --shadow-warm rgb(93,79,79) */
+  /* Elevation — warm shadows built on --shadow-warm rgb(93,79,79).
+
+     LAYERED, NEVER ONE HARD DROP. Each elevation is three shadows doing three
+     different jobs: a 1-2px contact shadow that seats the edge, a mid blur
+     that gives the shape its body, and a wide low-alpha ambient that puts it
+     in a room. A single big blur reads as a sticker; the stack reads as an
+     object. --shadow-pop used to be two undamped blurs (12/32 and 32/64 with
+     no negative spread), which is why a hovered card looked like it had been
+     smudged rather than lifted — it is now the same three-part stack one
+     stop up. */
   --shadow-card:0 1px 2px -1px rgba(93,79,79,.14),0 6px 16px -8px rgba(93,79,79,.20),0 20px 40px -22px rgba(93,79,79,.28);
-  --shadow-pop:0 12px 32px rgba(93,79,79,.18),0 32px 64px rgba(93,79,79,.22);
+  --shadow-pop:0 2px 4px -2px rgba(93,79,79,.18),0 12px 26px -12px rgba(93,79,79,.28),0 30px 62px -28px rgba(93,79,79,.36);
+
+  /* THE BEVEL. An arched corner needs an edge to arch, and the edge is a
+     hairline lit from above — not a border of one flat colour ringing the
+     shape. On a light surface that means the TOP hairline is fainter than the
+     sides (light falls on it, so less line survives) which is --hairline .07
+     against --line .12; on a dark surface it means an actual specular rim. */
+  --bevel-dark:inset 0 1px 0 rgba(255,255,255,.07);
 
   /* Motion */
   --smooth:cubic-bezier(.25,1,.5,1); --snap:cubic-bezier(.22,1,.36,1);
@@ -368,10 +429,15 @@
   --glass-shadow-2:0 2px 6px rgba(93,79,79,.14),0 12px 34px rgba(93,79,79,.22);
   --glass-shadow-3:0 6px 18px rgba(93,79,79,.20),0 28px 70px rgba(93,79,79,.32);
 
-  --glass-radius-sm:14px;
-  --glass-radius-md:20px;
-  --glass-radius-lg:28px;
-  --glass-radius-pill:999px;
+  /* The glass sizes are not a second scale — they are three rungs of the ONE
+     scale, named for the recipes that consume them. js/views/katalog.js maps
+     --akv-r / --akv-r-sm / --akv-r-pill straight onto these three, so a
+     catalogue product card and a .product-card in this sheet now land on the
+     same 28px rather than on 20px and 22px respectively. */
+  --glass-radius-sm:var(--r-md);       /* was 14px */
+  --glass-radius-md:var(--r-xl);       /* was 20px */
+  --glass-radius-lg:var(--r-2xl);      /* was 28px */
+  --glass-radius-pill:var(--r-pill);
   --glass-ease:cubic-bezier(.32,.72,0,1);
 
   /* Legacy names kept so older rules and any copied snippet keep resolving. */
@@ -483,7 +549,14 @@ small{font-size:12.5px}
 .tnum,.t-numeric{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
 .muted{color:var(--muted)}
 .faint{color:var(--faint)}
-:focus-visible{outline:2.5px solid var(--accent-ink);outline-offset:2px;border-radius:5px}
+/* NO border-radius here. It used to carry `border-radius:5px`, and because
+   :focus-visible is (0,1,0) while a bare `input`/`textarea`/`select` selector
+   is (0,0,1), focusing a text field SQUARED IT OFF from 12px to 5px for as
+   long as the ring was up — a corner that changed shape on focus, which is
+   the opposite of a consistent corner language. Every engine this app
+   supports already draws `outline` following the element's own
+   border-radius, so the declaration bought nothing and cost that. */
+:focus-visible{outline:2.5px solid var(--accent-ink);outline-offset:2px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 /* --------------------------------------------------------------------------
@@ -567,32 +640,123 @@ small{font-size:12.5px}
 .wordmark-on-dark .term,.wordmark-on-dark .brand-term{color:var(--logo-red)}
 
 /* ============================== Branded splash ========================== */
-/* Visible on first paint (this sheet is render-blocking), dismissed by the
-   inline script in index.html: .out fades, .gone removes. Watchdog-backed. */
+/* THE ENTRANCE. Visible on first paint (this sheet is render-blocking), and
+   dismissed by the inline script in index.html: .out fades, .gone removes,
+   a 4 s watchdog guarantees it can never wedge.
+
+   It is a CHOREOGRAPHY, not a fade, and it is built around the one thing this
+   app's identity actually says. The wordmark arrives first in its protected
+   navy/red (the logo is never restyled — see the Wordmark block above), then
+   the rule draws underneath it left to right, teal into amber: water into
+   heat, which is what Akvaterm sells and what the Iris palette encodes. The
+   warm end blooms once the draw lands, and that is the whole idea — one
+   gesture, no spin, no bounce, no logo assembling itself out of parts.
+
+   TIMELINE — 1.0 s of animation, handed off at 0.9 s:
+
+     0.04 - 0.52   wordmark rises 14px and settles (spMark)
+     0.22 - 0.58   rule track fades in and widens from its centre (spRule)
+     0.28 - 0.88   the teal->amber fill draws left to right (spFill)
+     0.62 - 0.88   the amber end blooms (spBloom)
+     0.90          MIN_MS reached -> .out, and html.splashing drops
+     0.90 - 1.32   veil fades while the app's OWN entrance plays underneath
+
+   Easing is --snap (.22,1,.36,1) and --smooth (.25,1,.5,1) throughout, never
+   --spring: --spring overshoots to 1.4 and a launch surface that boings is a
+   toy. Nothing here animates blur(), and the only properties that move are
+   opacity and transform.
+
+   THE HAND-OFF is the reason this reads as one entrance rather than two.
+   While html.splashing is up, #main's own entrance choreography holds at
+   frame 0 — animation-play-state:paused freezes the DELAY clock too, so the
+   staggered riseIn delays have not started counting either — and the whole
+   sequence plays from zero the instant the class drops. The app's entrance IS
+   the splash's second act. Without this, the view finishes rising while it is
+   still hidden behind the veil and the user is handed a dead, already-settled
+   screen. Pattern taken from ASC (app/app.css: html.splashing .reveal).
+
+   The class is added by the inline script at the bottom of index.html, which
+   runs BEFORE the deferred module that renders the first view, so there is no
+   window in which an unpaused entrance can start. It is removed in the same
+   statement that starts the fade, and again by the watchdog, so no failure
+   path can leave the app frozen at frame 0 behind a veil that has gone. */
 #splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--paper)}
+/* Without scripting nothing can ever dismiss this element, so it must not be
+   painted at all — otherwise the veil covers the <noscript> notice forever. */
+@media(scripting:none){#splash{display:none}}
 #splash::before{
   content:"";position:absolute;inset:0;
   background:
     radial-gradient(60vmax 56vmax at 6% -14%,var(--accent-tint),transparent 60%),
     radial-gradient(54vmax 50vmax at 98% 116%,var(--accent-2-tint),transparent 60%);
 }
-.sp-core{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px}
+/* -3vh is optical centring, not a mistake: a mark plus a rule under it reads
+   as sitting low when its bounding box is centred. Static, so the exit's
+   translate has a single origin to move from. */
+.sp-core{position:relative;display:flex;flex-direction:column;align-items:center;gap:18px;transform:translateY(-3vh)}
 /* No overflow:hidden anywhere on this path — Anton's carons must be free. */
-.sp-mark{font-size:clamp(34px,9vw,54px);line-height:1.1;animation:spMark 480ms var(--spring) 60ms both}
-.sp-rule{width:min(200px,52vw);height:3px;border-radius:2px;overflow:hidden;background:var(--line);animation:spRule 560ms var(--snap) 240ms both}
-/* The rule sweeps teal -> amber: the whole identity in one 200px gesture. */
-.sp-rule i{display:block;height:100%;width:100%;border-radius:2px;transform-origin:left;
-  background:linear-gradient(90deg,var(--accent-bright),var(--accent-2));animation:spFill 900ms var(--smooth) 340ms both}
-@keyframes spMark{from{opacity:0;transform:translateY(10px) scale(.96)}}
-@keyframes spRule{from{opacity:0;transform:scaleX(.4)}}
-@keyframes spFill{from{transform:scaleX(0)}}
-#splash.out{opacity:0;pointer-events:none;transition:opacity 420ms var(--smooth) 60ms}
-#splash.out .sp-core{opacity:0;transform:translateY(-3vh) scale(1.04);transition:opacity 420ms var(--smooth),transform 420ms var(--smooth)}
-#splash.gone{display:none!important}
-@media(prefers-reduced-motion:reduce){
-  .sp-mark,.sp-rule,.sp-rule i{animation:none}
-  #splash.out,#splash.out .sp-core{transition:opacity .001ms}
+.sp-mark{font-size:clamp(34px,9vw,54px);line-height:1.1;animation:spMark 480ms var(--snap) 40ms both}
+/* The track: a hairline the fill runs along, so the gesture has somewhere to
+   go before it gets there. --r-pill on a 3px bar is a 1.5px cap. */
+.sp-rule{
+  /* Named once so the patience state can restore it without repeating it. */
+  --sp-fill:linear-gradient(90deg,var(--teal-300),var(--accent-bright) 34%,var(--amber-600) 76%,var(--accent-2));
+  position:relative;width:min(212px,54vw);height:3px;border-radius:var(--r-pill);
+  background:var(--line);animation:spRule 360ms var(--snap) 220ms both;
 }
+/* The fill sweeps teal -> amber: the whole identity in one 212px gesture. */
+.sp-rule i{
+  display:block;height:100%;width:100%;border-radius:inherit;transform-origin:left;
+  background:var(--sp-fill);
+  animation:spFill 600ms var(--smooth) 280ms both;
+}
+/* The heat bloom at the warm end, arriving as the draw lands. closest-side on
+   a 26px box keeps it a soft halo rather than a lamp. */
+.sp-rule::after{
+  content:"";position:absolute;top:50%;right:-13px;width:26px;height:26px;
+  transform:translateY(-50%);pointer-events:none;
+  background:radial-gradient(closest-side,var(--accent-2-ring),transparent);
+  animation:spBloom 260ms var(--smooth) 620ms both;
+}
+@keyframes spMark{from{opacity:0;transform:translateY(14px) scale(.965)}}
+@keyframes spRule{from{opacity:0;transform:scaleX(.34)}}
+@keyframes spFill{from{transform:scaleX(0)}}
+@keyframes spBloom{from{opacity:0}to{opacity:1}}
+/* PATIENCE. If the app has not signalled ready by 1.6 s the rule starts a slow
+   shimmer, so a slow first load looks like work rather than like a hang. It is
+   a background-position sweep on a gradient that is already painted — no blur,
+   no layout, no second element. Same idea as ASC's #splash.wait. */
+#splash.wait .sp-rule i{
+  background:linear-gradient(90deg,var(--accent-bright) 0%,var(--accent-2) 42%,var(--accent-bright) 84%);
+  background-size:260% 100%;
+  animation:spSweep 1400ms linear infinite!important;
+}
+/* THE EXIT. The veil fades on opacity alone while the core lifts and grows a
+   fraction — the app's entrance is already playing underneath by then, so the
+   two movements overlap instead of queueing. */
+#splash.out{opacity:0;pointer-events:none;transition:opacity 380ms var(--smooth) 40ms}
+#splash.out .sp-core{opacity:0;transform:translateY(-6vh) scale(1.035);transition:opacity 380ms var(--smooth),transform 380ms var(--smooth)}
+#splash.gone{display:none!important}
+/* The pause that makes the hand-off possible. Scoped to the entrance classes
+   only: nothing else in the app animates on load, and a blanket
+   `html.splashing *` would freeze a spinner mid-turn. */
+html.splashing #main.view-enter,
+html.splashing #main.view-enter>*{animation-play-state:paused}
+/* FULL REDUCED-MOTION PATH: instant, and genuinely without movement. Every
+   entrance keyframe is dropped (not shortened — dropped), the patience
+   shimmer becomes a static gradient, the exit is a hard cut, and the core
+   does not translate on the way out. The app's own entrance is already
+   animation:none under this query, which is also why the pause above becomes
+   a no-op rather than a freeze. */
+@media(prefers-reduced-motion:reduce){
+  .sp-mark,.sp-rule,.sp-rule i,.sp-rule::after,#splash.wait .sp-rule i{animation:none!important}
+  /* …and the patience state stops being a shimmer, so it must not keep the
+     shimmer's teal-amber-teal gradient either: put the identity back. */
+  #splash.wait .sp-rule i{background:var(--sp-fill)}
+  #splash.out,#splash.out .sp-core{transition:opacity .001ms}
+  #splash.out .sp-core{transform:translateY(-3vh)}
+}
+@keyframes spSweep{from{background-position:200% 0}to{background-position:-120% 0}}
 
 /* ==========================================================================
    LIQUID GLASS — reusable classes
@@ -886,8 +1050,17 @@ main,#main{
   background:transparent;
   isolation:isolate;
 }
+/* THE ARCH ON THE STANDING BARS. The glass is a panel hanging from the top
+   edge, so it is bevelled where it meets the page (--r-xl, the card rung) and
+   square where it meets the screen edge and the notch — a radius on the top
+   corners would open a gap into the status-bar area under viewport-fit=cover.
+   The arch is on the SURFACE, never on .topbar itself: the wrapper stays
+   transparent so Safari 26 samples the page rather than the panel when it
+   tints its own chrome (see the note above), and the row inside is not
+   clipped, so a long Croatian nav label still runs the full width. */
 .topbar__surface{
   position:absolute;inset:0;z-index:-1;pointer-events:none;
+  border-radius:0 0 var(--r-xl) var(--r-xl);
   background-color:var(--glass-bg-text);
   -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
   backdrop-filter:var(--glass-fx-md);
@@ -898,6 +1071,7 @@ main,#main{
 .topbar__inner{display:flex;align-items:center;gap:12px;flex:1;min-width:0;height:var(--topbar-h)}
 /* Flat-shell fallback: no __surface child, so the header carries the glass. */
 .topbar:not(:has(.topbar__surface)){
+  border-radius:0 0 var(--r-xl) var(--r-xl);
   background-color:var(--glass-bg-text);
   -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
   backdrop-filter:var(--glass-fx-md);
@@ -939,8 +1113,15 @@ main,#main{
   isolation:isolate;
 }
 /* Absolutely positioned, so it never becomes a sixth grid column. */
+/* Mirror of the top bar: arched where it meets the page, square where it meets
+   the screen edge and the home indicator. Measured in-browser at the 320px
+   floor, where the five columns are 64px each: the outermost icon's near edge
+   sits 20.5px in from the bar edge and its top is 10.3px down, at which depth
+   the 28px arc has intruded 6.35px — 14.15px of clearance, so neither the
+   first nor the last tab is ever touched by the corner. */
 .tabbar__surface{
   position:absolute;inset:0;z-index:-1;pointer-events:none;
+  border-radius:var(--r-xl) var(--r-xl) 0 0;
   background-color:var(--glass-bg-text);
   -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
   backdrop-filter:var(--glass-fx-md);
@@ -949,6 +1130,7 @@ main,#main{
   contain:paint;
 }
 .tabbar:not(:has(.tabbar__surface)){
+  border-radius:var(--r-xl) var(--r-xl) 0 0;
   background-color:var(--glass-bg-text);
   -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
   backdrop-filter:var(--glass-fx-md);
@@ -1007,14 +1189,17 @@ html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface)
    cosmetic declaration lives here. Compound selector on purpose: the .card
    block below would otherwise win the radius on source order. */
 .card.menu-pop{
-  padding:6px;border-radius:var(--radius-sm);width:min(300px,calc(100vw - 24px));
-  background:var(--glass-solid);border-color:var(--line);box-shadow:var(--shadow-pop);
+  padding:6px;border-radius:var(--r-lg);width:min(300px,calc(100vw - 24px));
+  background:var(--glass-solid);border-color:var(--line);border-top-color:var(--hairline);
+  box-shadow:var(--shadow-pop);
   animation:popIn var(--dur) var(--snap) both;
 }
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.98)}}
+/* Concentric: 22px popover, 6px pad -> 16px item. Both rungs of the one scale,
+   and the arithmetic is exact rather than approximately right. */
 .menu-pop .btn,.menu-pop .menu-item{
   min-height:var(--tap);width:100%;justify-content:flex-start;
-  font-size:14.5px;border-radius:var(--radius-sm);padding:8px 12px;text-align:left;
+  font-size:14.5px;border-radius:var(--r-md);padding:8px 12px;text-align:left;
 }
 .menu-sep{height:1px;margin:6px 4px;background:var(--line)}
 .menu-toggle{display:flex;align-items:center;gap:12px}
@@ -1046,8 +1231,12 @@ html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface)
 /* Cards stay OPAQUE. Making every card glass would blow the 2–3 surface budget
    on the catalogue grid alone, and docs/DESIGN_SYSTEM.md says so explicitly.
    A view that wants one floating glass panel adds .glass to that one panel. */
+/* --radius is --r-xl (28px). The border is NOT one flat ring: the top hairline
+   drops to --hairline so the lit edge carries less line than the shaded ones,
+   which is what makes an arched corner read as bevelled rather than drawn. */
 .card{
   position:relative;background:var(--surface);border:1px solid var(--line);
+  border-top-color:var(--hairline);
   border-radius:var(--radius);box-shadow:var(--shadow-card);padding:var(--pad);
 }
 .card+.card{margin-top:var(--gap)}
@@ -1069,6 +1258,9 @@ html:has(.sheet-backdrop) :is(.topbar,.topbar__surface,.tabbar,.tabbar__surface)
   background-color:var(--dark);
   background-image:radial-gradient(120% 100% at 90% -20%,rgba(19,158,177,.22),transparent 55%),linear-gradient(175deg,var(--dark),var(--dark-2));
   border-color:transparent;color:var(--on-dark);
+  /* A dark surface cannot show a fainter top line, so it gets the other half
+     of the same idea: an actual specular rim along the top arch. */
+  box-shadow:var(--shadow-card),var(--bevel-dark);
 }
 .card-dark .muted{color:var(--on-dark-2)}
 .card-dark .eyebrow{color:var(--accent-soft)}
@@ -1205,15 +1397,15 @@ input[type="range"]{
   padding:0;border:none;background:transparent;cursor:pointer;accent-color:var(--accent);
 }
 input[type="range"]:focus{box-shadow:none}
-input[type="range"]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line-strong)}
+input[type="range"]::-webkit-slider-runnable-track{height:6px;border-radius:var(--r-pill);background:var(--line-strong)}
 input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none;width:22px;height:22px;border-radius:50%;margin-top:-8px;
   background:var(--accent);border:3px solid var(--surface);box-shadow:0 2px 6px var(--accent-ring);
   transition:transform var(--dur) var(--spring);
 }
 input[type="range"]:active::-webkit-slider-thumb{transform:scale(1.15)}
-input[type="range"]::-moz-range-track{height:6px;border-radius:3px;background:var(--line-strong)}
-input[type="range"]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+input[type="range"]::-moz-range-track{height:6px;border-radius:var(--r-pill);background:var(--line-strong)}
+input[type="range"]::-moz-range-progress{height:6px;border-radius:var(--r-pill);background:var(--accent)}
 input[type="range"]::-moz-range-thumb{
   width:16px;height:16px;border-radius:50%;background:var(--accent);
   border:3px solid var(--surface);box-shadow:0 2px 6px var(--accent-ring);
@@ -1240,9 +1432,13 @@ input[type="range"]::-moz-range-thumb{
 /* ============================== Product grid ============================ */
 .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:var(--gap)}
 @media(min-width:720px){.product-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
+/* The swatch is FLUSH with the card's top edge, so it needs no radius of its
+   own: overflow:hidden makes it inherit the arch exactly. That is the flush
+   case of the concentric rule — inset 0, so r_child = r_parent. */
 .product-card{
   position:relative;display:flex;flex-direction:column;overflow:hidden;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);border:1px solid var(--line);border-top-color:var(--hairline);
+  border-radius:var(--radius);
   box-shadow:var(--shadow-card);cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform var(--dur-2) var(--spring),box-shadow var(--dur-2) var(--smooth),border-color var(--dur) var(--smooth);
 }
@@ -1275,7 +1471,8 @@ input[type="range"]::-moz-range-thumb{
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--gap)}
 .cat-tile{
   display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:18px 16px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);border:1px solid var(--line);border-top-color:var(--hairline);
+  border-radius:var(--radius);
   box-shadow:var(--shadow-card);cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform var(--dur-2) var(--spring),box-shadow var(--dur-2) var(--smooth),border-color var(--dur) var(--smooth);
 }
@@ -1303,13 +1500,18 @@ input[type="range"]::-moz-range-thumb{
 .list{display:flex;flex-direction:column;gap:10px}
 .list-row{
   display:flex;gap:12px;align-items:center;padding:14px 15px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);border:1px solid var(--line);border-top-color:var(--hairline);
+  border-radius:var(--radius);
   box-shadow:var(--shadow-card);cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform var(--dur-2) var(--spring),box-shadow var(--dur-2) var(--smooth),border-color var(--dur) var(--smooth);
 }
 @media(hover:hover) and (pointer:fine){.list-row:hover{box-shadow:var(--shadow-pop);border-color:var(--accent-2-ring);transform:translateY(-2px)}}
 .list-row:active{transform:translateY(-1px) scale(.995);transition-duration:100ms}
-.list-row .thumb{flex:none;width:56px;height:56px;border-radius:var(--radius-sm);background:var(--panel) center/cover;overflow:hidden}
+/* Concentric: the row is 28px with a 15px pad, so the ideal inner corner is
+   13px and the scale's nearest rung is --r-sm 12px. NOT --radius-sm (16px) —
+   that is the control rung, and it would leave the thumb's corner crossing
+   its parent's. */
+.list-row .thumb{flex:none;width:56px;height:56px;border-radius:var(--r-sm);background:var(--panel) center/cover;overflow:hidden}
 .list-row .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .list-row .body{flex:1;min-width:0}
 .list-row .t{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1328,7 +1530,12 @@ input[type="range"]::-moz-range-thumb{
 /* Canvas stage + product drawer: right rail on desktop, below-stage on mobile */
 .designer{display:grid;gap:var(--gap);grid-template-columns:minmax(0,1fr);align-items:start}
 @media(min-width:900px){.designer{grid-template-columns:minmax(0,1fr) 340px}}
-.stage-wrap{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--dark);box-shadow:var(--shadow-card)}
+/* HERO TIER — --r-2xl. The stage is the largest single object on its screen
+   and the radius scales with the element, so it sits a rung above the cards
+   around it. The canvas inside is flush, so overflow:hidden gives it the same
+   arch by inheritance; --bevel-dark is the lit top edge that the dark ground
+   cannot express as a hairline. */
+.stage-wrap{position:relative;border-radius:var(--r-2xl);overflow:hidden;background:var(--dark);box-shadow:var(--shadow-card),var(--bevel-dark)}
 .stage-canvas{display:block;width:100%;aspect-ratio:10/7;touch-action:manipulation}
 .stage-canvas canvas,canvas.stage-canvas{display:block;width:100%;height:100%}
 /* NOTE: .stage-hint (a pill-shaped dark-glass caption over the canvas) used to
@@ -1347,9 +1554,14 @@ input[type="range"]::-moz-range-thumb{
 /* Drawer — controls + product picker */
 .drawer{
   display:flex;flex-direction:column;gap:var(--gap);min-width:0;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);border:1px solid var(--line);border-top-color:var(--hairline);
+  border-radius:var(--r-2xl);
   box-shadow:var(--shadow-card);padding:16px;
 }
+/* Concentric: the drawer is 34px with a 16px pad, so its product cards drop a
+   rung to 22px instead of keeping the 28px they carry out in the grid, where
+   they are the largest thing on screen rather than the smallest. */
+.drawer .product-card{border-radius:var(--r-lg)}
 @media(min-width:900px){
   .drawer{position:sticky;top:calc(var(--topbar-h) + env(safe-area-inset-top,0px) + var(--gap));max-height:calc(100dvh - var(--topbar-h) - env(safe-area-inset-top,0px) - 2*var(--gap));overflow-y:auto;overscroll-behavior:contain}
 }
@@ -1378,7 +1590,7 @@ input[type="range"]::-moz-range-thumb{
 .compare-label{position:absolute;top:10px;left:10px;z-index:2}
 
 /* 3D room stage (soba3d) */
-.room3d-stage{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--dark);box-shadow:var(--shadow-card);aspect-ratio:16/10;min-height:280px}
+.room3d-stage{position:relative;border-radius:var(--r-2xl);overflow:hidden;background:var(--dark);box-shadow:var(--shadow-card),var(--bevel-dark);aspect-ratio:16/10;min-height:280px}
 .room3d-stage canvas{display:block;width:100%;height:100%;touch-action:none}
 .room3d-loading{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
@@ -1394,7 +1606,8 @@ input[type="range"]::-moz-range-thumb{
   display:flex;flex-direction:column;min-height:0;
   height:calc(100dvh - var(--topbar-h) - env(safe-area-inset-top,0px) - var(--nav-h) - env(safe-area-inset-bottom,0px) - 46px);
   min-height:340px;background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--radius);box-shadow:var(--shadow-card);overflow:hidden;
+  border-top-color:var(--hairline);
+  border-radius:var(--r-2xl);box-shadow:var(--shadow-card);overflow:hidden;
 }
 @media(min-width:720px){.chat-dock{height:calc(100dvh - var(--topbar-h) - env(safe-area-inset-top,0px) - 88px);max-height:760px}}
 .chat-head{
@@ -1410,10 +1623,14 @@ input[type="range"]::-moz-range-thumb{
 .chat-head .who b{display:block;font-size:14.5px;font-weight:700}
 .chat-head .who span{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:var(--track-meta)}
 .chat-log{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:82%;padding:10px 14px;border-radius:18px;font-size:14.5px;line-height:1.5;overflow-wrap:anywhere;animation:msgIn var(--dur-2) var(--smooth) both}
+/* 22px on a ~42px single-line bubble is effectively a pill, which is what a
+   short message should be; the tail corner drops to --r-xs so the bubble still
+   points at its author. Both are rungs of the scale — the old 18px/6px pair
+   was neither. */
+.msg{max-width:82%;padding:10px 14px;border-radius:var(--r-lg);font-size:14.5px;line-height:1.5;overflow-wrap:anywhere;animation:msgIn var(--dur-2) var(--smooth) both}
 @keyframes msgIn{from{opacity:0;transform:translateY(8px)}}
-.msg.me{align-self:flex-end;background:var(--grad-accent);color:var(--on-accent);border-bottom-right-radius:6px}
-.msg.bot{align-self:flex-start;background:var(--panel);color:var(--ink);border-bottom-left-radius:6px}
+.msg.me{align-self:flex-end;background:var(--grad-accent);color:var(--on-accent);border-bottom-right-radius:var(--r-xs)}
+.msg.bot{align-self:flex-start;background:var(--panel);color:var(--ink);border-bottom-left-radius:var(--r-xs)}
 .msg.note{align-self:center;max-width:100%;background:transparent;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:var(--track-meta);text-align:center;padding:2px 8px}
 /* Streaming/typing indicator */
 .msg.typing{display:inline-flex;gap:5px;align-items:center;min-height:20px}
@@ -1464,7 +1681,8 @@ input[type="range"]::-moz-range-thumb{
 .toast-ok .toast-ic{color:var(--ok)}
 .toast .toast-ic{display:inline-flex;opacity:.9}
 .toast .toast-msg{flex:1}
-.toast .toast-action{pointer-events:auto;background:rgba(255,255,255,.16);border:none;color:var(--on-dark);font-family:inherit;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:var(--track-meta);padding:7px 11px;border-radius:6px;cursor:pointer}
+/* A control this small is a pill, never a 6px rounded rectangle. */
+.toast .toast-action{pointer-events:auto;background:rgba(255,255,255,.16);border:none;color:var(--on-dark);font-family:inherit;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:var(--track-meta);padding:7px 11px;border-radius:var(--r-pill);cursor:pointer}
 .toast .toast-action:hover{background:rgba(255,255,255,.28)}
 
 /* ============================== Bottom sheet (confirm / save dialog) ==== */
@@ -1485,21 +1703,26 @@ input[type="range"]::-moz-range-thumb{
 /* The sheet itself is OPAQUE: it carries long Croatian body text, and starting
    it as glass would mean proving a contrast floor for text over an unknown,
    already-blurred backdrop. Its header is the only glass part. */
+/* Hero tier: a sheet fills the width of a phone, so it takes the same --r-2xl
+   arch as the stages rather than the card rung. */
 .sheet{
   width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--radius) var(--radius) 0 0;
+  border-top-color:var(--hairline);
+  border-radius:var(--r-2xl) var(--r-2xl) 0 0;
   padding:22px 20px calc(20px + env(safe-area-inset-bottom,0px));
   box-shadow:var(--glass-shadow-3);
   animation:sheetUp var(--dur) var(--smooth);
 }
-@media(min-width:720px){.sheet{border-radius:var(--radius)}}
+@media(min-width:720px){.sheet{border-radius:var(--r-2xl)}}
 @keyframes sheetUp{from{transform:translateY(24px);opacity:.6}}
 .sheet h2{font-size:clamp(19px,3vw,23px)}
 .sheet p{color:var(--muted);margin-top:8px;font-size:14px}
 .sheet-actions{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+/* FLUSH child: negative margins put it exactly on the sheet's edge, so its
+   inset is 0 and its radius must EQUAL the sheet's, not sit a rung below. */
 .sheet-header{
   position:sticky;top:0;margin:-22px -20px 14px;padding:14px 20px;
-  border-radius:var(--radius) var(--radius) 0 0;
+  border-radius:var(--r-2xl) var(--r-2xl) 0 0;
   background-color:var(--glass-bg-strong);
   -webkit-backdrop-filter:blur(10px) saturate(170%);
   backdrop-filter:var(--glass-fx-sm);
@@ -1508,17 +1731,19 @@ input[type="range"]::-moz-range-thumb{
 
 /* ============================== Skeletons =============================== */
 .skel-group{display:flex;flex-direction:column;gap:12px}
-.skel{height:13px;border-radius:8px;background:linear-gradient(90deg,var(--panel) 25%,var(--panel-2) 50%,var(--panel) 75%);background-size:200% 100%;animation:shimmer 1.3s ease-in-out infinite}
+.skel{height:13px;border-radius:var(--r-xs);background:linear-gradient(90deg,var(--panel) 25%,var(--panel-2) 50%,var(--panel) 75%);background-size:200% 100%;animation:shimmer 1.3s ease-in-out infinite}
 .skel-title{height:22px}
 .skel-swatch{aspect-ratio:1;height:auto;border-radius:var(--radius)}
-.skel-row{display:flex;gap:12px;align-items:center;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.skel-row{display:flex;gap:12px;align-items:center;padding:14px;background:var(--surface);border:1px solid var(--line);border-top-color:var(--hairline);border-radius:var(--radius)}
 .skel-row .skel{flex:none}
 .w-20{width:20%}.w-30{width:30%}.w-40{width:40%}.w-55{width:55%}.w-65{width:65%}.w-70{width:70%}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
 /* ============================== Empty states ============================ */
 .empty{text-align:center;padding:46px 20px}
-.empty-icon{width:72px;height:72px;margin:0 auto 16px;border-radius:var(--radius-sm);background:var(--accent-tint);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-size:30px}
+/* 22px on a 72px tile is 31% — the app-icon proportion, and the reason this
+   reads as an object rather than as a rounded box. */
+.empty-icon{width:72px;height:72px;margin:0 auto 16px;border-radius:var(--r-lg);background:var(--accent-tint);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-size:30px}
 .empty h3{font-size:18px}
 .empty p{color:var(--muted);margin:8px auto 0;max-width:320px}
 .empty .btn{margin-top:18px}

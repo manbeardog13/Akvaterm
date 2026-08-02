@@ -634,12 +634,49 @@ function markup() {
      are therefore opaque or plain-translucent, never blurred. Blur is switched,
      never animated.
      ========================================================================= */
+  /* CORNER LADDER. css/styles.css owns the scale (--r-xs … --r-pill); the
+     literal after each comma is the same step, so this view keeps the app's
+     corner language even before that sheet lands. Concentric nesting is the
+     rule: a child's arc is its parent's arc MINUS the padding between them,
+     written as a calc() against the same literal the padding uses. */
   .diz-root{
-    --diz-r:var(--radius,22px);
-    --diz-r-sm:var(--radius-sm,12px);
-    --diz-pill:var(--radius-pill,999px);
+    --diz-r-xs:var(--r-xs,8px);
+    --diz-r-sm:var(--r-md,16px);      /* nested panels, swatch tiles */
+    --diz-r-lg:var(--r-lg,22px);      /* compare cells */
+    --diz-r:var(--r-xl,28px);         /* stage, estimate bar, control panel */
+    --diz-pill:var(--r-pill,999px);
     color:var(--ink);
+    /* MOBILE BOTTOM GUTTER. #main already reserves the tab bar itself
+       (css/styles.css: padding-bottom calc(--nav-h + safe-area + 28px)), so
+       re-reserving --nav-h here would double-count it and leave ~150px of dead
+       page. What was missing is a gutter on top of that reserve: measured at
+       375x812 the last control sat 16px clear of the bar, which is close enough
+       that the estimate reads as tucked under it — and on iOS, where
+       viewport-fit=cover means the bar also carries env(safe-area-inset-bottom),
+       that inset has to be added again here or the gutter shrinks by exactly
+       the home-indicator height. Both terms are explicit below. */
+    padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);
   }
+  @media(min-width:720px){
+    /* No tab bar above 720px — css/styles.css hides it and drops #main to a
+       flat 44px — so the phone gutter is not wanted here. */
+    .diz-root{padding-bottom:0}
+  }
+  /* THE HUD'S BLUR DEPENDS ON THIS LINE. css/styles.css:1022 runs the shell
+     entrance on every direct child of #main —
+       #main.view-enter>*{animation:riseIn var(--dur-2) var(--smooth) both}
+     — and riseIn ends on transform:none. fill-mode BOTH freezes the last
+     keyframe as the computed style, and a transform resolved by an animation
+     stays a MATRIX: measured here in Chrome, .diz-root settles on
+     transform:matrix(1,0,0,1,0,0) and keeps it. A transformed element is a
+     BACKDROP ROOT, so .diz-hud — the one glass surface this view budgets for —
+     had nothing left to sample and its blur was inert. Same class of defect
+     css/styles.css records against viewFade's filter:blur(0px).
+     BACKWARDS keeps the entrance and hands the element back to its own
+     stylesheet at the end, where transform really is none. Specificity (1,2,0)
+     beats the sheet's (1,1,0). The root cause belongs in css/styles.css; this
+     is the scoped repair for this view. */
+  #main.view-enter>.diz-root{animation-fill-mode:backwards}
 
   /* ---- type ------------------------------------------------------------- */
   .diz-head{margin:0 0 16px}
@@ -657,8 +694,30 @@ function markup() {
     letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
 
   /* ---- scene tabs ------------------------------------------------------- */
-  .diz-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  .diz-tab{min-height:var(--tap,44px);padding:11px 18px;border-radius:var(--diz-pill);
+  /* ONE ROW, SCROLLED — the catalogue's .akv-chiprow gesture, not a wrap.
+     Measured at 375x812 before this change: five room tabs at 44px with
+     flex-wrap took 148px of height (three rows), the surface pills took another
+     44px, and the room itself did not start until y=389 of a 750px usable
+     viewport. Operator: "the designer's scene tabs eat three rows before the
+     room is visible at 375px". A nowrap scroller is a fixed 44px whatever the
+     scene list grows to, which is the property that actually fixes it — cutting
+     the label size would only postpone the wrap.
+
+     The row bleeds to the screen edges (negative margin cancelled by equal
+     padding) so a partially visible tab at the right edge reads as "there is
+     more", the way an iOS chip rail does. #main's own inline padding is 16px on
+     phones and 24px from 720px up, where the row goes back to a plain wrap
+     because there is room for it. */
+  .diz-tabs{
+    display:flex;gap:8px;flex-wrap:nowrap;margin:0 -16px 12px;padding:0 16px 2px;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;scroll-padding-inline:16px;
+    scrollbar-width:none;-ms-overflow-style:none;
+  }
+  .diz-tabs::-webkit-scrollbar{display:none}
+  .diz-surfaces::-webkit-scrollbar{display:none}
+  .diz-tab{flex:0 0 auto;scroll-snap-align:start;
+    min-height:var(--tap,44px);padding:11px 18px;border-radius:var(--diz-pill);
     border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;
     font-family:var(--font-text);font-size:12.5px;font-weight:600;letter-spacing:.1em;
     text-transform:uppercase;color:var(--ink);white-space:nowrap}
@@ -673,12 +732,29 @@ function markup() {
   }
 
   /* ---- surface pills ---------------------------------------------------- */
-  .diz-surfaces{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  .diz-surf{min-height:var(--tap,44px);padding:9px 16px;border-radius:var(--diz-pill);
+  /* Same one-row scroller, same reason: a kitchen scene has five surfaces and
+     wrapped to a second 44px row before the room appeared. */
+  .diz-surfaces{
+    display:flex;gap:8px;flex-wrap:nowrap;margin:0 -16px 12px;padding:0 16px 2px;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;scroll-padding-inline:16px;
+    scrollbar-width:none;-ms-overflow-style:none;
+  }
+  .diz-surf{flex:0 0 auto;scroll-snap-align:start;
+    min-height:var(--tap,44px);padding:9px 16px;border-radius:var(--diz-pill);
     border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;
     font-family:var(--font-text);font-size:13px;font-weight:600;color:var(--ink);
     display:inline-flex;align-items:center;gap:8px}
   .diz-surf[aria-pressed="true"]{background:var(--accent);border-color:transparent;color:var(--on-accent)}
+  /* Desktop: both rails go back to plain wrapping. This block MUST sit after
+     BOTH base rules, not next to the tabs — an earlier draft put it in the
+     scene-tab section and .diz-surfaces, declared further down at equal
+     specificity, simply won on source order: at 1180px the surface pills kept
+     their -16px bleed and nowrap. Verified in the browser at 1180px after the
+     move. */
+  @media(min-width:720px){
+    .diz-tabs,.diz-surfaces{flex-wrap:wrap;overflow:visible;margin-inline:0;padding-inline:0}
+  }
 
   /* ---- stage ------------------------------------------------------------ */
   /* The letterbox now lives on the stage itself: the engine's canvas is sized
@@ -689,6 +765,25 @@ function markup() {
   .diz-mount{position:absolute;inset:0;border-radius:var(--diz-r);overflow:hidden;
     background:var(--panel);box-shadow:var(--shadow-card)}
   .diz-mount canvas{display:block;width:100%;height:100%}
+  /* THE FRAME. Operator: "the entire frame a bit more professionally framed."
+     A hairline ring plus a bevel highlight along the top edge, drawn as an
+     overlay rather than as an inset shadow on .diz-mount — an inset shadow
+     paints under the mount's CONTENT, and the WebGL canvas is content, so it
+     would have covered the ring completely. pointer-events:none keeps every
+     control underneath it live (the wipe grip, the coach button, the canvas
+     itself); it only draws. */
+  .diz-stage::after{
+    content:"";position:absolute;inset:0;z-index:6;pointer-events:none;
+    border-radius:var(--diz-r);
+    /* --line, not --hairline: measured in the browser, --hairline composites to
+       #F4F1EE on a light ground (1.01:1 against --paper) and the ring does no
+       work; --line gives #EDE7E2, 1.23:1 — a real edge that still reads as a
+       hairline. It is decoration, not a 1.4.11 boundary: the stage is bounded
+       by its own dark fill and drop shadow too. */
+    box-shadow:inset 0 0 0 1px var(--line,rgba(104,52,15,.12)),
+               inset 0 1px 0 0 var(--glass-rim-top,rgba(255,255,255,.62)),
+               inset 0 -1px 0 0 var(--glass-rim-bottom,rgba(255,255,255,.26));
+  }
   .diz-bare{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;
     border-radius:var(--diz-r);pointer-events:none;background:none;
     clip-path:inset(0 calc(100% - var(--diz-wipe)) 0 0)}
@@ -710,7 +805,9 @@ function markup() {
      outline is: --glass-solid core inside a --dark hairline stays visible over
      any tile the user picks. */
   .diz-wipe-line{position:absolute;top:10px;bottom:10px;left:50%;width:3px;margin-left:-1.5px;
-    border-radius:2px;background:var(--glass-solid);
+    /* A pill on a 3px-wide bar is simply "round the ends" — the ladder's
+       smallest step (8px) would turn this hairline divider into a lozenge. */
+    border-radius:var(--diz-pill);background:var(--glass-solid);
     box-shadow:0 0 0 1px var(--dark),var(--glass-shadow-1)}
   /* Opaque, not glass: it rides over unpredictable canvas pixels and the glass
      budget is already spent. --ink on --glass-solid = 12.34:1 (computed). */
@@ -755,7 +852,7 @@ function markup() {
      there (--line-dark is .14, --glass-hairline .34), so reaching for a token
      would have been a wrong reference rather than a tidier one. The coach
      mark's button uses the same value for the same reason. */
-  .diz-hud-btn{position:relative;flex:none;min-height:38px;padding:9px 13px;border-radius:10px;
+  .diz-hud-btn{position:relative;flex:none;min-height:38px;padding:9px 14px;border-radius:var(--diz-pill);
     border:1px solid rgba(242,242,242,.66);background:transparent;
     color:var(--glass-on-dark);font-family:var(--font-text);font-size:11.5px;
     font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;
@@ -791,14 +888,14 @@ function markup() {
      --paper 8.22:1. */
   .diz-coach{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:5;
     width:calc(100% - 20px);max-width:410px;display:flex;align-items:center;gap:10px;
-    padding:10px 10px 10px 14px;border-radius:var(--glass-radius-sm);
+    padding:10px 10px 10px 16px;border-radius:var(--diz-r-lg);
     background:var(--glass-bg-dark);color:var(--glass-on-dark);
     font-family:var(--font-text);font-size:12.5px;font-weight:600;line-height:1.4;
     box-shadow:var(--glass-shadow-2);pointer-events:none}
   .diz-coach[hidden]{display:none}
   .diz-coach p{margin:0;flex:1;min-width:0}
-  .diz-coach button{pointer-events:auto;flex:none;min-height:var(--tap,44px);padding:8px 14px;
-    border-radius:10px;border:1px solid rgba(242,242,242,.66);background:transparent;
+  .diz-coach button{pointer-events:auto;flex:none;min-height:var(--tap,44px);padding:8px 16px;
+    border-radius:var(--diz-pill);border:1px solid rgba(242,242,242,.66);background:transparent;
     color:var(--glass-on-dark);font-family:var(--font-text);font-weight:700;font-size:12px;
     letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
 
@@ -813,7 +910,7 @@ function markup() {
      tint at full strength, where --ink is 11.12:1, --muted 4.90:1 and
      --brown-800 8.60:1 (computed). No blur: see the budget note. */
   .diz-est{position:relative;border:1px solid var(--hairline);border-radius:var(--diz-r);
-    padding:15px 17px;margin-bottom:14px;box-shadow:var(--shadow-card);
+    padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-card);
     background:linear-gradient(158deg,var(--accent-2-tint) 0%,transparent 62%),var(--surface)}
   .diz-est-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .diz-est-toggle{display:inline-flex;align-items:center;gap:8px;min-height:var(--tap,44px);
@@ -831,7 +928,7 @@ function markup() {
     letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   /* Anton on the total. Same metric rule as the h1: line-height 1.06, room for
      the descender, nothing clipping it. */
-  .diz-est-total b{font-family:var(--font-display);font-weight:400;font-size:27px;
+  .diz-est-total b{font-family:var(--font-display);font-weight:400;font-size:28px;
     line-height:1.06;letter-spacing:-.01em;color:var(--brown-800);
     font-variant-numeric:tabular-nums;padding-bottom:.04em}
   .diz-est-note{margin:9px 0 0;font-size:11.5px;line-height:1.45;color:var(--muted)}
@@ -839,10 +936,10 @@ function markup() {
   /* ---- control panel ---------------------------------------------------- */
   /* Cool half: --accent-tint over --surface. Darkest point --ink 11.41:1,
      --muted 5.02:1, --accent 5.07:1 (computed). */
-  .diz-panel{border:1px solid var(--hairline);border-radius:var(--diz-r);padding:17px;
+  .diz-panel{border:1px solid var(--hairline);border-radius:var(--diz-r);padding:20px;
     box-shadow:var(--shadow-card);
     background:linear-gradient(152deg,var(--accent-tint) 0%,transparent 58%),var(--surface)}
-  .diz-row{margin-bottom:17px}
+  .diz-row{margin-bottom:20px}
   .diz-row:last-of-type{margin-bottom:12px}
   .diz-hint{margin:7px 0 0;font-size:11.5px;line-height:1.45;color:var(--muted)}
 
@@ -852,7 +949,9 @@ function markup() {
     border-radius:var(--diz-r-sm);background:none;padding:5px;font:inherit;cursor:pointer;
     text-align:center;color:var(--ink)}
   .diz-sw[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
-  .diz-sw img,.diz-sw .diz-flat{width:78px;height:58px;border-radius:9px;display:block;
+  /* Concentric: the swatch button is --diz-r-sm with 5px of padding, so its
+     picture is that radius minus that padding. */
+  .diz-sw img,.diz-sw .diz-flat{width:78px;height:58px;border-radius:calc(var(--diz-r-sm) - 5px);display:block;
     object-fit:cover;box-shadow:inset 0 0 0 1px var(--line-strong)}
   .diz-sw small{display:block;font-size:11px;line-height:1.3;margin-top:5px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -865,7 +964,7 @@ function markup() {
     color:var(--ink);text-align:center}
   .diz-combo[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
   .diz-combo .diz-combo-sw{display:flex;gap:3px;justify-content:center}
-  .diz-combo img,.diz-combo .diz-flat{width:26px;height:40px;border-radius:6px;display:block;
+  .diz-combo img,.diz-combo .diz-flat{width:26px;height:40px;border-radius:var(--diz-r-xs);display:block;
     object-fit:cover;box-shadow:inset 0 0 0 1px var(--line-strong)}
   .diz-combo small{display:block;margin-top:8px;font-family:var(--font-text);font-size:10px;
     font-weight:700;letter-spacing:.1em;text-transform:uppercase;line-height:1.35}
@@ -906,11 +1005,11 @@ function markup() {
   .diz-cmp-grid{display:flex;gap:12px;flex-wrap:wrap}
   .diz-cmp-cell{flex:1 1 300px;min-width:260px}
   .diz-cmp-cell canvas{display:block;width:100%;aspect-ratio:${STAGE_W}/${STAGE_H};
-    border-radius:var(--diz-r-sm);background:var(--panel);box-shadow:var(--shadow-card)}
+    border-radius:var(--diz-r-lg);background:var(--panel);box-shadow:var(--shadow-card)}
   .diz-cmp-cell .diz-k{margin:9px 0 0;text-align:center}
 
   /* ---- focus -------------------------------------------------------------- */
-  .diz-root :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+  .diz-root :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:var(--diz-r-xs)}
   /* The engine sets outline-offset:-3px on its own canvas so the ring stays
      inside the rounded mount instead of being clipped by overflow:hidden. */
   .diz-mount canvas:focus-visible{outline:3px solid var(--accent)}
@@ -964,13 +1063,30 @@ function markup() {
     .diz-est,.diz-panel{background:Canvas;border-color:CanvasText}
   }
   /* Path 4 — reduced motion. Nothing here animates blur(); these are the
-     colour/border transitions on the controls. */
+     colour/border transitions on the controls, plus one entrance.
+
+     THE ENTRANCE IS DELIBERATELY NARROW. It is declared on the two panels BELOW
+     the stage and on nothing else, because .diz-hud is this view's one glass
+     surface and an animated opacity/transform on any ANCESTOR of it would make
+     that ancestor a backdrop root — the HUD would sample nothing and go flat.
+     The panels are its siblings, not its parents, so they are safe; .diz-root
+     and .diz-stage are not, and are left alone.
+     Fill mode is 'backwards', not 'both', for the same reason: 'both' freezes
+     the last keyframe as the computed style forever, and a transform resolved
+     by an animation stays a MATRIX even where the keyframe says none — measured
+     here in Chrome, .diz-est settled on matrix(1,0,0,1,0,0). A matrix is a
+     backdrop root. 'backwards' applies the FROM state before the run (so
+     nothing flashes in) and then hands the element back to its own stylesheet,
+     where transform is genuinely none. */
   @media (prefers-reduced-motion:no-preference){
     .diz-tab,.diz-surf,.diz-seg button,.diz-btn,.diz-hud-btn,.diz-sw,.diz-combo{
       transition:background-color var(--dur,200ms) var(--glass-ease,ease),
                  border-color var(--dur,200ms) var(--glass-ease,ease),
                  color var(--dur,200ms) var(--glass-ease,ease),
                  filter var(--dur,200ms) var(--glass-ease,ease)}
+    @keyframes diz-rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+    .diz-est{animation:diz-rise 420ms var(--glass-ease,ease) backwards}
+    .diz-panel{animation:diz-rise 420ms var(--glass-ease,ease) 60ms backwards}
   }
   @media (prefers-reduced-motion:reduce){
     .diz-root *,.diz-root *::before,.diz-root *::after{transition:none!important;animation:none!important}

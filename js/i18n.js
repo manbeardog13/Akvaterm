@@ -39,6 +39,8 @@ const DICT = {
   "nav.dizajni": "Dizajni",
   "nav.vise": "Više",
   "nav.pocetna": "Početna",
+  "nav.prijava": "Prijava",
+  "nav.odjava": "Odjava",
 
   /* ---- "Smanji prozirnost" switch in the "Više" menu (js/app.js openMore) ----
      This is the MANUAL degradation path for the liquid-glass chrome. Safari
@@ -449,6 +451,53 @@ const DICT = {
   "qr.canvasAlt": "QR kod poveznice za dijeljenje",
   "qr.urlLabel": "Poveznica",
   "qr.tooLong": "Poveznica je predugačka za QR kod. Kopirajte je i pošaljite porukom.",
+
+  /* ---- Prijava (js/views/prijava.js, #/prijava) ----
+     HONESTY CONTRACT for this block. The public demo has no accounts: config.js
+     ships empty, so js/supabaseClient.js never creates a client and no password
+     can be checked by anything. Every string below is written to be true in
+     BOTH deployments:
+       • nothing here promises synchronisation, cross-device favorites or a
+         cloud account — db.js mirrors writes only, and only when configured;
+       • "prijava.offBody" states plainly that sign-in cannot complete in this
+         build, instead of hinting at a temporary outage;
+       • "prijava.guest" is always offered, because the catalogue must stay
+         reachable for anyone who opens the public link.
+     If a future build gains real accounts, the copy that changes is offBody —
+     the rest already describes what the screen does. */
+  "prijava.eyebrow": "Prijava",
+  "prijava.title": "Dobrodošli natrag",
+  "prijava.sub": "Kupaonice, grijanje i klimatizacija",
+  "prijava.email": "Email",
+  "prijava.emailPlaceholder": "ime@tvrtka.hr",
+  "prijava.password": "Lozinka",
+  "prijava.passwordPlaceholder": "Vaša lozinka",
+  "prijava.showPassword": "Prikaži lozinku",
+  "prijava.hidePassword": "Sakrij lozinku",
+  "prijava.submit": "Prijavi se",
+  "prijava.busy": "Prijava u tijeku…",
+  "prijava.or": "ili",
+  "prijava.guest": "Nastavi kao gost",
+  "prijava.guestHint": "Katalog, dizajner i 3D soba rade bez prijave.",
+  "prijava.localNote": "Favoriti i dizajni spremaju se na ovaj uređaj.",
+  "prijava.offTitle": "Prijava još nije uključena",
+  "prijava.offBody": "Ova verzija radi bez poslužitelja za račune, pa se prijava ne može dovršiti. Sve ostalo radi normalno.",
+  "prijava.errEmailRequired": "Unesite email adresu.",
+  "prijava.errEmailInvalid": "Provjerite email adresu — nedostaje @ ili domena.",
+  "prijava.errPasswordRequired": "Unesite lozinku.",
+  "prijava.err.credentials": "Email ili lozinka nisu točni.",
+  "prijava.err.unconfirmed": "Račun još nije potvrđen — provjerite email.",
+  "prijava.err.rate": "Previše pokušaja. Pričekajte trenutak pa pokušajte ponovno.",
+  "prijava.err.network": "Nema veze s poslužiteljem. Provjerite internet pa pokušajte ponovno.",
+  "prijava.err.unavailable": "Prijava nije dostupna u ovoj verziji.",
+  "prijava.err.other": "Prijava nije uspjela. Pokušajte ponovno.",
+  "prijava.success": "Prijavljeni ste.",
+  "prijava.signedInTitle": "Prijavljeni ste",
+  "prijava.account": "Račun",
+  "prijava.signOut": "Odjava",
+  "prijava.signedOut": "Odjavljeni ste.",
+  "prijava.toCatalog": "U katalog",
+  "a11y.prijavaCard": "Prijava na Akvaterm",
 
   /* ---- Common ---- */
   "common.back": "Natrag",

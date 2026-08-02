@@ -133,13 +133,21 @@ const STYLES = `
   /* max-width is a scanning constraint, not a taste one: a dense share URL is
      a ~93-module code, and phone cameras want roughly 3 CSS px per module.
      340px keeps it above that and still fits the 375px mobile sheet. */
-  margin:18px auto 0;width:100%;max-width:340px;
+  margin:20px auto 0;width:100%;max-width:340px;
   /* Literal white, NOT var(--surface): a tinted quiet zone lowers the module
      contrast the scanner thresholds on. The one place in the app where the
      palette is deliberately not applied — see the QR_DARK/QR_LIGHT note. */
   background:${QR_LIGHT};
   border:1px solid var(--line,rgba(104,52,15,.12));
-  border-radius:var(--radius-sm,12px);padding:10px;
+  /* One step off the sheet's corner ladder (css/styles.css owns --r-xs …
+     --r-pill); the literal after the comma is the same step, so the panel keeps
+     the app's corner language even before that sheet lands. --r-md rather than
+     the sheet radius: this frame nests inside the bottom sheet, and a child's
+     arc belongs BELOW its parent's. */
+  /* padding stays 10px: it is part of the scanning arithmetic above (340px of
+     frame minus border and quiet zone is what keeps a ~93-module code at
+     3.4 CSS px per module), not a spacing choice. */
+  border-radius:var(--r-md,16px);padding:10px;
 }
 .akv-qr-frame canvas{
   display:block;width:100%;height:auto;
@@ -164,7 +172,7 @@ const STYLES = `
    (No backticks in this comment: it lives inside the STYLES template literal,
    and one would terminate the literal here.) */
 .akv-qr-sheet .akv-qr-note{
-  margin-top:14px;padding:11px 14px;border-radius:var(--radius-sm,12px);
+  margin-top:16px;padding:12px 16px;border-radius:var(--r-md,16px);
   background:var(--accent-tint,rgba(19,158,177,.12));
   border:1px solid var(--accent-ring,rgba(19,158,177,.34));
   color:var(--accent-ink,#0D707D);
@@ -181,8 +189,8 @@ const STYLES = `
   line-height:1.4;text-transform:uppercase;color:var(--muted,#756168);
 }
 .akv-qr-url{
-  display:block;width:100%;padding:10px 12px;
-  border:1px solid var(--line,rgba(104,52,15,.12));border-radius:var(--radius-sm,12px);
+  display:block;width:100%;padding:12px 14px;
+  border:1px solid var(--line,rgba(104,52,15,.12));border-radius:var(--r-md,16px);
   background:var(--panel-2,#FBFAFA);color:var(--ink,#313131);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;
   max-height:5.5em;overflow-y:auto;overflow-wrap:anywhere;word-break:break-all;

@@ -86,11 +86,47 @@
 // ones. Five scenes, four different corners, so the scene strip is not five of
 // the same picture.
 //
-// Every camera was solved numerically, not eyeballed: the two visible wall
-// rectangles and the floor were projected through the same perspective maths
-// js/scene3d.js uses (including its framedFov() aspect compensation) and the
-// distance was bisected until the drawn geometry fit the frame. The per-scene
-// numbers are in each camera's comment.
+// ---------------------------------------------------------------------------
+// THE CAMERAS ARE PHOTOGRAPHS, and the five below were re-solved as a set,
+// against four rules an interior photographer actually works to:
+//
+//   1. VERTICALS STAY VERTICAL. js/scene3d.js forces the optical axis
+//      horizontal and turns the `posM.y` - `targetM.y` difference into a lens
+//      SHIFT (an off-centre frustum), the way a shift lens or a view camera's
+//      rise movement works. So `targetM.y` here still means "aim the middle of
+//      the frame at this height" — it just no longer tips the room over. It is
+//      a real movement with a real limit: MAX_SHIFT is 0.6 half-frames, and the
+//      five below use 0.199, 0.208, 0.248, 0.287 and 0.466 of it — read back off
+//      the live camera, not off these numbers.
+//   2. EYE HEIGHT FALLS WITH THE ROOM. 1.60 m — adult standing eye height —
+//      in the three larger rooms; 1.40 m in the 4.3 m² second bathroom and
+//      1.25 m in the 2.66 m² WC. That is not inconsistency, it is what a
+//      photographer does: from a standing eye a tiny room needs so much down
+//      angle that the WC and the basin fall out of the bottom of the frame,
+//      and the tripod comes down instead. Verified, not assumed — see rule 4.
+//   3. ONE LENS, 33-35 mm EQUIVALENT, on all five. Wide enough to hold a 2.6 m
+//      bathroom, long enough not to bow it — a 24 mm on a small bathroom
+//      stretches whatever is nearest the frame edge, which here is always a
+//      bath or a cabinet, i.e. the product. The `fov` below is the VERTICAL
+//      angle; js/scene3d.js treats it as vertical at 4:3 and widens it on a
+//      narrower viewport so the horizontal coverage — what the composition was
+//      solved on — survives a phone.
+//   4. THE ROOM FILLS THE FRAME AND NOTHING IN IT IS CUT. Each camera was
+//      pushed in along its corner diagonal until the two drawn walls reach the
+//      frame edges, then the shift was chosen so that EVERY FIXTURE'S BOUNDING
+//      BOX still projects inside the frame. The boxes are not estimated: they
+//      were read out of the live scene graph through scene3d's inspect() and
+//      re-projected corner by corner. The check passes for all thirty fixtures
+//      across the five scenes with nothing clipped on any edge. (The WC was
+//      solved allowing its door's threshold onto the bottom edge, since a door
+//      is an opening rather than a product being chosen — in the end the camera
+//      that won did not need the allowance.)
+//
+// "Fill", "backdrop" and "floor" below are measured, not adjectives: the two
+// visible wall rectangles were projected through the SAME maths js/scene3d.js
+// uses (framedFov + the frustum shift), and a 101x101 grid of rays was traced
+// to classify every part of the frame as floor, wall or backdrop. The stage
+// runs at aspect 1.429 in the app, so that is the aspect quoted throughout.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE CC0 SET DOES NOT HAVE, so no scene below pretends otherwise
@@ -121,15 +157,23 @@ const KUPAONICA = {
   nameHr: "Kupaonica",
   room: { widthM: 2.6, depthM: 2.8, heightM: 2.6 },
   // Camera SE, so the visible pair is N (right) and W (left) — the tub wall and
-  // the washbasin wall, which is the whole room. Eye height 1.70 m looking
-  // slightly down at 1.20 m puts the horizon just above the vanity top and lets
-  // the floor read as a floor. fov 40 is a ~50 mm look: wide enough to hold the
-  // room from 4.24 m off its centre, narrow enough that the tub does not bow.
-  // Solved: at 4:3 the two walls occupy x [-0.97, 0.94], y [-0.78, 0.92] in NDC
-  // — the whole drawn room inside the frame with a hair of margin, filling 96%
-  // of the width. The near SE floor corner falls off the bottom edge, which is
-  // what standing in the doorway of a small bathroom looks like.
-  camera: { posM: [4.3, 1.7, 4.4], targetM: [1.1, 1.2, 1.2], fov: 40 },
+  // the washbasin wall, which is the whole room. Standing 1.30 m out from the
+  // SE corner on the diagonal, at 1.60 m, with a 34.6 mm-equivalent lens shifted
+  // down 4.33 deg (k = 0.21 half-frames) so the horizon sits just above the
+  // vanity top and the floor reads as a floor.
+  //
+  // The `targetM` x and z are outside the room on purpose. They are not a place
+  // in the room, they are the AIM POINT that bisects the angle between the two
+  // visible walls, and for a 2.60 x 2.80 room that bisector passes beyond the
+  // far corner. Aiming at the room centre instead pushes the whole room to one
+  // side of the frame.
+  //
+  // Solved at aspect 1.429: the two walls span 97.9% of the frame width (86.5%
+  // before) and their ceiling line tops out at y 0.96, just inside the top
+  // edge. Frame composition 76.2% wall / 11.6% floor / 12.2% backdrop, against
+  // 60.0 / 15.1 / 24.9 for the camera this replaces — a quarter of the picture
+  // was empty paper and now an eighth is. All seven fixtures project whole.
+  camera: { posM: [3.9, 1.6, 4.1], targetM: [-0.25, 1.15, -0.15], fov: 40 },
   surfaces: [
     { id: "pod", kind: "floor", wall: null, labelKey: "surface.pod", defaultProductId: "ker-05" },
     // West wall — behind the bath, so it is the accent plane: Jadran Plava.
@@ -176,13 +220,23 @@ const MALA_KUPAONICA = {
   room: { widthM: 1.8, depthM: 2.4, heightM: 2.5 },
   // Camera SW — a different corner from the full bathroom on purpose, so the
   // two bathrooms do not read as the same photograph. Visible pair N (left) and
-  // E (right). A 4.3 m² room is small enough that the ceiling line is allowed
-  // to crop at the near edges: solved to fit the walls up to 2.20 m, which
-  // fills 91% of the frame width and 90% of its height instead of leaving the
-  // room marooned in the middle of the picture. Everything that matters is
-  // inside — the shower top (1.95 m) lands at y 0.59 and the far ceiling corner
-  // at y 0.88.
-  camera: { posM: [-1.45, 1.62, 3.55], targetM: [1.1, 1.1, 1.0], fov: 42 },
+  // E (right). 33.7 mm equivalent, 1.00 m out from the SW corner.
+  //
+  // THE TRIPOD COMES DOWN HERE, to 1.40 m, and the reason is measurable rather
+  // than stylistic. The WC stands on the east wall 2.9 m from the camera; from
+  // a 1.60 m eye at this distance its base projects at y -1.48 — half a frame
+  // BELOW the bottom edge — and no lens shift inside the 0.6 limit brings it
+  // back. At 1.40 m a 0.466 shift holds the whole room, and all five fixtures
+  // were re-projected corner by corner to confirm it. A photographer drops the
+  // tripod in a small bathroom for exactly this reason.
+  //
+  // The ceiling is cropped (line at y 1.58) and that is the trade: 4.3 m² is
+  // far taller in projection than it is wide, and holding the full 2.50 m would
+  // cost most of the frame. Solved at aspect 1.429: walls span 95.3% of the
+  // width (81.8% before), composition 75.8% wall / 17.5% floor / 6.7% backdrop
+  // against 66.7 / 11.7 / 21.6 — the cleanest frame of the five. All five
+  // fixtures, including the 1.95 m shower enclosure, project whole.
+  camera: { posM: [-1.0, 1.4, 3.4], targetM: [2.7, 0.45, -0.6], fov: 41 },
   surfaces: [
     { id: "pod", kind: "floor", wall: null, labelKey: "surface.pod", defaultProductId: "ker-22" },
     // North wall — the one you face from the door: Metro Bijela.
@@ -237,12 +291,19 @@ const KUHINJA = {
   room: { widthM: 3.6, depthM: 3.0, heightM: 2.6 },
   // Camera SE: N (right) carries the whole run and W (left) carries the fridge
   // and the window, so the corner view shows both legs of the L and the joint
-  // between them. This is the shot a kitchen is photographed in. Eye 1.75 m,
-  // target 1.25 m — just above the worktop line, which is what makes a run of
-  // cabinets read as depth rather than as a flat elevation. Solved: walls at
-  // x [-0.89, 0.97], y [-0.68, 0.72] at 4:3, so the room fills 93% of the frame
-  // width with the full ceiling line in shot.
-  camera: { posM: [5.35, 1.75, 5.05], targetM: [1.6, 1.25, 1.3], fov: 42 },
+  // between them. This is the shot a kitchen is photographed in. Eye 1.60 m,
+  //1.50 m out from the SE corner, 34.6 mm equivalent, shifted down 5.16 deg
+  // (k = 0.25) — the deepest rise of the five, because a kitchen is judged on
+  // its worktop line and the shift drops the horizon to just above it without
+  // tipping the cabinet stiles over.
+  //
+  // Solved at aspect 1.429: x [-0.97, 1.04] — the outer 4% of the far end of
+  // the north wall runs off the right edge, which is what a kitchen photograph
+  // does rather than shrinking the room to fit — ceiling line at y 0.91, 98.5%
+  // of the frame width filled against 84.9% before. Composition 64.5% wall /
+  // 19.8% floor / 15.7% backdrop, against 47.5 / 17.1 / 35.4: more than a third
+  // of this picture used to be empty paper. All eleven modules project whole.
+  camera: { posM: [5.1, 1.6, 4.5], targetM: [0.25, 1.0, -0.05], fov: 40 },
   surfaces: [
     { id: "pod", kind: "floor", wall: null, labelKey: "surface.pod", defaultProductId: "ker-15" },
     // West wall — the fridge/window leg, calm Beton Pijesak.
@@ -303,11 +364,23 @@ const DNEVNI_BORAVAK = {
   room: { widthM: 4.2, depthM: 3.6, heightM: 2.7 },
   // Camera SW — the fourth distinct corner in the set. Visible pair N (left,
   // the window wall) and E (right, the door wall), which is the only pairing
-  // that puts both of this room's three objects in shot. A 15 m² floor is the
-  // subject here, so the camera sits well back (5.9 m out) with the target at
-  // 1.30 m: the floor plane runs almost the full width of the frame. Solved:
-  // walls x [-0.97, 0.90], y [-0.60, 0.64] at 4:3.
-  camera: { posM: [-2.05, 1.75, 5.95], targetM: [2.3, 1.3, 1.6], fov: 42 },
+  // that puts both of this room's three objects in shot. Eye 1.60 m, 1.60 m out
+  // from the SW corner, shifted down 4.36 deg (k = 0.20).
+  //
+  // The one scene on a slightly wider lens, 32.8 mm rather than 34.6: at 15 m²
+  // this is the largest room in the set and the only one whose two walls will
+  // not both reach the frame edges at 35 mm from a standing distance. 32.8 mm
+  // is still inside the interior band and the widening is small enough not to
+  // stretch the door frame at the right-hand edge.
+  //
+  // Solved at aspect 1.429: x [-1.03, 0.96], ceiling line at y 0.80, 98.2% of
+  // the frame width filled against 85.8% before. The floor — which IS the
+  // subject in a room with no furniture — goes from 17.4% of the frame to
+  // 22.1%, the largest floor share of the five. This room still keeps the most
+  // backdrop (21.9%, down from 40.0%) and that is honest rather than fixable: a
+  // wide low box seen from a corner has open sky above its two walls, and no
+  // ceiling is drawn because a ceiling would hide the room.
+  camera: { posM: [-1.6, 1.6, 5.2], targetM: [3.65, 1.05, 0.25], fov: 42 },
   surfaces: [
     { id: "pod", kind: "floor", wall: null, labelKey: "surface.pod", defaultProductId: "ker-16" },
     { id: "zid-lijevi", kind: "wall", wall: "N", labelKey: "surface.zid-lijevi", defaultProductId: "ker-09" },
@@ -337,14 +410,25 @@ const WC = {
   nameHr: "WC / toalet",
   room: { widthM: 1.4, depthM: 1.9, heightM: 2.4 },
   // Camera NW — the last unused corner. Visible pair E (left, basin + mirror +
-  // door) and S (right, the WC). At 2.66 m² the room is much taller than it is
-  // wide in projection, so the ceiling is cropped: the camera was solved to fit
-  // the walls up to 2.10 m, which gets the room to 83% of the frame width
-  // instead of the 65% a full-height fit would leave. The door head at 2.05 m
-  // lands at y 0.76–0.82 and the far ceiling corner at exactly y 1.00, so the
-  // ceiling line still meets the frame at the corner and only runs off at the
-  // near edges — a normal interior crop, not a clipped object.
-  camera: { posM: [-1.2, 1.6, -0.95], targetM: [0.85, 1.05, 1.1], fov: 45 },
+  // door) and S (right, the WC). 34.6 mm equivalent, 1.10 m out from the NW
+  // corner, shifted down 5.96 deg (k = 0.29).
+  //
+  // The lowest tripod of the five at 1.25 m, and this room is why the rule
+  // exists. A 1.60 m eye 0.75 m out from this corner was tried first: the
+  // wall-hung basin projected to y -1.81 and the WC to y -1.68, so BOTH FELL
+  // OUT OF THE BOTTOM OF THE FRAME and no floor was in shot at all. That was
+  // rendered and looked at, not deduced — a guest toilet photographed from
+  // standing height shows a half-basin, half a door and no floor tiles, which
+  // in a tile app is the one thing the picture must not do.
+  //
+  // The ceiling is DELIBERATELY cropped here (line at y 1.55) and the door's
+  // threshold sits just below the bottom edge; everything a customer is
+  // choosing — WC, basin, mirror, and both tiled walls — is whole and so is
+  // the floor. That costs frame fill and the number is stated rather than hidden:
+  // the walls span 81.8% of the width, the weakest of the five, but still up
+  // from 73.7%. Composition 72.4% wall / 8.6% floor / 19.0% backdrop, against
+  // 64.4 / 8.5 / 27.1.
+  camera: { posM: [-1.1, 1.25, -1.1], targetM: [2.5, 0.7, 2.75], fov: 40 },
   surfaces: [
     { id: "pod", kind: "floor", wall: null, labelKey: "surface.pod", defaultProductId: "ker-23" },
     { id: "zid-lijevi", kind: "wall", wall: "E", labelKey: "surface.zid-lijevi", defaultProductId: "ker-08" },

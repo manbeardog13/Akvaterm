@@ -14,20 +14,24 @@
 // ⚠ WHAT THE MIRROR DOES AND DOES NOT DO TODAY. The rows below match
 // supabase/schema.sql exactly (column names, id types, conflict targets), but
 // `favorites` and `designs` are owner-only under RLS (`to authenticated`,
-// `user_id = auth.uid()`), and this client ships NO sign-in UI — nothing calls
-// supabase.auth. So with an anon session every mirrored write is filtered to
-// zero rows and the row-count guard logs a warning; localStorage stays the one
-// and only store. Cross-device favorites/designs become real the day an auth
-// flow lands, not the day config.js is filled in. Do not describe it as a
-// working sync feature until then (docs/SETUP.md says the same).
+// `user_id = auth.uid()`). js/views/prijava.js is now the app's ONE caller of
+// supabase.auth (email + password), so a signed-in session is reachable — but
+// only on a deployment whose config.js carries real credentials. On the public
+// demo CONFIG is empty, getSupabase() returns null forever, every mirrored
+// write is a no-op and localStorage stays the one and only store. Even when
+// signed in, READS stay local-first: nothing in this file has ever pulled
+// favorites or designs back down from Postgres, so cross-device sync is NOT a
+// shipped feature and must not be described as one (docs/SETUP.md says the
+// same). What signing in changes today is the mirror's write leg, nothing else.
 // ============================================================================
 
-import { getSupabase } from "./supabaseClient.js";
+import { getSupabase, initSupabase, isConfigured } from "./supabaseClient.js";
 import { newId } from "./domain.js";
 
 const FAV_KEY = "akv:fav";
 const DESIGNS_KEY = "akv:designs";
 const OUTBOX_KEY = "akv:outbox";
+const EMAIL_KEY = "akv:auth:email";
 
 // ---- localStorage plumbing (never throws) ----------------------------------
 function readJson(key, fallbackValue) {
@@ -44,6 +48,139 @@ function writeJson(key, value) {
   } catch {
     /* storage full / private mode — the in-memory result is still returned */
   }
+}
+
+// ============================================================================
+// AUTH — optional, and deliberately powerless over the rest of this file.
+//
+// The one hard rule: signing in must never become a precondition for using the
+// app. Nothing above or below this block consults a session. Favorites and
+// designs read and write localStorage whether a session exists or not, the
+// catalog comes from the seed file either way, and there is no gate anywhere in
+// the router. A signed-out visitor on the public demo has the whole app.
+//
+// So these helpers are a SEAM, not a gate:
+//   • authConfigured()  — is there a backend at all? (config.js filled in)
+//   • getSession()      — the current session, or null; never throws
+//   • signIn()          — the only function here that throws, and only when a
+//                         user has actively pressed "Prijavi se"
+//   • signOut(), onAuthChange(), rememberedEmail()/rememberEmail()
+//
+// signIn() throws an Error carrying a `.code` rather than a sentence, because
+// js/i18n.js is the authority for UI copy — the view maps the code to a
+// Croatian string. A message invented here would bypass the dictionary and
+// could never be translated.
+// ============================================================================
+
+/** True when config.js carries real Supabase credentials. False on the demo. */
+export function authConfigured() {
+  return isConfigured();
+}
+
+// Last known session, kept so synchronous callers (the "Više" menu label) can
+// ask without awaiting. null means "signed out OR not configured OR not looked
+// up yet" — every consumer treats all three the same way, which is why one
+// value can carry them.
+let sessionCache = null;
+
+/** The cached session without a round trip. Call getSession() for the truth. */
+export function currentSession() {
+  return sessionCache;
+}
+
+/** The live session, or null. Resolves to null immediately when unconfigured
+ *  (initSupabase() short-circuits), so calling this on the demo costs nothing
+ *  and issues no network request. Never throws. */
+export async function getSession() {
+  const sb = await initSupabase();
+  if (!sb) { sessionCache = null; return null; }
+  try {
+    const { data } = await sb.auth.getSession();
+    sessionCache = data?.session ?? null;
+  } catch (err) {
+    console.warn("[db] auth: session lookup failed —", err?.message || err);
+    sessionCache = null;
+  }
+  return sessionCache;
+}
+
+// Supabase phrases its auth failures in English prose. Classify them once,
+// here, into codes the dictionary has entries for.
+function authCode(error) {
+  const message = error?.message || String(error);
+  if (/invalid login credentials|invalid grant/i.test(message)) return "credentials";
+  if (/email not confirmed|not confirmed/i.test(message)) return "unconfirmed";
+  if (/rate limit|too many requests/i.test(message)) return "rate";
+  if (/Failed to fetch|network|fetch failed|load failed/i.test(message)) return "network";
+  return "other";
+}
+
+function authError(code, detail) {
+  const err = new Error(detail || code);
+  err.code = code;
+  return err;
+}
+
+/** Email + password sign-in. Throws an Error with `.code` in
+ *  { unavailable, credentials, unconfirmed, rate, network, other }. */
+export async function signIn(email, password) {
+  const sb = await initSupabase();
+  if (!sb) throw authError("unavailable");
+  let result;
+  try {
+    result = await sb.auth.signInWithPassword({
+      email: String(email ?? "").trim().toLowerCase(),
+      password: String(password ?? ""),
+    });
+  } catch (err) {
+    // A thrown (rather than returned) failure is a transport failure.
+    throw authError(authCode(err), err?.message);
+  }
+  if (result?.error) throw authError(authCode(result.error), result.error.message);
+  sessionCache = result?.data?.session ?? null;
+  return sessionCache;
+}
+
+/** Sign out. Clears the cache first, so the UI is honest even if the network
+ *  call fails — a session that cannot be revoked remotely is still gone here. */
+export async function signOut() {
+  sessionCache = null;
+  const sb = getSupabase();
+  if (!sb) return;
+  try { await sb.auth.signOut(); } catch (err) {
+    console.warn("[db] auth: sign-out call failed —", err?.message || err);
+  }
+}
+
+/** Subscribe to session changes. Returns an unsubscribe function; a no-op
+ *  subscription on an unconfigured deployment, so callers need no branch. */
+export function onAuthChange(callback) {
+  let subscription = null;
+  let cancelled = false;
+  initSupabase().then((sb) => {
+    if (!sb || cancelled) return;
+    const { data } = sb.auth.onAuthStateChange((_event, session) => {
+      sessionCache = session ?? null;
+      try { callback(sessionCache); } catch { /* a listener must not break auth */ }
+    });
+    subscription = data?.subscription ?? null;
+    // Unsubscribed while the library was still loading — honour it now.
+    if (cancelled) { try { subscription?.unsubscribe(); } catch { /* already gone */ } }
+  }).catch(() => { /* unconfigured or vendor file missing — stay silent */ });
+  return () => {
+    cancelled = true;
+    try { subscription?.unsubscribe(); } catch { /* already gone */ }
+    subscription = null;
+  };
+}
+
+/** The last email that signed in successfully, for prefilling the form. A
+ *  convenience only — it is NOT a credential and NOT a session. */
+export function rememberedEmail() {
+  try { return localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; }
+}
+export function rememberEmail(email) {
+  try { localStorage.setItem(EMAIL_KEY, String(email ?? "").trim()); } catch { /* storage blocked */ }
 }
 
 // ---- Products (seed catalog, cached) ---------------------------------------

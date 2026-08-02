@@ -45,7 +45,7 @@
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-yQhsfNETkwxWqoUBcBCI96gyWjKZWdsQxKssS5yRlM0=' https://cdn.jsdelivr.net;
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-K96dW/qdVwhxO5zu3CQgALmdSf3zeqEwMvhbDWy9eeg=' https://cdn.jsdelivr.net;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -165,22 +165,55 @@
 </noscript>
 
 <script>
-/* Splash dismissal. The splash fades once the first view has painted (app.js
-   dispatches "akv:ready"), never sooner than 700 ms so it cannot blink, and a
-   4 s watchdog guarantees it can never trap the user behind the veil.
-   Service-worker registration lives in js/app.js — one registration only. */
+/* Splash lifecycle + HAND-OFF. The launch surface fades once the first view
+   has painted (app.js calls window.akvHideSplash, or dispatches "akv:ready"),
+   never sooner than MIN_MS, and a 4 s watchdog guarantees it can never trap
+   the user behind the veil. Service-worker registration lives in js/app.js —
+   one registration only.
+
+   MIN_MS is 900, not 700: css/styles.css lands the last frame of the entrance
+   choreography at 880 ms, and a splash that begins fading through its own
+   animation reads as a glitch rather than as a hand-off. Total time to a live
+   app is ~900 ms plus a 380 ms cross-fade the app's entrance plays underneath.
+
+   html.splashing IS the hand-off. While it is set, #main's entrance animations
+   hold at frame 0 — animation-play-state:paused freezes the delay clock too —
+   so the app's own entrance plays FROM ZERO the moment the veil starts to go,
+   instead of finishing unseen behind it. This script runs BEFORE the deferred
+   module that renders the first view, so there is no window in which an
+   unpaused entrance can start.
+
+   Everything about that class is failure-biased toward SHOWING the app: it is
+   dropped in the same statement that starts the fade, again if the splash
+   element is missing, and again by an unconditional backstop after the
+   watchdog — because the one unacceptable outcome is a stripped veil over an
+   app frozen invisible at frame 0. */
 (function () {
-  var MIN_MS = 700, WATCHDOG_MS = 4000, t0 = Date.now(), done = false;
+  var MIN_MS = 900, WAIT_MS = 1600, WATCHDOG_MS = 4000, t0 = Date.now(), done = false;
+  var root = document.documentElement;
+
+  root.classList.add("splashing");
+
+  /* Patience: if the app has not signalled ready by WAIT_MS, the rule starts a
+     slow shimmer so a slow first load looks like work rather than like a hang.
+     css/styles.css makes it a static gradient under prefers-reduced-motion. */
+  var waitT = setTimeout(function () {
+    var s = document.getElementById("splash");
+    if (s && !done) s.classList.add("wait");
+  }, WAIT_MS);
 
   function hideSplash() {
     if (done) return;
     done = true;
+    clearTimeout(waitT);
     var splash = document.getElementById("splash");
-    if (!splash) return;
+    if (!splash) { root.classList.remove("splashing"); return; }
     var wait = Math.max(0, MIN_MS - (Date.now() - t0));
     setTimeout(function () {
+      splash.classList.remove("wait");
       splash.classList.add("out");
-      setTimeout(function () { splash.classList.add("gone"); }, 560);
+      root.classList.remove("splashing");   /* the app's own entrance starts HERE */
+      setTimeout(function () { splash.classList.add("gone"); }, 480);
     }, wait);
   }
 
@@ -188,6 +221,8 @@
   window.addEventListener("akv:ready", hideSplash);  /* …or via the event, either works */
   window.addEventListener("load", hideSplash);       /* safety net if the app never boots */
   setTimeout(hideSplash, WATCHDOG_MS);
+  /* Final backstop: whatever happened above, nothing stays paused. */
+  setTimeout(function () { root.classList.remove("splashing"); }, WATCHDOG_MS + MIN_MS + 400);
 
   /* Keep the app still. Safari in a browser TAB ignores user-scalable=no by
      design, so the meta tag alone only settles the installed app. These three

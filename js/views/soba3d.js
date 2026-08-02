@@ -501,9 +501,44 @@ function markup() {
         --s3d-rim-bottom:var(--glass-rim-bottom,rgba(255,255,255,.26));
         --s3d-rim-side:var(--glass-rim-side,rgba(255,255,255,.18));
         --s3d-edge-dark:var(--glass-edge-dark,rgba(93,79,79,.12));
-        --s3d-radius-md:var(--glass-radius-md,20px);
+        /* CORNER LADDER. css/styles.css owns the scale (--r-xs … --r-pill);
+           the literal after each comma is the same step, so this view keeps the
+           app's corner language even before that sheet lands. Concentric
+           nesting is the rule — a child's arc is its parent's arc MINUS the
+           padding between them, written as a calc() against the same literal
+           the padding uses. */
+        --s3d-r-xs:var(--r-xs,8px);
+        --s3d-r-sm:var(--r-sm,12px);
+        --s3d-r-md:var(--r-md,16px);
+        --s3d-r-lg:var(--r-lg,22px);
+        --s3d-r-xl:var(--r-xl,28px);
+        --s3d-r-pill:var(--r-pill,999px);
+        --s3d-radius-md:var(--s3d-r-md);   /* legacy alias, still referenced below */
         color:var(--s3d-ink);
+        /* Bottom gutter on phones. #main already reserves the tab bar itself,
+           so re-reserving --nav-h here would double-count; what this adds is the
+           gutter on top of that reserve, plus the home-indicator inset again,
+           because with viewport-fit=cover the bar carries that inset too and it
+           would otherwise be eaten straight out of the clearance under the
+           estimate panel. Above 720px there is no tab bar and no gutter. */
+        padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);
       }
+      @media(min-width:720px){.s3d{padding-bottom:0}}
+      /* THE HUD'S BLUR DEPENDS ON THIS LINE. css/styles.css:1022 runs the
+         shell entrance on every direct child of #main —
+           #main.view-enter>*{animation:riseIn var(--dur-2) var(--smooth) both}
+         — and riseIn ends on transform:none. fill-mode BOTH freezes the last
+         keyframe as the computed style, and a transform resolved by an
+         animation stays a MATRIX: measured here in Chrome, .s3d settles on
+         transform:matrix(1,0,0,1,0,0) and keeps it. A transformed element is a
+         BACKDROP ROOT, so .s3d-hud had nothing to sample and its blur was
+         inert — the careful .78-alpha ledger above was being computed for a
+         panel that was not actually sampling anything. Same class of defect
+         css/styles.css records against viewFade's filter:blur(0px).
+         BACKWARDS keeps the entrance and hands the element back to its own
+         stylesheet at the end. Specificity (1,2,0) beats the sheet's (1,1,0).
+         The root cause belongs in css/styles.css; this is the scoped repair. */
+      #main.view-enter>.s3d{animation-fill-mode:backwards}
       .s3d :where(h1,h2){text-wrap:balance}
 
       /* Display type — Anton. line-height 1.05 is the measured floor for Č Š Ž
@@ -531,10 +566,30 @@ function markup() {
       /* ---------------------------------------------------------------
          Stage + the one glass surface in this view
          --------------------------------------------------------------- */
-      .s3d-stage{height:clamp(340px,54vh,580px);aspect-ratio:auto;min-height:0;
-        border-radius:18px;background:var(--s3d-paper);
-        box-shadow:0 10px 30px rgba(93,79,79,.16),0 1px 2px rgba(93,79,79,.12)}
-      .s3d-stage canvas{border-radius:18px}
+      /* THE FRAME. Operator: "the entire frame a bit more professionally
+         framed." Layered warm elevation (contact shadow + mid + deep) instead
+         of the two-stop drop it had, and the ring/bevel is drawn as an ::after
+         OVERLAY rather than as an inset shadow, because an inset shadow paints
+         under the element's content and the WebGL canvas is content — it would
+         have hidden the ring entirely. pointer-events:none keeps the orbit
+         drag, the HUD and the hint fully live underneath it. */
+      .s3d-stage{position:relative;height:clamp(340px,54vh,580px);aspect-ratio:auto;min-height:0;
+        border-radius:var(--s3d-r-xl);background:var(--s3d-paper);
+        box-shadow:0 1px 2px -1px rgba(93,79,79,.16),
+                   0 10px 30px -12px rgba(93,79,79,.24),
+                   0 28px 56px -28px rgba(93,79,79,.30)}
+      .s3d-stage canvas{border-radius:var(--s3d-r-xl)}
+      .s3d-stage::after{
+        content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+        border-radius:var(--s3d-r-xl);
+        /* --line, not --hairline: measured in the browser, --hairline
+           composites to #F4F1EE on a light ground (1.01:1 against --paper) and
+           the ring does no work; --line gives #EDE7E2, 1.23:1 — a real edge
+           that still reads as a hairline. Decoration, not a 1.4.11 boundary. */
+        box-shadow:inset 0 0 0 1px var(--line,rgba(104,52,15,.12)),
+                   inset 0 1px 0 0 var(--s3d-rim-top),
+                   inset 0 -1px 0 0 var(--s3d-rim-bottom);
+      }
 
       /* THE canvas HUD — this view's only backdrop-filter surface.
          The element also carries '.glass .glass-interactive' from
@@ -552,7 +607,9 @@ function markup() {
       .s3d-hud{
         position:absolute;left:12px;right:12px;bottom:12px;z-index:2;
         display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-        padding:10px 12px;border-radius:var(--s3d-radius-md);
+        /* Concentric: the stage is --s3d-r-xl and the HUD floats 12px inside
+           it, so its arc is that radius minus that inset. */
+        padding:10px 12px;border-radius:calc(var(--s3d-r-xl) - 12px);
         background:var(--s3d-glass-bg);
         /* The .glass recipe's own elevation, restated in full: the drop shadow
            PLUS the four inset rims. Restating only the drop shadow would win on
@@ -610,11 +667,17 @@ function markup() {
       /* Controls ON the glass are SOLID, so their contrast is independent of
          whatever the room shows behind them. */
       .s3d-hbtn{
-        min-height:40px;padding:8px 14px;border-radius:11px;border:1px solid transparent;
+        position:relative;
+        min-height:40px;padding:8px 16px;border-radius:var(--s3d-r-pill);border:1px solid transparent;
         font:inherit;font-size:13.5px;font-weight:600;letter-spacing:.02em;cursor:pointer;
         background:var(--s3d-surface);color:var(--s3d-ink);   /* 13.01:1 */
         box-shadow:0 1px 2px rgba(93,79,79,.18);
       }
+      /* 40px keeps the HUD from eating the room on a phone, so the 44px tap
+         rule is met by extending the HIT area past the painted box rather than
+         by growing the box — the same trick .diz-hud-btn and .glass-chip use.
+         40 + 2 + 2 = 44. */
+      .s3d-hbtn::before{content:"";position:absolute;inset:-2px 0;border-radius:inherit}
       .s3d-hbtn.is-primary{background:var(--s3d-teal-700);color:#FFFFFF}         /* 5.78:1 */
       .s3d-hbtn.is-danger{background:var(--s3d-surface);color:var(--s3d-amber-ink)}  /* 5.86:1 */
       .s3d-hbtn:hover{border-color:var(--s3d-amber-500)}      /* warm amber rim on hover */
@@ -623,7 +686,7 @@ function markup() {
       /* The hint chip is deliberately SOLID: the glass budget for this screen is
          already spent on the HUD (top bar + tab bar are the standing pair). */
       .s3d-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
-        max-width:calc(100% - 24px);padding:8px 14px;border-radius:999px;
+        max-width:calc(100% - 24px);padding:8px 16px;border-radius:var(--s3d-r-pill);
         background:var(--s3d-glass-solid);color:var(--s3d-ink);   /* 12.34:1 */
         font-size:13px;font-weight:600;letter-spacing:.01em;
         box-shadow:0 2px 8px rgba(93,79,79,.22);pointer-events:none;text-align:center;z-index:1}
@@ -687,19 +750,19 @@ function markup() {
       /* ---------------------------------------------------------------
          Solid panels below the stage
          --------------------------------------------------------------- */
-      .s3d-section{margin-top:20px}
+      .s3d-section{margin-top:24px}
       .s3d-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
       .s3d-dim{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;
         letter-spacing:.04em;text-transform:uppercase;color:var(--s3d-mauve-ink)}
-      .s3d-dim input,.s3d-dim select{width:88px;min-height:44px;padding:6px 10px;
-        border:1px solid var(--s3d-line-input);border-radius:11px;font:inherit;font-size:15px;
+      .s3d-dim input,.s3d-dim select{width:88px;min-height:44px;padding:6px 12px;
+        border:1px solid var(--s3d-line-input);border-radius:var(--s3d-r-md);font:inherit;font-size:15px;
         font-weight:600;letter-spacing:0;text-transform:none;
         background:var(--s3d-surface);color:var(--s3d-ink)}
       .s3d-dim select{width:auto}
       .s3d-dim input:focus-visible,.s3d-dim select:focus-visible{
         outline:3px solid var(--s3d-teal-700);outline-offset:1px}
 
-      .s3d-chip{min-height:44px;padding:8px 15px;border:1px solid var(--s3d-line);border-radius:999px;
+      .s3d-chip{min-height:44px;padding:8px 16px;border:1px solid var(--s3d-line);border-radius:var(--s3d-r-pill);
         background:var(--s3d-surface);font:inherit;font-size:14px;font-weight:500;
         letter-spacing:.01em;cursor:pointer;color:var(--s3d-ink)}          /* 13.01:1 */
       .s3d-chip:hover{border-color:var(--s3d-amber-500)}
@@ -715,12 +778,24 @@ function markup() {
       .s3d-grout:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
 
       .s3d-drawer{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 10px;-webkit-overflow-scrolling:touch}
-      .s3d-prod{flex:0 0 128px;border:2px solid var(--s3d-line);border-radius:14px;background:var(--s3d-surface);
+      /* The resting edge is THINNER, not LIGHTER. It used to paint a 2px
+         --line-strong on every tile and the drawer read as a grid of boxes
+         rather than a row of pictures; it now draws the same --s3d-line as a
+         1px inset ring, so the boundary keeps exactly the contrast it had.
+         Going to --hairline here would have been wrong: the tile is an
+         interactive control whose fill is --surface #FFFFFF on a --paper
+         #F2F2F2 ground (1.10:1), so the edge is the only thing that bounds it
+         and WCAG 1.4.11 applies to it.
+         The 2px border stays in the box model but transparent, so selecting a
+         tile changes colour only and never reflows the drawer. */
+      .s3d-prod{flex:0 0 128px;border:2px solid transparent;border-radius:var(--s3d-r-md);background:var(--s3d-surface);
         padding:8px;text-align:left;font:inherit;cursor:pointer;color:var(--s3d-ink);
-        box-shadow:0 1px 3px rgba(93,79,79,.14)}
+        box-shadow:inset 0 0 0 1px var(--s3d-line),0 1px 3px rgba(93,79,79,.14)}
       .s3d-prod.is-active{border-color:var(--s3d-teal-700)}
       .s3d-prod:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
-      .s3d-prod img{width:112px;height:84px;object-fit:cover;border-radius:9px;display:block}
+      /* Concentric: the tile is --s3d-r-md with 8px of padding. */
+      .s3d-prod img{width:112px;height:84px;object-fit:cover;
+        border-radius:calc(var(--s3d-r-md) - 8px);display:block}
       .s3d-prod .s3d-pname{font-size:13px;font-weight:600;margin:7px 0 2px;line-height:1.3}
       .s3d-prod .s3d-pmeta{font-size:12px;font-weight:500;letter-spacing:.04em;color:var(--s3d-mauve-ink)}
 
@@ -734,8 +809,8 @@ function markup() {
       .s3d-fixgroup[open]>summary::before{content:"−"}
       .s3d-fixgroup>summary:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
 
-      .s3d-fix{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px 0 14px;
-        border:1px solid var(--s3d-line);border-radius:999px;background:var(--s3d-surface);
+      .s3d-fix{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px 0 16px;
+        border:1px solid var(--s3d-line);border-radius:var(--s3d-r-pill);background:var(--s3d-surface);
         font-size:14px;color:var(--s3d-ink)}
       .s3d-fix.is-selected{border-color:var(--s3d-teal-700);box-shadow:0 0 0 2px rgba(19,158,177,.22)}
       .s3d-fix .s3d-fixname{background:none;border:0;font:inherit;color:inherit;cursor:pointer;
@@ -745,8 +820,16 @@ function markup() {
       .s3d-fix button:hover{background:rgba(234,166,81,.20);color:var(--s3d-amber-ink)}
       .s3d-fix :focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
 
-      .s3d-est{background:var(--s3d-surface);border:1px solid var(--s3d-line);
-        border-radius:16px;padding:16px}
+      /* The edge is --line, not --line-strong. --line-strong is what this app
+         gives a CONTROL boundary (it composites to #DED2CA on --surface,
+         1.48:1); a read-only summary panel is not a control, so WCAG 1.4.11
+         does not apply to it and the heavier line only made the estimate read
+         as a framed box. --line composites to #EDE7E2, 1.23:1 against the fill
+         — visible as an edge, quiet as a frame — and the new layered drop
+         shadow is what actually lifts the panel off --paper. */
+      .s3d-est{background:var(--s3d-surface);border:1px solid var(--line,rgba(104,52,15,.12));
+        border-radius:var(--s3d-r-xl);padding:20px;
+        box-shadow:0 1px 2px -1px rgba(93,79,79,.14),0 6px 16px -8px rgba(93,79,79,.20)}
       .s3d-est-head{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between}
       .s3d-est-total{font-family:var(--font-display,'Anton',system-ui,sans-serif);
         font-size:30px;line-height:1.1;letter-spacing:-.01em;
@@ -759,18 +842,35 @@ function markup() {
       .s3d-est-note{margin:12px 0 0;font-size:12px;line-height:1.5;color:var(--s3d-mauve-ink)}
 
       .s3d-save{display:flex;flex-wrap:wrap;gap:8px}
-      .s3d-save input{flex:1 1 200px;min-height:44px;padding:6px 14px;border:1px solid var(--s3d-line-input);
-        border-radius:11px;font:inherit;background:var(--s3d-surface);color:var(--s3d-ink)}
+      .s3d-save input{flex:1 1 200px;min-height:44px;padding:6px 16px;border:1px solid var(--s3d-line-input);
+        border-radius:var(--s3d-r-md);font:inherit;background:var(--s3d-surface);color:var(--s3d-ink)}
       .s3d-save input:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:1px}
       .s3d-btn{min-height:44px;padding:10px 22px;border:1px solid var(--s3d-line);
-        border-radius:11px;background:var(--s3d-surface);font:inherit;font-weight:600;
+        border-radius:var(--s3d-r-pill);background:var(--s3d-surface);font:inherit;font-weight:600;
         font-size:14px;letter-spacing:.02em;cursor:pointer;color:var(--s3d-ink)}
       .s3d-btn:hover{border-color:var(--s3d-amber-500)}
       .s3d-btn:focus-visible{outline:3px solid var(--s3d-teal-700);outline-offset:2px}
       .s3d-btn.is-primary{border-color:var(--s3d-teal-700);background:var(--s3d-teal-700);color:#FFFFFF}
       .s3d-help{margin:10px 0 0;font-size:12.5px;line-height:1.55;color:var(--s3d-mauve-ink)}
       .s3d-help kbd{font:inherit;font-weight:700;color:var(--s3d-ink);
-        border:1px solid var(--s3d-line);border-radius:6px;padding:1px 6px;background:var(--s3d-surface)}
+        border:1px solid var(--s3d-line);border-radius:var(--s3d-r-xs);padding:1px 6px;background:var(--s3d-surface)}
+
+      /* ---- entrance ---------------------------------------------------
+         The panels BELOW the stage only. .s3d-hud is this view's one glass
+         surface and it lives inside .s3d-stage, so animating .s3d or the stage
+         would make them backdrop roots and the HUD would sample nothing.
+         Fill mode is 'backwards', not 'both': 'both' freezes the last keyframe
+         as the computed style, and a transform resolved by an animation stays a
+         matrix even where the keyframe says none — and a matrix is itself a
+         backdrop root. 'backwards' hands the element back to its own
+         stylesheet the moment the run ends. */
+      @media (prefers-reduced-motion:no-preference){
+        @keyframes s3d-rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+        .s3d-section{animation:s3d-rise 420ms var(--glass-ease,cubic-bezier(.32,.72,0,1)) backwards}
+        .s3d-section:nth-of-type(2){animation-delay:50ms}
+        .s3d-section:nth-of-type(3){animation-delay:100ms}
+        .s3d-section:nth-of-type(n+4){animation-delay:150ms}
+      }
     </style>
 
     <div class="s3d">

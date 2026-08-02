@@ -189,13 +189,45 @@ const CATALOG_CSS = `
   /* Warm hairlines and shadows: --shadow-warm #5D4F4F = rgb(93,79,79) and
      --brown-800 #68340F = rgb(104,52,15). Never neutral black. */
   --akv-hairline:var(--hairline,rgba(104,52,15,.07));
+  /* The card RING. Measured in the browser: --hairline composites to #F4F1EE on
+     --surface, which is 1.13:1 against the card fill and 1.01:1 against --paper
+     — i.e. invisible, so a ring drawn in it does no work. --line composites to
+     #EDE7E2, 1.23:1 against the fill: a real edge that still reads as a
+     hairline. Neither is a 1.4.11 boundary and neither has to be — a card is
+     not a control, and these cards are bounded by their fill and their drop
+     shadow as well. --line-strong (1.48:1) stays reserved for the things that
+     ARE controls. */
+  --akv-line:var(--line,rgba(104,52,15,.12));
   --akv-hairline-2:var(--line-strong,rgba(104,52,15,.22));
   --akv-sh-1:var(--glass-shadow-1,0 1px 2px rgba(93,79,79,.10),0 4px 14px rgba(93,79,79,.14));
   --akv-sh-2:var(--glass-shadow-2,0 2px 6px rgba(93,79,79,.14),0 12px 34px rgba(93,79,79,.22));
 
-  --akv-r:var(--glass-radius-md,20px);
-  --akv-r-sm:var(--glass-radius-sm,14px);
-  --akv-r-pill:var(--glass-radius-pill,999px);
+  /* CORNER LADDER. css/styles.css owns the scale (--r-xs … --r-pill); the
+     literal after each comma is the same step written out, so these views keep
+     one corner language even before that sheet has landed. Nothing below
+     hardcodes a radius any more.
+
+       --r-xs   8px   inner marks inside an already-nested child
+       --r-sm  12px   swatches, small thumbnails
+       --r-md  16px   nested panels, inputs, banners
+       --r-lg  22px   list cards (the ASC step)
+       --r-xl  28px   page cards, product cards, category tiles, stages
+       --r-2xl 34px   heroes: empty state, resume card, detail panel
+       --r-pill       every button and chip
+
+     CONCENTRIC NESTING is the rule, not a preference: a child's radius is its
+     parent's radius MINUS the padding between them, so the two arcs stay
+     parallel instead of the inner one looking pinched. Where the pair is
+     unambiguous that subtraction is written as a calc() against the SAME
+     literal the padding uses, so the geometry survives a change to the scale. */
+  --akv-r-xs:var(--r-xs,8px);
+  --akv-r-sm:var(--r-sm,12px);
+  --akv-r-md:var(--r-md,16px);
+  --akv-r-lg:var(--r-lg,22px);
+  --akv-r-xl:var(--r-xl,28px);
+  --akv-r-2xl:var(--r-2xl,34px);
+  --akv-r-pill:var(--r-pill,999px);
+  --akv-r:var(--akv-r-xl);                   /* the card default */
   --akv-ease:var(--glass-ease,cubic-bezier(.32,.72,0,1));
   --akv-fam-display:var(--font-display,'Anton','Haettenschweiler','Arial Narrow',system-ui,sans-serif);
   --akv-fam-text:var(--font-text,'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
@@ -229,7 +261,7 @@ const CATALOG_CSS = `
 .akv-num{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
 
 /* ---- page header --------------------------------------------------------- */
-.akv-head{margin:2px 0 18px;overflow:visible}
+.akv-head{margin:2px 0 20px;overflow:visible}
 .akv-head .akv-meta{display:block;margin:0 0 6px}
 .akv-head .akv-lead{margin:8px 0 0;max-width:62ch}
 .akv-back{
@@ -241,7 +273,7 @@ const CATALOG_CSS = `
 
 /* ---- demo banner --------------------------------------------------------- */
 .akv-note{
-  margin:0 0 18px;padding:12px 14px;border-radius:var(--akv-r-sm);
+  margin:0 0 20px;padding:12px 16px;border-radius:var(--akv-r-md);
   background:var(--akv-sky);color:var(--akv-ink);                       /* 8.89:1 */
   font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.5;
   box-shadow:inset 0 1px 0 0 var(--akv-rim);
@@ -250,12 +282,17 @@ const CATALOG_CSS = `
 /* ---- category tiles ------------------------------------------------------ */
 /* Transparent glass: a palette wash + rim, no backdrop-filter. Text is --ink
    only — the derived -ink shades do not clear 4.5:1 on these washes. */
-.akv-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin:0 0 26px}
+.akv-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin:0 0 28px}
+/* Hairline first, then the rim, then the drop. The 1px ring is --hairline
+   (rgba(104,52,15,.07)) — a warm edge that defines the arc without reading as a
+   border; the old treatment had the rim doing that job alone and the tiles
+   dissolved into --paper at their sides. */
 .akv-cat-card{
   position:relative;display:flex;flex-direction:column;gap:8px;align-items:flex-start;
   min-height:132px;padding:16px;text-decoration:none;color:var(--akv-ink);
-  border-radius:var(--akv-r);background:var(--akv-placeholder);
-  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
+  border-radius:var(--akv-r-xl);background:var(--akv-placeholder);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-1),
+             inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
   isolation:isolate;overflow:hidden;
   transition:transform 260ms var(--akv-ease),box-shadow 260ms var(--akv-ease);
 }
@@ -283,10 +320,12 @@ const CATALOG_CSS = `
   opacity:.7;transition:opacity 260ms var(--akv-ease);
 }
 @media (hover:hover) and (pointer:fine){
-  .akv-cat-card:hover{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+  .akv-cat-card:hover{transform:translateY(-2px);
+    box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
   .akv-cat-card:hover::after{opacity:1}
 }
-.akv-cat-card:focus-visible{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+.akv-cat-card:focus-visible{transform:translateY(-2px);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
 .akv-cat-card>*{position:relative;z-index:1}
 .akv-cat-ico{font-size:30px;line-height:1}
 .akv-cat-n{margin-top:auto}
@@ -299,18 +338,22 @@ const CATALOG_CSS = `
    sits on the opaque .akv-pbody scrim below.
    No backdrop-filter — see the GLASS BUDGET note. */
 .akv-pcard{
-  position:relative;padding:0;overflow:hidden;border-radius:var(--akv-r);
+  position:relative;padding:0;overflow:hidden;border-radius:var(--akv-r-xl);
   background:var(--akv-glass-deco);
   -webkit-backdrop-filter:none;backdrop-filter:none;
-  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-1),
+             inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
   isolation:isolate;
   transition:transform 260ms var(--akv-ease),box-shadow 260ms var(--akv-ease);
 }
 @media (hover:hover) and (pointer:fine){
   /* cool surface, warm edge */
-  .akv-pcard:hover{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm),inset 0 -1px 0 0 var(--akv-rim-low)}
+  .akv-pcard:hover{transform:translateY(-2px);
+    box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),
+               inset 0 1px 0 0 var(--akv-rim-warm),inset 0 -1px 0 0 var(--akv-rim-low)}
 }
-.akv-pcard:focus-within{transform:translateY(-2px);box-shadow:var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
+.akv-pcard:focus-within{transform:translateY(-2px);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim-warm)}
 .akv-pcard-a{display:block;color:inherit;text-decoration:none}
 .akv-sw-wrap{position:relative;overflow:hidden}
 .akv-swatch{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--akv-placeholder)}
@@ -320,7 +363,7 @@ const CATALOG_CSS = `
   text-shadow:0 2px 12px rgba(93,79,79,.30);      /* --shadow-warm, not black */
 }
 /* The opaque scrim. Every card text ratio in the ledger is measured on this. */
-.akv-pbody{position:relative;z-index:2;padding:12px 14px 14px;background:var(--akv-scrim);display:flex;flex-direction:column;gap:4px}
+.akv-pbody{position:relative;z-index:2;padding:12px 16px 16px;background:var(--akv-scrim);display:flex;flex-direction:column;gap:4px}
 .akv-pmeta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .akv-pname{display:block}
 .akv-price{margin-top:2px;font-family:var(--akv-fam-text);font-weight:700;font-size:.9375rem;letter-spacing:.01em;color:var(--akv-teal-ink)}
@@ -331,7 +374,7 @@ const CATALOG_CSS = `
    the browser still font-fallbacks for the heart itself; what this fixes is
    the metrics/stack the control resolves to. */
 .akv-fav{
-  position:absolute;top:10px;right:10px;z-index:3;
+  position:absolute;top:12px;right:12px;z-index:3;
   min-width:var(--tap,44px);min-height:var(--tap,44px);border:none;border-radius:var(--akv-r-pill);
   background:var(--akv-scrim);color:var(--akv-amber-ink);          /* 5.86:1 on --surface */
   font-family:var(--akv-fam-text);
@@ -346,7 +389,7 @@ const CATALOG_CSS = `
 .akv-fav[aria-pressed="true"]{background:var(--akv-amber-ink);color:#fff}
 
 /* ---- filter chips -------------------------------------------------------- */
-.akv-chiprow{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 10px;align-items:center;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.akv-chiprow{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 10px;align-items:center;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px;scroll-padding-inline:16px}
 .akv-chiprow[hidden]{display:none}
 .akv-chiprow::-webkit-scrollbar{height:4px}
 .akv-chiprow::-webkit-scrollbar-thumb{background:rgba(93,79,79,.28);border-radius:var(--akv-r-pill)}
@@ -397,16 +440,21 @@ const CATALOG_CSS = `
 /* ---- "Nastavite gdje ste stali" ------------------------------------------ */
 /* The one warm/dark surface in the catalogue: brown-800 = toplina. */
 .akv-resume{
-  padding:0;overflow:hidden;margin:0 0 26px;border-radius:var(--akv-r);
+  padding:0;overflow:hidden;margin:0 0 28px;border-radius:var(--akv-r-2xl);
   background:var(--akv-brown);color:#fff;
   box-shadow:var(--akv-sh-2),inset 0 1px 0 0 rgba(255,255,255,.20);
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
-.akv-resume-a{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:inherit;text-decoration:none;padding:14px}
+.akv-resume-a{display:flex;gap:16px;align-items:center;flex-wrap:wrap;color:inherit;text-decoration:none;padding:16px}
 /* 4:3, not the old 1000/700 design space: js/scene3d.js frames every locked
    camera on 4:3 (its REF_ASPECT) and only widens the fov for something
    NARROWER, so a 4:3 thumbnail is the composition the scene was framed for. */
-.akv-resume-c{flex:0 0 auto;width:100%;max-width:320px;aspect-ratio:4/3;border-radius:var(--akv-r-sm);background:var(--akv-brown-mid);display:block;box-shadow:0 2px 10px rgba(93,79,79,.34)}
+/* Concentric with its frame: the card is --r-2xl and the picture sits 16px in,
+   so its arc is that radius minus that padding — the two curves stay parallel
+   whatever the scale resolves to. */
+.akv-resume-c{flex:0 0 auto;width:100%;max-width:320px;aspect-ratio:4/3;
+  border-radius:calc(var(--akv-r-2xl) - 16px);background:var(--akv-brown-mid);display:block;
+  box-shadow:0 2px 10px rgba(93,79,79,.34),inset 0 0 0 1px rgba(255,255,255,.10)}
 .akv-resume-b{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .akv-resume-e{color:var(--akv-amber)}                       /* 4.83:1 on brown-800 */
 .akv-resume-t{font-family:var(--akv-fam-text);font-weight:700;font-size:1.125rem;line-height:1.3;color:#fff}
@@ -419,13 +467,13 @@ const CATALOG_CSS = `
 }
 
 /* ---- section heading ----------------------------------------------------- */
-.akv-sec{display:flex;align-items:baseline;gap:12px;margin:0 0 14px;overflow:visible}
+.akv-sec{display:flex;align-items:baseline;gap:12px;margin:0 0 16px;overflow:visible}
 
 /* ---- empty state --------------------------------------------------------- */
 .akv-empty{
-  text-align:center;padding:44px 20px;border-radius:var(--akv-r);
+  text-align:center;padding:44px 24px;border-radius:var(--akv-r-2xl);
   background:var(--akv-scrim);overflow:visible;                /* Anton caron guard */
-  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 .akv-empty .ico{font-size:42px;line-height:1}
@@ -453,27 +501,61 @@ const CATALOG_CSS = `
 
 /* ---- product detail ------------------------------------------------------ */
 .akv-prod{display:grid;gap:20px;grid-template-columns:1fr;margin-top:6px}
+/* THE RAIL'S BLUR DEPENDS ON THIS LINE. css/styles.css:1022 runs the shell's
+   entrance on every direct child of #main —
+     #main.view-enter>*{animation:riseIn var(--dur-2) var(--smooth) both}
+   — and riseIn ends on transform:none. But fill-mode BOTH freezes the last
+   keyframe as the element's computed style, and a transform resolved by an
+   animation stays a MATRIX: measured here in Chrome, .akv-prod settles on
+   transform:matrix(1,0,0,1,0,0) and keeps it for the life of the view. An
+   element with a transform is a BACKDROP ROOT, so .akv-rail — which is inside
+   .akv-prod — had nothing left to sample and its blur was doing nothing at all.
+   This is the same class of defect css/styles.css itself records against
+   viewFade's filter:blur(0px), one layer up.
+   BACKWARDS keeps the entrance (the from-state still applies before it runs)
+   and hands the element back to its own stylesheet at the end, where transform
+   really is none. Specificity (1,2,0) beats the sheet's (1,1,0), so this holds
+   whatever the source order.
+   The root cause is in css/styles.css and belongs there; this is the scoped
+   repair for the one view in this file that carries glass. */
+#main.view-enter>.akv-prod{animation-fill-mode:backwards}
 @media (min-width:760px){.akv-prod{grid-template-columns:1.1fr .9fr;align-items:start}}
-.akv-prevwrap{position:relative;border-radius:var(--akv-r);overflow:hidden;box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim)}
+/* The tile preview is a FRAME, not a bare picture: a hairline ring holds the
+   arc, the rim reads as a bevel highlight along the top edge and the drop is
+   the same restrained --akv-sh-2 every raised surface uses. It is deliberately
+   NOT given an entrance animation — it is the ancestor of .akv-rail, and an
+   animated opacity/transform on an ancestor makes it a backdrop root, which
+   would leave the rail's blur sampling nothing (the trap css/styles.css
+   documents around viewFade). */
+.akv-prevwrap{position:relative;border-radius:var(--akv-r-2xl);overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim)}
 .akv-prev{width:100%;aspect-ratio:4/3;display:block;background:var(--akv-placeholder);object-fit:cover}
 /* THE one extra backdrop-filter surface in these four views (see GLASS BUDGET).
    -webkit- line carries LITERAL values: Safari fails to resolve var() there. */
 .akv-rail{
   position:absolute;left:10px;right:10px;bottom:10px;z-index:2;
   display:flex;gap:8px;align-items:center;margin:0;padding:8px;
-  border-radius:var(--akv-r-sm);background:var(--akv-glass-ui);
+  /* concentric inside the --r-2xl frame it floats in, inset 10px */
+  border-radius:calc(var(--akv-r-2xl) - 10px);background:var(--akv-glass-ui);
   -webkit-backdrop-filter:blur(18px) saturate(180%) brightness(1.06);
   backdrop-filter:var(--glass-fx-md,blur(18px) saturate(180%) brightness(1.06));
   box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim),inset 0 -1px 0 0 var(--akv-rim-low);
   isolation:isolate;contain:paint;                 /* bound the compositor read-back */
 }
+/* No scrollbar chrome INSIDE the rail. .akv-rail also carries .akv-chiprow,
+   which paints a thin track — fine on the page, but on a 40px floating glass
+   strip it reads as a broken edge. The last chip stays visibly clipped at the
+   right, which is the affordance doing the work instead. */
+.akv-rail{scrollbar-width:none;-ms-overflow-style:none}
+.akv-rail::-webkit-scrollbar{display:none}
 .akv-rail .lab{position:static;background:transparent;min-width:0;color:var(--akv-ink);padding-right:2px}
 .akv-rail .akv-chip{min-height:40px;background:var(--akv-glass-ui)}
 .akv-rail .akv-chip.on,.akv-rail .akv-chip[aria-pressed="true"]{background:var(--akv-teal-ink)}
-.akv-eqwrap{position:relative;border-radius:var(--akv-r);overflow:hidden;background:var(--akv-glass-deco);box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim)}
+.akv-eqwrap{position:relative;border-radius:var(--akv-r-2xl);overflow:hidden;background:var(--akv-glass-deco);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-2),inset 0 1px 0 0 var(--akv-rim)}
 .akv-panel{
-  border-radius:var(--akv-r);padding:20px;background:var(--akv-scrim);
-  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);overflow:visible;
+  border-radius:var(--akv-r-2xl);padding:24px;background:var(--akv-scrim);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);overflow:visible;
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 .akv-panel .akv-display-2{margin:6px 0 4px}
@@ -490,9 +572,16 @@ const CATALOG_CSS = `
   color:var(--akv-teal-ink);margin:8px 0 10px;                 /* 5.78:1 */
 }
 .akv-order{margin:0 0 10px;font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.5;color:var(--akv-amber-ink)}
-.akv-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.akv-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
 .akv-fine{margin:12px 0 0;font-family:var(--akv-fam-text);font-size:.75rem;line-height:1.5;color:var(--akv-mauve-ink)}
-.akv-inq{margin-top:14px;padding:14px;border:1px dashed var(--akv-hairline-2);border-radius:var(--akv-r-sm);background:var(--akv-paper)}
+/* --r-md, not the concentric calc(--r-2xl - 24px). The subtraction rule applies
+   to a child that sits AGAINST its parent's corner, where the two arcs have to
+   stay parallel; this box is a full-width block in the middle of the panel and
+   never touches one. Measured, the calc landed on 10px, which put the textarea
+   nested inside it (12px) on a LARGER radius than its own container — the exact
+   inversion the nesting rule exists to prevent. 16 outside, 12 inside. */
+.akv-inq{margin-top:16px;padding:16px;border:1px dashed var(--akv-hairline-2);
+  border-radius:var(--akv-r-md);background:var(--akv-paper)}
 .akv-inq textarea{
   width:100%;min-height:196px;font-family:var(--akv-fam-text);font-size:.8125rem;line-height:1.55;
   padding:12px;margin-top:10px;border:1px solid var(--akv-hairline-2);border-radius:var(--akv-r-sm);
@@ -502,12 +591,12 @@ const CATALOG_CSS = `
 /* ---- saved designs ------------------------------------------------------- */
 .akv-dcard{
   display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;
-  padding:14px;border-radius:var(--akv-r);background:var(--akv-scrim);
-  box-shadow:var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
+  padding:16px;border-radius:var(--akv-r-xl);background:var(--akv-scrim);
+  box-shadow:inset 0 0 0 1px var(--akv-line),var(--akv-sh-1),inset 0 1px 0 0 var(--akv-rim);
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
 .akv-dsw{display:flex;gap:5px;flex:0 0 auto}
-.akv-dsw img{width:40px;height:40px;border-radius:10px;display:block;background:var(--akv-placeholder)}
+.akv-dsw img{width:40px;height:40px;border-radius:var(--akv-r-sm);display:block;background:var(--akv-placeholder)}
 .akv-dbody{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:5px}
 .akv-dname{font-family:var(--akv-fam-text);font-weight:600;font-size:1rem;line-height:1.3;color:var(--akv-ink)}
 .akv-drow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -529,10 +618,11 @@ const CATALOG_CSS = `
    .akv-thumb-load must stay AFTER .akv-resume-c / .akv-dthumb: those two set
    "background" as a shorthand, which resets background-image to none at the
    same (0,1,0) specificity, and only source order lets the sweep win. */
+/* Concentric inside the --r-xl saved-design card at 16px of padding. */
 .akv-dthumb{
   flex:0 0 auto;width:128px;max-width:34vw;aspect-ratio:4/3;display:block;
-  border-radius:var(--akv-r-sm);background:var(--akv-placeholder);
-  box-shadow:inset 0 0 0 1px var(--akv-hairline);
+  border-radius:calc(var(--akv-r-xl) - 16px);background:var(--akv-placeholder);
+  box-shadow:inset 0 0 0 1px var(--akv-line);
 }
 .akv-thumb-load{
   background-image:linear-gradient(100deg,transparent 32%,rgba(255,255,255,.22) 50%,transparent 68%);
@@ -540,6 +630,50 @@ const CATALOG_CSS = `
   animation:akv-thumb-sweep 1400ms linear infinite;
 }
 @keyframes akv-thumb-sweep{from{background-position:130% 0}to{background-position:-130% 0}}
+
+/* ---- entrance ------------------------------------------------------------
+   One keyframe, one curve, one distance. A 10px rise over 420ms on the shipped
+   --glass-ease: it settles rather than bounces, which is the difference between
+   this and the --spring curve the tab bar icons use. Nothing overshoots and
+   nothing scales.
+
+   FILL MODE IS 'backwards', NOT 'both', and that is load-bearing rather than
+   tidy. 'both' makes the LAST keyframe the element's computed style forever
+   after, and a transform that has been resolved by an animation stays a matrix
+   even when the keyframe says 'none' — measured in Chrome 2026-08-02, an
+   .akv-pcard finished on transform:matrix(1,0,0,1,0,0), not none. A matrix is a
+   containing block and a BACKDROP ROOT, so any glass inside such an element
+   would sample nothing at all: exactly the defect css/styles.css records
+   against viewFade's filter:blur(0px), which also looked like a no-op value.
+   'backwards' applies the FROM state before the animation starts (so nothing
+   flashes in at full opacity first) and then hands the element back to its own
+   stylesheet — where transform really is none and opacity really is 1.
+
+   Belt as well as braces, the list below still names only surfaces with no
+   backdrop-filter descendant. .akv-prevwrap is excluded on purpose: it is the
+   parent of .akv-rail, this view's one blurred surface.
+
+   The stagger is CAPPED at eight steps. A category grid can be 23 cards, and a
+   per-card delay across all of them turns a calm entrance into a wave; past the
+   eighth card everything arrives together. Re-filtering a category rebuilds the
+   grid and therefore replays the entrance — at 10px and 420ms that reads as the
+   result settling in, which is the intent. */
+@keyframes akv-rise{
+  from{opacity:0;transform:translate3d(0,10px,0)}
+  to{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:no-preference){
+  .akv-cat-card,.akv-pcard,.akv-dcard,.akv-empty,.akv-resume,.akv-panel{
+    animation:akv-rise 420ms var(--akv-ease) backwards;
+  }
+  .akv-grid>.akv-pcard:nth-child(2),.akv-cats>.akv-cat-card:nth-child(2),#dizList>.akv-dcard:nth-child(2){animation-delay:26ms}
+  .akv-grid>.akv-pcard:nth-child(3),.akv-cats>.akv-cat-card:nth-child(3),#dizList>.akv-dcard:nth-child(3){animation-delay:52ms}
+  .akv-grid>.akv-pcard:nth-child(4),.akv-cats>.akv-cat-card:nth-child(4),#dizList>.akv-dcard:nth-child(4){animation-delay:78ms}
+  .akv-grid>.akv-pcard:nth-child(5),.akv-cats>.akv-cat-card:nth-child(5),#dizList>.akv-dcard:nth-child(5){animation-delay:104ms}
+  .akv-grid>.akv-pcard:nth-child(6),.akv-cats>.akv-cat-card:nth-child(6),#dizList>.akv-dcard:nth-child(6){animation-delay:130ms}
+  .akv-grid>.akv-pcard:nth-child(7),.akv-cats>.akv-cat-card:nth-child(7),#dizList>.akv-dcard:nth-child(7){animation-delay:156ms}
+  .akv-grid>.akv-pcard:nth-child(n+8),.akv-cats>.akv-cat-card:nth-child(n+8),#dizList>.akv-dcard:nth-child(n+8){animation-delay:182ms}
+}
 
 /* =========================== DEGRADATIONS =================================
    FIVE paths, matching the DEGRADATION PATHS block at css/styles.css:1516
@@ -619,9 +753,17 @@ html[data-transparency="reduced"] .akv-cat-card::after{display:none}
 /* 5. Motion. Blur radius is never animated anywhere above; this only stills
       the transform/colour transitions — and the thumbnail sweep, which is the
       one looping animation in this file. Stilling it leaves the flat
-      placeholder colour, which is what the sweep is painted over anyway. */
+      placeholder colour, which is what the sweep is painted over anyway.
+      The entrance rise is already gated behind
+      (prefers-reduced-motion:no-preference), so it is never DECLARED for a user
+      who asked for less motion rather than declared and then cancelled; the
+      names are repeated here so a future entrance added outside that gate still
+      lands in the same net. Because the rise is never applied, the elements
+      also keep their natural opacity:1 / transform:none — a reduced-motion user
+      sees the finished layout, never a stuck 'from' state. */
 @media (prefers-reduced-motion:reduce){
-  .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after,.akv-thumb-load{
+  .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after,.akv-thumb-load,
+  .akv-dcard,.akv-empty,.akv-resume,.akv-panel{
     transition-duration:1ms !important;animation:none !important;
   }
   .akv-pcard:hover,.akv-pcard:focus-within,.akv-cat-card:hover,.akv-cat-card:focus-visible{transform:none}
