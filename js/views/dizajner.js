@@ -733,7 +733,13 @@ function markup() {
      --glass-alpha-dark of .82, --paper on it measures 8.22:1 in its worst case
      (a white backdrop) and 15.56:1 over black, both re-verified here against
      the live computed style. Everything below only lays out its contents. */
-  .diz-hud{position:absolute;left:10px;right:10px;bottom:10px;z-index:3;
+  /* BELOW the stage, never over it. It used to float across the bottom of the
+     room (position:absolute; bottom:10px) where it covered the floor — i.e. the
+     surface being edited whenever "Pod" was selected, which is the common case.
+     Operator instruction, 2026-08-02: put the info text below the screen so it
+     is not in the way. Normal flow also means it can never overlap the room on
+     a short phone viewport, which the absolute version did as the stage shrank. */
+  .diz-hud{position:relative;margin:8px 0 0;
     display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:7px 8px}
   .diz-chip{flex:1 1 auto;min-width:0;padding:0 6px;color:var(--glass-on-dark);
     font-family:var(--font-text);font-size:11.5px;font-weight:700;letter-spacing:.1em;
@@ -770,7 +776,9 @@ function markup() {
      hand a user who asked for no transparency a translucent panel mid-drag.
      Legibility goes UP, not down: --paper on --glass-solid-dark is 14.63:1
      against the 8.22:1 worst case of the live glass (computed). */
-  .diz-stage.is-busy .diz-hud{
+  /* Sibling selector, not descendant: the HUD now lives after the stage rather
+     than inside it, so `.diz-stage.is-busy .diz-hud` would never match. */
+  .diz-stage.is-busy + .diz-hud{
     backdrop-filter:none;-webkit-backdrop-filter:none;
     background-color:var(--glass-solid-dark)}
 
@@ -994,12 +1002,6 @@ function markup() {
         aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
         aria-label="${esc(T("diz.wipeA11y", "Klizač usporedbe prije i poslije"))}">&#8942;</span>
     </div>
-    <div class="diz-hud glass-hud" id="dizHud">
-      <span class="diz-chip" id="dizChip"></span>
-      <button class="diz-hud-btn" type="button" id="dizHudRotate" aria-pressed="false"
-        title="${esc(T("diz.rotateHint", "Zakreni pločice za 90°"))}">90&deg;</button>
-      <button class="diz-hud-btn" type="button" id="dizHudWipe" aria-pressed="false">${esc(T("diz.wipe", "Prije/poslije"))}</button>
-    </div>
     <div class="diz-coach" id="dizCoach" hidden>
       <p>${esc(T("diz.coach", "Dodirnite površinu pa odaberite pločicu. Namještaj možete povući i premjestiti."))}</p>
       <button type="button" id="dizCoachOk">${esc(T("diz.coachOk", "U redu"))}</button>
@@ -1007,6 +1009,12 @@ function markup() {
     <div class="room3d-loading diz-loading" id="dizLoading">
       <span class="spinner" aria-hidden="true"></span>${esc(T("diz.loading", "Učitavanje 3D prikaza…"))}
     </div>
+  </div>
+  <div class="diz-hud glass-hud" id="dizHud">
+    <span class="diz-chip" id="dizChip"></span>
+    <button class="diz-hud-btn" type="button" id="dizHudRotate" aria-pressed="false"
+      title="${esc(T("diz.rotateHint", "Zakreni pločice za 90°"))}">90&deg;</button>
+    <button class="diz-hud-btn" type="button" id="dizHudWipe" aria-pressed="false">${esc(T("diz.wipe", "Prije/poslije"))}</button>
   </div>
   <p class="diz-move-hint" id="dizMoveHint">
     <b>${esc(T("diz.moveHintLead", "Savjet:"))}</b>
