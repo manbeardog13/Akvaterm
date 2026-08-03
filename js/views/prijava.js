@@ -183,7 +183,7 @@ html[${AUTH_ATTR}] #main{
    Mine was a flex row with justify-content:space-between, which put it on the
    logo's baseline and inset it by the card's 26px padding. Same two elements,
    completely different anchor - and that is the placement difference. */
-.pr-cardtop{display:block;margin-bottom:20px}
+.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
 /* THE THEME SLIDER. Operator instruction, 2026-08-02: "replace the light/dark
    button with a little slider that has a background lighting of the logo -- for
    when it goes from light to dark there is a bluish under-colour, and switching
@@ -200,7 +200,7 @@ html[${AUTH_ATTR}] #main{
    element every frame, and this sits on a card that is already compositing
    glass. */
 .pr-theme{
-  position:absolute;top:16px;right:16px;z-index:4;width:52px;height:29px;padding:0;
+  flex:none;position:relative;width:42px;height:23px;padding:0;
   border:1px solid var(--line);border-radius:var(--r-pill);
   background:var(--glass-wash);cursor:pointer;
   transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
@@ -240,13 +240,13 @@ html[${AUTH_ATTR}] #main{
    POSITION and by the one-shot glow underneath - which is enough, and is why
    the sun/moon pair was noise rather than information. */
 .pr-themeic{
-  position:absolute;top:3px;left:3px;width:23px;height:23px;z-index:1;
+  position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;z-index:1;
   border-radius:50%;
   background:#FFFFFF;
   box-shadow:0 1px 3px rgba(20,16,14,.28),0 0 0 .5px rgba(20,16,14,.06);
   transition:transform 380ms var(--spring);
 }
-.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(23px)}
+.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(19px)}
 
 @media(prefers-reduced-motion:reduce){
   .pr-themeic,.pr-themeic svg{transition-duration:1ms}
