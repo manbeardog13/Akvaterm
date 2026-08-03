@@ -154,7 +154,7 @@ html[${AUTH_ATTR}] #main{
      clamped at both ends so a 320px phone still gets 24px of air and a
      desktop does not run the gutter away (the card caps at 360px there
      regardless, so the upper bound only guards the tablet range). */
-  padding:max(20px,env(safe-area-inset-top,0px)) clamp(18px,9.5vw,36px) max(24px,env(safe-area-inset-bottom,0px));
+  padding:max(20px,env(safe-area-inset-top,0px)) 12px max(24px,env(safe-area-inset-bottom,0px));
 }
 
 /* margin:auto rather than align-items:center — an auto margin centres without
@@ -171,7 +171,12 @@ html[${AUTH_ATTR}] #main{
    and the device wins - it is the thing being compared. Chasing the stylesheet
    is what produced a card that measured "identical" on content width while
    still looking bigger on screen. */
-.pr-wrap{margin:auto;width:min(304px,100%);display:flex;flex-direction:column;gap:20px}
+/* 351px at 375 = 93.6% of viewport, MEASURED off ASC's rendered card - not
+   off the screenshot, which read 81% and produced a card with a 1.81 height
+   ratio against ASC's 1.504. That ratio difference is the "elongated vs
+   squashed" complaint: same content in a narrower column simply runs taller.
+   Width is what fixes the shape; the height follows from it. */
+.pr-wrap{margin:auto;width:min(351px,100%);display:flex;flex-direction:column;gap:20px}
 
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
@@ -355,13 +360,13 @@ html[${AUTH_ATTR}] #main{
    lighter than --paper, which is why it read as a grey block sitting ON the
    page rather than as the page. Dropped to a near-paper tone with the
    separation carried by the rim and the shadow instead of by the fill. */
-:root[data-theme="dark"] .pr-card{background-color:rgba(23,24,28,.94);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+:root[data-theme="dark"] .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{background-color:rgba(23,24,28,.94);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+  :root:not([data-theme="light"]) .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
@@ -442,14 +447,16 @@ html[${AUTH_ATTR}] #main{
      far shadow 0 30px 80px -30px, which is what makes it float rather than sit
    Dropping any one gives a flat rectangle. */
 .pr-wrap .pr-card{
-  padding:28px 24px 24px;border-radius:30px;position:relative;
+  padding:30px 26px 24px;border-radius:30px;position:relative;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.55),
     inset 0 0 0 1px var(--line),
+    0 1px 2px -1px rgba(0,0,0,.5),
+    0 8px 20px -10px rgba(0,0,0,.55),
     0 30px 80px -30px rgba(0,0,0,.45);
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .pr-wrap .pr-card{-webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%)}
+  .pr-wrap .pr-card{-webkit-backdrop-filter:blur(34px) saturate(150%) brightness(1.08);backdrop-filter:blur(34px) saturate(150%) brightness(1.08)}
 }
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
@@ -544,6 +551,13 @@ html[${AUTH_ATTR}] #main{
    still reserves its line (it appears and disappears while the user is looking
    straight at it, and a reflow there moves the button under their thumb); the
    Google one does not, because it only ever appears as the page unloads. */
+/* COLLAPSED WHEN EMPTY. This reserved 19px plus a 13px margin at all times,
+   and that 32px was the ENTIRE remaining height difference against ASC -
+   560.5 vs 528 - after width, padding, radius and every control matched.
+   ASC's .auth-err / .auth-ok carry a .hidden class instead of standing space.
+   The form's message still gets its line WHILE VISIBLE; it just no longer
+   holds a gap open when there is nothing to say. */
+.pr-msg:empty{display:none}
 .pr-msg{min-height:19px;margin:13px 0 0;font-size:13px;font-weight:600;line-height:1.4;text-align:center;color:var(--ink-2)}
 #prGoogleMsg{min-height:0;margin:0}
 #prGoogleMsg:not(:empty){margin-top:10px}
