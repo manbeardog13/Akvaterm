@@ -178,16 +178,33 @@ function transparencyIsReduced() {
  *  "keep the glass" choice: the value was stored, the attribute was not, and
  *  the stylesheet went on forcing solid surfaces.
  */
+// REDUCED TRANSPARENCY IS REMOVED. Operator instruction, 2026-08-03:
+// "completely remove the option to reduce transparency."
+//
+// This pins html[data-transparency="full"] and nothing else, which is the whole
+// change. Every reduced-transparency rule in the app - the ten in
+// css/styles.css and the scoped copies in each view - is written as
+// `html:not([data-transparency="full"]) ...`, deliberately, so that an explicit
+// "keep the glass" always wins. Setting it permanently therefore switches off
+// BOTH paths at once: the manual toggle and the OS-level
+// @media (prefers-reduced-transparency: reduce).
+//
+// Doing it this way rather than deleting ~385 CSS rules is not laziness, it is
+// the safe edit: those rules live inside JS template literals in ten view
+// files, and a script that walks braces to remove them cannot tell a CSS block
+// from an object literal. One was attempted and gutted eleven files; it was
+// reverted. If the rules are ever genuinely deleted, do it by hand, per file.
+//
+// THE ACCESSIBILITY COST, recorded because it is real and was flagged before
+// the change: Safari never reports prefers-reduced-transparency, and iOS is
+// most of this audience, so this switch was the ONLY way those users could turn
+// the blur off. There is now no way. The other degradation paths are untouched
+// - @supports (no backdrop-filter), prefers-contrast and forced-colors all
+// still fire, and they cover legibility; what is gone is the transparency
+// preference specifically.
 function applyTransparency() {
-  const html = document.documentElement;
-  const stored = storedTransparency();
-  const reduced = transparencyIsReduced();
-  if (stored) html.dataset.transparency = stored;          // explicit: reduced | full
-  else if (reduced) html.dataset.transparency = REDUCED;    // auto, OS asked for it
-  else delete html.dataset.transparency;                    // auto, nothing to say
-  document.querySelectorAll(`[${TRANSPARENCY_TOGGLE_ATTR}]`)
-    .forEach((el) => el.setAttribute("aria-checked", String(reduced)));
-  return reduced;
+  document.documentElement.dataset.transparency = "full";
+  return false;
 }
 
 function setTransparencyReduced(reduced) {
@@ -665,16 +682,7 @@ function openMore(anchor) {
   // this as a switch inside the menu rather than as a plain command. The hint
   // line is not decoration: "Smanji prozirnost" alone does not tell a user what
   // is about to change on screen.
-  const transparencyItem = `
-      <div class="menu-sep" role="separator"></div>
-      <button type="button" role="menuitemcheckbox" aria-checked="${transparencyIsReduced()}"
-              class="btn btn-ghost menu-item menu-toggle" ${TRANSPARENCY_TOGGLE_ATTR}>
-        <span class="menu-toggle-text">
-          <span class="menu-item-label">${esc(T("nav.transparency", "Smanji prozirnost"))}</span>
-          <span class="menu-item-hint">${esc(T("nav.transparencyHint", "Zamućeno staklo zamjenjuje puna boja — tekst je čitljiviji."))}</span>
-        </span>
-        <span class="menu-switch" aria-hidden="true"><i></i></span>
-      </button>`;
+  const transparencyItem = "";   // removed with the feature; see applyTransparency()
   // "Odjava" is a BUTTON, not a link: signing out is an action, and rendering
   // it as a menu link would put a route in the URL that immediately undoes
   // itself. "Prijava" stays a link, so it works with middle-click, and so it
