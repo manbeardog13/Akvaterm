@@ -130,9 +130,16 @@ ali za dimenzioniranje grijanja/klime uvijek preporuči procjenu na licu mjesta.
 STIL: kratko i konkretno, počni odgovorom (broj, naziv, cijena). Bez markdowna,
 bez zvjezdica i tablica — obične rečenice i kratki popisi. Cijene u eurima.`;
 
-// Gemini function declarations (OpenAPI-subset schemas).
+// Gemini tool declarations.
+//
+// WIRE FORMAT, verified live 2026-08-03 against v1beta/interactions: tools are
+// a FLAT list of {type:"function", name, description, parameters}. The older
+// [{function_declarations:[...]}] wrapper is rejected outright
+// ("Request contains an invalid argument"), and camelCase functionDeclarations
+// gets "The 'type' parameter is required at 'tools[0]'".
 const FUNCTION_DECLARATIONS = [
   {
+    type: "function",
     name: "search_products",
     description:
       "Pretraži Akvatermov katalog proizvoda (pločice, sanitarije, armature, grijanje, klima). Vraća do 8 proizvoda s cijenama. Pozovi za svako pitanje o konkretnim proizvodima.",
@@ -493,7 +500,12 @@ function pickFunctionCalls(evt: any): ToolCall[] {
     });
   };
   visit(evt);
-  for (const list of [evt?.output, evt?.interaction?.output, evt?.candidates?.[0]?.content?.parts]) {
+  // Steps-based wire (verified 2026-08-03): a call arrives as
+  // {index, step:{type:"function_call", id, name, arguments}} on step.start,
+  // and non-streamed responses carry the same objects in a top-level steps[].
+  // `arguments` is already an object here, which visit() handles.
+  visit(evt?.step);
+  for (const list of [evt?.steps, evt?.interaction?.steps, evt?.output, evt?.interaction?.output, evt?.candidates?.[0]?.content?.parts]) {
     if (Array.isArray(list)) list.forEach(visit);
   }
   return found;
@@ -509,7 +521,9 @@ function pickOutputText(data: any): string {
     if (typeof item.text === "string") chunks.push(item.text);
     for (const list of [item.content, item.parts]) if (Array.isArray(list)) list.forEach(visit);
   };
-  for (const list of [data?.output, data?.interaction?.output, data?.candidates]) {
+  // steps[] is the current shape: {type:"model_output", content:[{type:"text",
+  // text}]} alongside {type:"thought"} (which carries no text).
+  for (const list of [data?.steps, data?.interaction?.steps, data?.output, data?.interaction?.output, data?.candidates]) {
     if (Array.isArray(list)) list.forEach(visit);
   }
   const parts = data?.candidates?.[0]?.content?.parts;
@@ -642,16 +656,29 @@ function clampMessages(messages: WireMessage[]): WireMessage[] {
   return kept;
 }
 
+// STEP-LIST INPUT, verified live 2026-08-03. The API moved from a "turn_list"
+// to a "steps-based" shape and now answers the old form with: "When using the
+// steps-based API version, use step_list input format instead of turn_list."
+// A step is {type:"content", role, content:[{type:"text", text}]}.
+//
+// Only role "user" is accepted on input — both "assistant" and "model" are
+// refused ("Request contains an invalid argument"). That is not a limitation in
+// practice: the model's own turns live server-side and come back through
+// previous_interaction_id, which is how every turn after the first is sent.
+// Prior assistant turns from the client are therefore dropped rather than
+// faked into a role the API rejects.
+const userStep = (text: string) =>
+  ({ type: "content", role: "user", content: [{ type: "text", text: String(text ?? "") }] });
+
 function historyInput(messages: WireMessage[]) {
-  return messages.map((m) => ({
-    role: m.role === "assistant" ? "assistant" : "user",
-    content: [{ type: "text", text: String(m.content ?? "") }],
-  }));
+  const userTurns = messages.filter((m) => m.role !== "assistant");
+  const source = userTurns.length ? userTurns : messages.slice(-1);
+  return source.map((m) => userStep(m.content));
 }
 
 function lastUserInput(messages: WireMessage[]) {
   const last = [...messages].reverse().find((m) => m.role !== "assistant");
-  return [{ role: "user", content: [{ type: "text", text: String(last?.content ?? "") }] }];
+  return [userStep(last?.content ?? "")];
 }
 
 // Returns the final Gemini interaction id so the caller can bind it to the
@@ -668,12 +695,13 @@ async function runChat(
   let input: unknown = prev ? lastUserInput(messages) : historyInput(messages);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    // thinking_level is GONE from this API ("Unknown parameter 'thinking_level'")
+    // — it was a hard 400 on every call, so it is not merely ignored here.
     const res = await interactionsRequest(apiKey, {
       model: CHAT_MODEL,
       stream: true,
-      thinking_level: "low",
       system_instruction: SYSTEM,
-      tools: [{ function_declarations: FUNCTION_DECLARATIONS }],
+      tools: FUNCTION_DECLARATIONS,
       ...(prev ? { previous_interaction_id: prev } : {}),
       input,
     }, true);
@@ -708,9 +736,11 @@ async function runChat(
     for (const call of calls) {
       const out = await runTool(call);
       if (out.productIds.length) send(controller, { products: out.productIds });
+      // Results are matched by NAME on this wire: an `id`/`call_id` field is
+      // rejected ("Unknown parameter 'id' at 'input[0]'" / "Invalid input
+      // received"), while {type, name, result} is accepted.
       results.push({
         type: "function_result",
-        call_id: call.id || undefined,
         name: call.name,
         result: out.result,
       });
@@ -825,10 +855,14 @@ async function handleVision(body: Record<string, unknown>, apiKey: string, cors:
   const rawMime = typeof body.mimeType === "string" ? body.mimeType : "";
   const mimeType = /^image\/(jpeg|png|webp)$/i.test(rawMime) ? rawMime : "image/jpeg";
 
+  // Same wire migration as chat: step_list input, no thinking_level. This path
+  // is disabled by TERMA_ENABLED_ACTIONS on the text-only deployment, so it is
+  // updated for consistency rather than exercised — treat it as UNVERIFIED
+  // against the live API until vision is switched on and actually tested.
   const res = await interactionsRequest(apiKey, {
     model: CHAT_MODEL,
-    thinking_level: "low",
     input: [{
+      type: "content",
       role: "user",
       content: [
         { type: "text", text: VISION_PROMPT },
