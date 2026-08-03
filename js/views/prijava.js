@@ -170,20 +170,64 @@ html[${AUTH_ATTR}] #main{
    css/styles.css; nothing here recolours or re-faces it. ---- */
 /* THE CARD TOP: mark left, theme switch right — ASC's .auth-shell row. */
 .pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+/* THE THEME SLIDER. Operator instruction, 2026-08-02: "replace the light/dark
+   button with a little slider that has a background lighting of the logo -- for
+   when it goes from light to dark there is a bluish under-colour, and switching
+   from dark to light a reddish one below."
+
+   So the glow under the track IS the wordmark, split: AKVA navy underneath the
+   dark side, TERM red underneath the light side. The two halves of the logo are
+   already a cool one and a warm one, so the control says which way it is going
+   without a label.
+
+   The glow is a real box-shadow on the track and it CROSS-FADES rather than
+   animating the shadow itself: two absolutely positioned layers, each carrying
+   a static shadow, swapped on opacity. Animating box-shadow repaints the
+   element every frame, and this sits on a card that is already compositing
+   glass. */
 .pr-theme{
-  flex:none;width:38px;height:38px;display:grid;place-items:center;
+  flex:none;position:relative;width:56px;height:31px;padding:0;
   border:1px solid var(--line);border-radius:var(--r-pill);
-  background:var(--glass-wash);color:var(--ink-2);cursor:pointer;
-  transition:background var(--dur) var(--smooth),color var(--dur) var(--smooth);
+  background:var(--glass-wash);cursor:pointer;
+  transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
 }
-.pr-theme:hover{color:var(--ink)}
-.pr-theme:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
-/* The two glyphs cross-fade in place so the control never changes width. */
-.pr-themeic{position:relative;display:block;width:17px;height:17px}
-.pr-themeic svg{position:absolute;inset:0;transition:opacity 200ms var(--snap),transform 260ms var(--snap)}
-.pr-themeic svg:nth-child(2){opacity:0;transform:rotate(-35deg)}
-.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(1){opacity:0;transform:rotate(35deg)}
+.pr-theme:focus-visible{outline:2px solid var(--pr-link);outline-offset:3px}
+/* The two under-glows. -1 z-index inside the button's own stacking context
+   keeps them behind the thumb but in front of the track fill. */
+.pr-theme::before,.pr-theme::after{
+  content:"";position:absolute;inset:2px;border-radius:inherit;pointer-events:none;
+  transition:opacity 420ms var(--smooth);
+}
+/* Light state -> the WARM half, TERM red. */
+.pr-theme::before{
+  box-shadow:0 3px 14px -2px rgba(214,37,46,.62),inset 0 0 10px -2px rgba(214,37,46,.34);
+  opacity:1;
+}
+/* Dark state -> the COOL half, AKVA navy, lifted so it reads on a dark ground. */
+.pr-theme::after{
+  box-shadow:0 3px 14px -2px rgba(60,90,255,.66),inset 0 0 10px -2px rgba(60,90,255,.38);
+  opacity:0;
+}
+.pr-theme[aria-pressed="true"]::before{opacity:0}
+.pr-theme[aria-pressed="true"]::after{opacity:1}
+
+/* The thumb carries the two glyphs and slides. transform only. */
+.pr-themeic{
+  position:absolute;top:2px;left:2px;width:25px;height:25px;z-index:1;
+  display:grid;place-items:center;border-radius:50%;
+  background:var(--surface);color:var(--ink-2);
+  box-shadow:0 1px 3px rgba(20,16,14,.35);
+  transition:transform 380ms var(--spring),color var(--dur) var(--smooth);
+}
+.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(25px)}
+.pr-themeic svg{position:absolute;width:15px;height:15px;transition:opacity 240ms var(--snap),transform 300ms var(--snap)}
+.pr-themeic svg:nth-child(2){opacity:0;transform:rotate(-40deg) scale(.7)}
+.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(1){opacity:0;transform:rotate(40deg) scale(.7)}
 .pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(2){opacity:1;transform:none}
+
+@media(prefers-reduced-motion:reduce){
+  .pr-theme::before,.pr-theme::after,.pr-themeic,.pr-themeic svg{transition-duration:1ms}
+}
 
 /* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
    a link: it acts on the address already typed, it does not navigate. */
@@ -271,24 +315,46 @@ html[${AUTH_ATTR}] #main{
 }
 
 /* The primary. ASC geometry, ASC shadow, this brand's blue. */
+/* THE EDGE IS FOUR SHADOWS, NOT A BORDER. A 1px border on a gradient button
+   flattens it: the line is one colour all the way round, so it fights the
+   light the gradient is describing. These four do what a real moulded edge
+   does instead, and each is a different job:
+     inset 0 1px 0        a bright top lip, where the light hits
+     inset 0 -1px 0       a dark bottom lip, where it falls away
+     inset 0 0 0 1px      a faint containing rim, so the shape stays crisp
+                          against the card at any zoom
+     0 12px 28px -12px    the coloured glow beneath, thrown well below
+   The result reads as a piece of moulded glass rather than a coloured
+   rectangle, and it is why the rim brightens rather than the whole control
+   lifting on hover. */
 .pr-card .btn-primary{
-  min-height:56px;border-radius:var(--pr-r-ctl);border-color:transparent;
+  min-height:56px;border-radius:var(--pr-r-ctl);border:0;
   background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
   color:#fff;font-weight:700;letter-spacing:.02em;
-  box-shadow:0 12px 28px -12px var(--pr-brand-ring),inset 0 1px 0 rgba(255,255,255,.18);
-  transition:transform 180ms var(--spring),box-shadow 160ms ease,filter 160ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(0,0,0,.22),
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    0 12px 28px -12px var(--pr-brand-ring);
+  transition:transform 180ms var(--spring),box-shadow 220ms var(--smooth),filter 160ms ease;
 }
 @media(hover:hover) and (pointer:fine){
   .pr-card .btn-primary:hover{
     filter:brightness(1.05);transform:translateY(-1px);
-    box-shadow:0 16px 34px -12px var(--pr-brand-ring),inset 0 1px 0 rgba(255,255,255,.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.46),
+      inset 0 -1px 0 rgba(0,0,0,.22),
+      inset 0 0 0 1px rgba(255,255,255,.18),
+      0 16px 34px -12px var(--pr-brand-ring);
   }
 }
 .pr-card .btn-primary:active{transform:scale(.99)}
 
 /* Fields and the Google button follow the same corner, not a capsule. */
-.pr-input{border-radius:var(--pr-r-field)}
-.pr-google{border-radius:var(--pr-r-ctl)}
+/* The radii live on the rules themselves further down: these sit EARLIER in
+   the sheet, so an override here would lose to them at equal specificity.
+   That is exactly what kept the fields capsule-shaped after the shape was
+   supposedly changed. */
 .pr-input:focus-within{border-color:var(--pr-brand-2);box-shadow:0 0 0 4px var(--pr-brand-ring)}
 /* Every accent tier on this card moves off the teal with it. */
 .pr-eyebrow{color:var(--pr-link)}
@@ -348,7 +414,7 @@ html[${AUTH_ATTR}] #main{
 .pr-field{display:block;margin-bottom:12px}
 .pr-input{
   display:flex;align-items:center;gap:11px;padding:0 20px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-pill);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--pr-r-field,16px);
   transition:border-color var(--dur) var(--smooth),box-shadow var(--dur) var(--smooth),background var(--dur) var(--smooth);
 }
 .pr-input:focus-within{border-color:var(--accent-ink);box-shadow:0 0 0 4px var(--accent-ring)}
@@ -417,7 +483,7 @@ html[${AUTH_ATTR}] #main{
    --line is a light-on-dark rgba in dark mode and disappears against white. */
 .pr-google{
   width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:11px;
-  background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--r-pill);
+  background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--pr-r-ctl,14px);
   font-size:15px;font-weight:600;
 }
 .pr-google:hover:not(:disabled){background:#FFFFFF;border-color:rgba(0,0,0,.26)}
