@@ -154,7 +154,7 @@ html[${AUTH_ATTR}] #main{
      clamped at both ends so a 320px phone still gets 24px of air and a
      desktop does not run the gutter away (the card caps at 360px there
      regardless, so the upper bound only guards the tablet range). */
-  padding:max(20px,env(safe-area-inset-top,0px)) clamp(24px,9vw,34px) max(24px,env(safe-area-inset-bottom,0px));
+  padding:max(20px,env(safe-area-inset-top,0px)) clamp(18px,9.5vw,36px) max(24px,env(safe-area-inset-bottom,0px));
 }
 
 /* margin:auto rather than align-items:center — an auto margin centres without
@@ -164,12 +164,26 @@ html[${AUTH_ATTR}] #main{
    why the card read noticeably larger than ASC's for the same six controls.
    Matched to ASC's content width instead of its outer width -- that is the
    measurement that decides how big a card FEELS. */
-.pr-wrap{margin:auto;width:min(360px,100%);display:flex;flex-direction:column;gap:20px}
+/* 81% OF THE VIEWPORT, measured off the operator's own phone screenshot.
+   NOT off the code: a local copy of ASC renders .auth-card at 351px in a 375
+   viewport (93.6%), because @media(max-width:759.5px) drops .login-canvas's
+   horizontal padding to 0. The operator's device shows 81%. The two disagree,
+   and the device wins - it is the thing being compared. Chasing the stylesheet
+   is what produced a card that measured "identical" on content width while
+   still looking bigger on screen. */
+.pr-wrap{margin:auto;width:min(304px,100%);display:flex;flex-direction:column;gap:20px}
 
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
 /* THE CARD TOP: mark left, theme switch right — ASC's .auth-shell row. */
-.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:26px}
+/* THE SWITCH IS PINNED TO THE CARD CORNER, NOT LAID OUT WITH THE LOGO.
+   ASC's .auth-seg is position:absolute; top:16px; right:16px (css/styles.css
+   :1355-1357) - anchored to the card, so it sits ABOVE the logo's centre and
+   closer to the corner than any padding would allow.
+   Mine was a flex row with justify-content:space-between, which put it on the
+   logo's baseline and inset it by the card's 26px padding. Same two elements,
+   completely different anchor - and that is the placement difference. */
+.pr-cardtop{display:block;margin-bottom:20px}
 /* THE THEME SLIDER. Operator instruction, 2026-08-02: "replace the light/dark
    button with a little slider that has a background lighting of the logo -- for
    when it goes from light to dark there is a bluish under-colour, and switching
@@ -186,7 +200,7 @@ html[${AUTH_ATTR}] #main{
    element every frame, and this sits on a card that is already compositing
    glass. */
 .pr-theme{
-  flex:none;position:relative;width:52px;height:29px;padding:0;
+  position:absolute;top:16px;right:16px;z-index:4;width:52px;height:29px;padding:0;
   border:1px solid var(--line);border-radius:var(--r-pill);
   background:var(--glass-wash);cursor:pointer;
   transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
@@ -241,7 +255,7 @@ html[${AUTH_ATTR}] #main{
 
 /* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
    a link: it acts on the address already typed, it does not navigate. */
-.pr-rowend{display:flex;justify-content:flex-end;margin:2px 6px 12px}
+.pr-rowend{display:flex;justify-content:flex-end;margin:2px 4px 10px}
 .pr-form fieldset{border:0;margin:0;padding:0;min-inline-size:0}
 .pr-forgot{
   border:0;background:none;padding:4px 2px;cursor:pointer;
@@ -252,7 +266,7 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 /* The footer swap — ASC's .auth-create. */
-.pr-foot{margin:20px 0 0;text-align:center;font-size:14px;color:var(--muted)}
+.pr-foot{margin:18px 0 0;text-align:center;font-size:14px;color:var(--muted)}
 .pr-footlink{
   border:0;background:none;padding:2px;cursor:pointer;
   font-family:var(--font-text);font-size:13px;font-weight:700;color:var(--accent-ink);
@@ -266,7 +280,11 @@ html[${AUTH_ATTR}] #main{
    match is on rendered WIDTH: this size puts AKVATERM at ~200px inside a 304px
    content column, i.e. ASC's 74%. It stopped shrinking - every previous value
    here was judged by eye, which is why it lost a step on each pass. */
-.pr-mark{margin:0;font-size:clamp(30px,9.4vw,36px);line-height:1.12}
+/* 46.4% of the content column - ASC RENDERED, measured in the browser at
+   375x812. The 74% used before came from .auth-logo in the stylesheet, which
+   does not govern this breakpoint; the running page is the reference and the
+   source was confidently wrong. */
+.pr-mark{margin:0;font-size:clamp(22px,6.8vw,26px);line-height:1.12}
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
@@ -333,8 +351,8 @@ html[${AUTH_ATTR}] #main{
   --pr-brand-3:#1E32AE;
   --pr-brand-ring:rgba(43,63,216,.42);
   --pr-link:#2B3FD8;
-  --pr-r-ctl:13px;
-  --pr-r-field:16px;
+  --pr-r-ctl:14px;
+  --pr-r-field:14px;
 }
 /* ASC's card is barely separable from its page - #17181C on a #020305 canvas -
    so it reads as part of the screen. Ours was --glass-bg-strong, a full step
@@ -366,7 +384,7 @@ html[${AUTH_ATTR}] #main{
    rectangle, and it is why the rim brightens rather than the whole control
    lifting on hover. */
 .pr-card .btn-primary{
-  min-height:56px;border-radius:var(--pr-r-ctl);border:0;
+  min-height:49px;border-radius:var(--pr-r-ctl);border:0;
   background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
   /* SENTENCE CASE. css/styles.css:815 sets .btn-amber to text-transform
      uppercase, but the shipped ASC login renders "Prijavi se" - so the rule is
@@ -374,7 +392,7 @@ html[${AUTH_ATTR}] #main{
      here, the running app is. Matching the CSS gave "PRIJAVI SE", which is the
      one thing that made the two buttons obviously different side by side.
      Tracking drops to .2px with it: .8px is spacing for capitals. */
-  color:#fff;font-size:15.5px;font-weight:700;letter-spacing:.2px;
+  color:#fff;font-size:15px;font-weight:700;letter-spacing:.2px;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.34),
     inset 0 -1px 0 rgba(0,0,0,.22),
@@ -406,7 +424,7 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:hover{color:var(--pr-link)}
 .pr-theme:focus-visible,.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline-color:var(--pr-link)}
 
-.pr-card{padding:34px 26px 30px;border-radius:var(--glass-radius-lg);position:relative}
+.pr-card{padding:28px 24px 24px;border-radius:var(--glass-radius-lg);position:relative}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
@@ -424,7 +442,7 @@ html[${AUTH_ATTR}] #main{
    type is the loud version of the same words. */
 .pr-title{
   margin:0;font-family:var(--font-display);font-weight:600;
-  font-size:22px;line-height:1.22;letter-spacing:-.01em;
+  font-size:24px;line-height:1.22;letter-spacing:-.01em;
   color:var(--ink);text-wrap:balance;
 }
 /* ASC's rhythm, taken from design/login-arched-v2.html rather than guessed:
@@ -435,7 +453,7 @@ html[${AUTH_ATTR}] #main{
    not good" was pointing at. The rest of the scale below is the same file:
    divider 18px, fields 12px apart, primary 12px after the forgot row,
    footer 20px. */
-.pr-sub{margin:5px 0 22px;font-size:13.5px;line-height:1.5;color:var(--muted)}
+.pr-sub{margin:3px 0 20px;font-size:13.5px;line-height:1.5;color:var(--muted)}
 
 /* ---- honest notice (CONFIG empty) ---- */
 .pr-notice{
@@ -470,7 +488,7 @@ html[${AUTH_ATTR}] #main{
 /* The global input rule owns font-size:16px (iOS must not zoom on focus); only
    the chrome is stripped here so the icon and the field read as one control. */
 .pr-field input{
-  flex:1;min-width:0;min-height:56px;font-size:15.5px;padding:11px 0;
+  flex:1;min-width:0;min-height:49px;font-size:15.5px;padding:9px 0;
   border:0;background:none;box-shadow:none;border-radius:0;
 }
 .pr-field input:focus{outline:none;border:0;box-shadow:none}
@@ -510,7 +528,7 @@ html[${AUTH_ATTR}] #main{
 /* ASC: uppercase, 11.5px, 1.6px tracking (css/styles.css .auth-divider). The
    lowercase version read as a sentence fragment rather than as a separator. */
 .pr-div{
-  display:flex;align-items:center;gap:14px;margin:20px 2px 16px;
+  display:flex;align-items:center;gap:14px;margin:16px 2px 14px;
   font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
   color:var(--muted);
 }
@@ -533,7 +551,7 @@ html[${AUTH_ATTR}] #main{
    is 10.96:1 and holds in either theme. Same reason the border is a literal:
    --line is a light-on-dark rgba in dark mode and disappears against white. */
 .pr-google{
-  width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;min-height:49px;display:flex;align-items:center;justify-content:center;gap:12px;
   background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--pr-r-ctl,14px);
   font-size:14.5px;font-weight:600;
 }

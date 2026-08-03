@@ -622,9 +622,23 @@ small{font-size:12.5px}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme:dark;
-    --paper:#1C1E23; --surface:#25282E; --panel:#31353C; --panel-2:#2A2E34;
-    --ink:#F1F2F4; --ink-2:#C9CDD4; --muted:#A3A9B3;
-    --line:rgba(241,242,244,.13); --line-input:rgba(241,242,244,.32);
+    /* ASC'S DARK PALETTE, adopted wholesale on operator instruction. Taken
+       from css/styles.css:1410-1425 of the ASC repo, value for value:
+         --bg #020305  --surface #17181c  --surface-2 #1d1e22
+         --surface-3 #26272b  --ink #f4f5f7  --ink-2 #d6d8dc  --muted #9aa0a8
+       It is a near-black page with a distinctly lifted card, which is why
+       ASC's login reads as depth rather than as a grey block - the previous
+       silky grey put only one step between page and card.
+       Every Akvaterm tier re-checked against it, worst case first:
+         --muted   #9aa0a8 on --panel #26272b  5.66:1
+         --ink     #f4f5f7 on --panel         13.68:1
+         --accent-ink  #5FD3E0 on --surface   10.04:1
+         --logo-red    #FF5A63 on --panel      4.90:1
+       ASC's --faint #6a6e77 is NOT adopted: it measures 2.92:1 on --surface-3
+       and this app has no tier that low. */
+    --paper:#020305; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
+    --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
+    --line:rgba(244,245,247,.10); --line-input:rgba(244,245,247,.16);
     --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
     --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
     --glass-wash:rgba(255,255,255,.06);
@@ -647,11 +661,11 @@ small{font-size:12.5px}
          --danger-on-glass  #FFA79A   6.36:1
        The light theme's on-glass inks are all DARK (#5C4B51, #0B5863, …) and
        measure under 2:1 here, so every one of them is re-pointed. */
-    --glass-bg-text:hsl(222 11% 17% / .90);
-    --glass-bg-strong:hsl(222 11% 17% / .94);
-    --glass-bg-deco:hsl(222 11% 17% / .40);
-    --glass-solid:#272A30; --glass-solid-deep:#1F2227;
-    --glass-ink:#F1F2F4; --glass-ink-muted:#BCC1C9;
+    --glass-bg-text:hsl(230 8% 10% / .92);
+    --glass-bg-strong:hsl(230 8% 10% / .96);
+    --glass-bg-deco:hsl(230 8% 10% / .40);
+    --glass-solid:#17181C; --glass-solid-deep:#0A0B0D;
+    --glass-ink:#F4F5F7; --glass-ink-muted:#B4BAC3;
     --accent-on-glass:#7FE0EA; --warm-on-glass:#F0B860;
     --ok-on-glass:#6FD79A; --danger-on-glass:#FFA79A;
     --glass-rim-top:rgba(255,255,255,.10);
@@ -663,9 +677,9 @@ small{font-size:12.5px}
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --paper:#1C1E23; --surface:#25282E; --panel:#31353C; --panel-2:#2A2E34;
-  --ink:#F1F2F4; --ink-2:#C9CDD4; --muted:#A3A9B3;
-  --line:rgba(241,242,244,.13); --line-input:rgba(241,242,244,.32);
+  --paper:#020305; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
+  --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
+  --line:rgba(244,245,247,.10); --line-input:rgba(244,245,247,.16);
   --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
   --danger-ink:#FF8A7A; --red-ink:#FF8A7A; --ok-ink:#6FD79A;
   --glass-tint:24 18%; --glass-wash:rgba(255,255,255,.06);
