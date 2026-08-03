@@ -257,6 +257,7 @@ const ICONS = {
   // Zasluge — an award ribbon, the one glyph that reads as "credit given"
   // rather than "information" or "settings".
   zasluge: SVG(`<circle cx="12" cy="9" r="5.4"/><path d="M8.6 13.4L7.2 20.6l4.8-2.5 4.8 2.5-1.4-7.2"/>`),
+  signout: SVG(`<path d="M15.4 16.6l4.2-4.6-4.2-4.6"/><path d="M19.2 12H9.4"/><path d="M12.4 4.4H5.6a1.2 1.2 0 0 0-1.2 1.2v12.8a1.2 1.2 0 0 0 1.2 1.2h6.8"/>`),
 };
 
 const NAV = [
@@ -325,6 +326,23 @@ function mountFrame() {
         ${sideLink({ route: "/zasluge", key: "nav.zasluge", fb: "Zasluge", icon: "zasluge" })}
       </nav>
       <div class="sb-foot">
+        <!-- THE ACCOUNT ROW. ASC's drawer ends with a user card (app/app.css
+             .sb-foot / .sb-user), and this one had only a theme switch, so
+             there was nowhere in the menu to see who you are or to sign out.
+             The label is filled in by paintAccountRow() once the session is
+             known -- it renders signed-out by default because that is the
+             honest state before the lookup returns, and a row that guessed
+             would flicker from a wrong name to the right one. -->
+        <a class="sb-item sb-acct" id="sideAcct" href="#/prijava" data-route="/prijava">
+          <span class="sb-ava" id="sideAva" aria-hidden="true">?</span>
+          <span class="sb-uid">
+            <b id="sideAcctName">${esc(T("nav.prijava", "Prijava"))}</b>
+            <span id="sideAcctSub">${esc(T("account.signedOut", "Niste prijavljeni"))}</span>
+          </span>
+        </a>
+        <button type="button" class="sb-item sb-signout" id="sideSignOut" hidden>
+          ${ICONS.signout}<span class="t">${esc(T("prijava.signOut", "Odjava"))}</span>
+        </button>
         <button type="button" class="sb-item sb-theme" id="themeToggle" aria-pressed="false">
           <span class="sb-themeic">${ICONS.sun}${ICONS.moon}</span>
           <span class="t">${esc(T("theme.label", "Tamna tema"))}</span>
@@ -389,6 +407,15 @@ function sideClose() {
 }
 
 function wireSide() {
+  document.getElementById("sideSignOut")?.addEventListener("click", async () => {
+    await signOut();
+    authedEmail = null;
+    paintAccountRow();
+    toast(T("prijava.signedOut", "Odjavljeni ste."));
+    sideClose();
+    if (location.hash.replace(/^#/, "").split("?")[0] === "/prijava") route();
+  });
+  paintAccountRow();
   document.getElementById("sideOpen")?.addEventListener("click", sideOpen);
   document.getElementById("sideClose")?.addEventListener("click", sideClose);
   document.getElementById("sideScrim")?.addEventListener("click", sideClose);
@@ -545,9 +572,32 @@ const oauthReturn = (() => {
   return null;
 })();
 
+/** Paint the drawer's account row from the current session. Called wherever
+ *  authedEmail moves, and once after the frame is built — the row is created
+ *  before the session lookup resolves, so it has to be filled in rather than
+ *  rendered once. */
+function paintAccountRow() {
+  const name = document.getElementById("sideAcctName");
+  const sub = document.getElementById("sideAcctSub");
+  const ava = document.getElementById("sideAva");
+  const out = document.getElementById("sideSignOut");
+  if (!name || !sub) return;
+  if (authedEmail) {
+    name.textContent = authedEmail.split("@")[0];
+    sub.textContent = authedEmail;
+    if (ava) ava.textContent = authedEmail.trim().charAt(0).toUpperCase() || "?";
+    if (out) out.hidden = false;
+  } else {
+    name.textContent = T("nav.prijava", "Prijava");
+    sub.textContent = T("account.signedOut", "Niste prijavljeni");
+    if (ava) ava.textContent = "?";
+    if (out) out.hidden = true;
+  }
+}
+
 function watchAuthState() {
-  if (!authConfigured()) return;   // no backend to ask, and nothing to change
-  getSession().then((session) => { authedEmail = session?.user?.email || null; }).catch(() => {});
+  if (!authConfigured()) { paintAccountRow(); return; }
+  getSession().then((session) => { authedEmail = session?.user?.email || null; paintAccountRow(); }).catch(() => {});
 
   // Only the FIRST session after an OAuth return is worth announcing. Without
   // this latch every page load of an already-signed-in user would toast, since
@@ -558,6 +608,7 @@ function watchAuthState() {
   // on the login screen, must move this label without a reload.
   onAuthChange((session) => {
     authedEmail = session?.user?.email || null;
+    paintAccountRow();
     if (announce && authedEmail) {
       announce = false;
       toast(T("prijava.success", "Prijavljeni ste."));

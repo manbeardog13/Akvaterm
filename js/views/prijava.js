@@ -150,12 +150,17 @@ html[${AUTH_ATTR}] #main{
 
 /* margin:auto rather than align-items:center — an auto margin centres without
    ever clipping the top when the card is taller than the viewport. */
-.pr-wrap{margin:auto;width:min(412px,100%);display:flex;flex-direction:column;gap:20px}
+/* ASC's form column is min(880px)/2 = 440px carrying 40px side padding, i.e.
+   360px of content. Ours was 412px of content inside 28px padding, which is
+   why the card read noticeably larger than ASC's for the same six controls.
+   Matched to ASC's content width instead of its outer width -- that is the
+   measurement that decides how big a card FEELS. */
+.pr-wrap{margin:auto;width:min(360px,100%);display:flex;flex-direction:column;gap:20px}
 
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
 /* THE CARD TOP: mark left, theme switch right — ASC's .auth-shell row. */
-.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .pr-theme{
   flex:none;width:38px;height:38px;display:grid;place-items:center;
   border:1px solid var(--line);border-radius:var(--r-pill);
@@ -193,7 +198,7 @@ html[${AUTH_ATTR}] #main{
 .pr-footlink:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 .pr-brand{display:flex;flex-direction:column;align-items:center;gap:12px}
-.pr-mark{margin:0;font-size:clamp(24px,6.4vw,29px);line-height:1.15}
+.pr-mark{margin:0;font-size:clamp(21px,5.6vw,25px);line-height:1.15}
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
@@ -217,89 +222,66 @@ html[${AUTH_ATTR}] #main{
    side, against controls that are 54px tall.
    Concentric corners still hold: side padding 28px, so an inset panel lands on
    var(--r-2xl) - 28. Controls are pills and opt out of that arithmetic. */
-.pr-card{padding:38px 28px 28px;border-radius:var(--glass-radius-lg);position:relative}
+.pr-card{padding:32px 24px 26px;border-radius:var(--glass-radius-lg);position:relative}
 
-/* ---- THE THERMAL LOOP ----------------------------------------------------
-   Operator instruction, 2026-08-02: "since this is a platform that deals with
-   heating and cooling, grab some effect that has a loop on running like hot and
-   cold water and apply it to the login page ... as if it's cooling and heating
-   the card".
+/* ---- THE ANIMATED GLASS EDGE ---------------------------------------------
+   Operator instruction, 2026-08-02: "forget the running light, cut that effect
+   out. Turn the panel into a liquid glass card that has an animated edge in
+   the colours of Akvaterm."
 
-   Two layers, deliberately, because heating and cooling are not the same event
-   and one gradient cannot say both:
+   So: the whole rim carries a slow gradient flowing through Akvaterm's own
+   colours -- teal into amber into teal, water into heat -- and nothing else on
+   the card is tinted. Not a dot, not a panel wash.
 
-     ::after  is the EDGE - a cool-to-warm band travelling around the card's
-              rim, which is the water moving THROUGH it. A pipe reads by its
-              run, so this one travels.
-     ::before is the BODY - a wide, very soft bloom that swells warm and fades
-              cool in ANTIPHASE with the edge, which is the heat arriving after
-              the water does. A room reads by its temperature, so this one does
-              not travel; it breathes.
+   HOW IT IS DRAWN, AND WHY IT IS GUARDED. A gradient BORDER has no CSS
+   property. The mask-free construction (a padding-box layer of the card colour
+   under a border-box gradient) needs an OPAQUE interior, which would destroy
+   the glass -- the one thing this card is. So it has to be the mask: paint the
+   whole box, then punch the middle out with two masks composited xor.
 
-   The 22s cycle is deliberate and it is the difference between an effect and a
-   distraction. This sits under a password field, so it must be something you
-   notice only if you stop and look - fast enough to be alive, slow enough that
-   it never competes with the caret.
+   That is exactly what failed silently twice earlier in this file's history,
+   which is why it now sits behind @supports. If an engine cannot composite
+   masks, this element paints NOTHING instead of painting a solid gradient over
+   the entire card. A decoration that fails to a blank is acceptable; one that
+   fails to a coloured slab covering the sign-in form is not.
 
-   HOW THE EDGE IS DRAWN. The rim is a gradient BORDER, which CSS has no
-   property for: the standard construction is two masks composited with xor, so
-   the fill is punched out and only the padding ring survives. That is a paint
-   trick with no element and no dependency. -webkit- prefixes are required for
-   iOS Safari, which is most of this audience.
-
-   BUDGET. Neither layer animates blur, box-shadow or any layout property.
-   background-position on a masked ring is the same technique css/styles.css
-   already uses for the splash's patience shimmer, and the bloom moves on
-   opacity and transform alone. */
-/* THE EDGE. Drawn as a gradient panel sitting 2px PROUD of the card and one
-   layer BEHIND it, so the card's own glass covers the middle and only the ring
-   escapes. That is deliberate: the textbook way to do a gradient border is two
-   masks composited with xor, and it silently rendered nothing here - a masked
-   ring is one unsupported mask-composite away from being invisible, and it
-   fails without an error. A layer behind an opaque-enough surface cannot fail
-   that way; there is no feature to not support. */
-.pr-card::after{
-  content:"";position:absolute;inset:-2px;border-radius:calc(var(--glass-radius-lg) + 2px);
-  pointer-events:none;z-index:-1;
-  background-image:linear-gradient(160deg,
-    var(--accent-bright) 0%, var(--teal-300) 14%,
-    var(--accent-2) 34%, var(--amber-600) 46%,
-    var(--teal-300) 66%, var(--accent-bright) 82%,
-    var(--accent-2) 100%);
-  background-size:100% 300%;
-  opacity:.85;
-  animation:prFlow 22s linear infinite;
+   z-index 3 is deliberate and is the other half of the earlier failure: the
+   card is .glass-strong, backdrop-filter makes it a stacking context, and a
+   z-index:-1 layer inside one is swallowed. A positive z-index child paints.
+   It is pointer-events:none and sits on the 1.5px rim, where no text lives. */
+.pr-edge{display:none}
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)){
+  .pr-edge{
+    display:block;position:absolute;inset:0;z-index:3;pointer-events:none;
+    border-radius:inherit;padding:1.5px;
+    background-image:linear-gradient(140deg,
+      var(--accent-bright) 0%,
+      var(--teal-300) 12%,
+      var(--accent-2) 30%,
+      var(--amber-600) 40%,
+      var(--accent-2) 50%,
+      var(--teal-300) 70%,
+      var(--accent-bright) 88%,
+      var(--teal-300) 100%);
+    background-size:100% 300%;
+    opacity:.9;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+            mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+            mask-composite:exclude;
+    animation:prEdge 14s linear infinite;
+  }
 }
-.pr-card::before{
-  content:"";position:absolute;inset:0;border-radius:inherit;
-  pointer-events:none;z-index:0;
-  background:
-    radial-gradient(58% 44% at 18% 8%,var(--accent-2-tint),transparent 68%),
-    radial-gradient(54% 40% at 86% 96%,var(--accent-tint),transparent 66%);
-  opacity:.5;
-  animation:prTemper 22s var(--smooth) infinite;
-}
-/* The card's own children must sit above the body bloom. */
-.pr-card>*{position:relative;z-index:1}
-
-@keyframes prFlow{
+/* Linear, and slow. An eased loop on a continuous run reads as a stutter at the
+   seam, and this one never stops, so there is no arrival to ease into. */
+@keyframes prEdge{
   from{background-position:0 0}
   to{background-position:0 -300%}
 }
-@keyframes prTemper{
-  0%,100%{opacity:.34;transform:scale(1)}
-  50%{opacity:.72;transform:scale(1.04)}
-}
-/* Ambient decoration on a screen someone is typing a password into. Motion
-   sensitivity is exactly the case it yields to, and the rim keeps its gradient
-   so the card does not lose its edge - it simply stops running. */
-@media(prefers-reduced-motion:reduce){
-  .pr-card::after,.pr-card::before{animation:none}
-  .pr-card::before{opacity:.42}
-}
-/* Hardened modes drop it entirely rather than tint what is behind text. */
-@media(prefers-contrast:more){ .pr-card::before{display:none} }
-@media(forced-colors:active){ .pr-card::before,.pr-card::after{display:none} }
+@media(prefers-reduced-motion:reduce){ .pr-edge{animation:none} }
+@media(prefers-contrast:more){ .pr-edge{display:none} }
+@media(forced-colors:active){ .pr-edge{display:none} }
+
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
    so no blur is ever animated, and pointer devices only. */
@@ -327,7 +309,7 @@ html[${AUTH_ATTR}] #main{
    not good" was pointing at. The rest of the scale below is the same file:
    divider 18px, fields 12px apart, primary 12px after the forgot row,
    footer 20px. */
-.pr-sub{margin:6px 0 26px;font-size:14px;line-height:1.5;color:var(--muted)}
+.pr-sub{margin:5px 0 22px;font-size:14px;line-height:1.5;color:var(--muted)}
 
 /* ---- honest notice (CONFIG empty) ---- */
 .pr-notice{
@@ -658,6 +640,7 @@ function signInMarkup(configured) {
   return `
     <div class="pr-wrap">
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
+        <span class="pr-edge" aria-hidden="true"></span>
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(signup
           ? tf("prijava.createTitle", "Otvorite račun")
@@ -677,6 +660,7 @@ function signedInMarkup(email) {
   return `
     <div class="pr-wrap">
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
+        <span class="pr-edge" aria-hidden="true"></span>
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(tf("prijava.signedInTitle", "Prijavljeni ste"))}</h1>
         <div class="pr-who">
