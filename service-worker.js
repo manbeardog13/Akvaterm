@@ -91,6 +91,7 @@ const SHELL = [
      precache list can rot without ever raising anything. Verified against the
      tree; this was the only stale entry. */
   "./js/room3d.js",
+  "./js/director3d.js",   // room3d imports it statically — a missing entry here is a broken 3D room offline, not a degraded one
   "./js/terma.js",
   "./js/qrshare.js",
   "./js/splash.js",   // post-login transition; lazy-imported, so precached rather than blocking

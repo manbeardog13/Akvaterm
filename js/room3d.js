@@ -81,6 +81,7 @@ import {
   measureFootprint, rotatedExtent, limitsFor, axisSettle, reanchor,
   buildPlaceholder, loadPrototype, retainPrototypes, releasePrototypes, disposeObject,
 } from "./gfx3d.js";
+import { createDirector } from "./director3d.js";
 
 const DIM_MIN = 1.5, DIM_MAX = 8;
 const SURFACE_IDS = ["floor", "wallN", "wallE", "wallS", "wallW"];
@@ -463,12 +464,38 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       color: bareColor(sid),
       roughness: 0.9,
       metalness: 0,
+      // Walls stay visible as glass once the camera crosses behind them, and a
+      // back-face-culled plane viewed from outside is invisible — which is the
+      // exposed edge the coverage rule forbids, reintroduced by omission.
+      side: sid === "floor" ? THREE.FrontSide : THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
     mesh.receiveShadow = true;
     scene.add(mesh);
     surfaceRecs[sid] = { mesh };
   }
+
+  // ---- Ceiling: coverage geometry, NOT a product surface -------------------
+  // The coverage rule forbids void, and looking up used to show exactly that:
+  // SURFACE_IDS is floor + four walls and nothing above.
+  //
+  // It is deliberately NOT added to SURFACE_IDS. That list is the module's
+  // published contract and drives assignments, the estimate, the aria label and
+  // the surface picker in the view. A ceiling that entered it would become a
+  // tileable product the customer never asked for and a line the estimate would
+  // have to price. It exists to close the box, so it is built here, lit like a
+  // wall, and never cast into shadow (a ceiling shadow reads as a dirty
+  // smudge overhead rather than as depth).
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshStandardMaterial({
+      color: BARE_SURFACE_COLOR.wall, roughness: 0.95, metalness: 0,
+      side: THREE.DoubleSide,
+    }),
+  );
+  ceiling.receiveShadow = false;
+  ceiling.castShadow = false;
+  scene.add(ceiling);
 
   const surfaceSizeM = (sid) => {
     if (sid === "floor") return [dims.widthM, dims.depthM];
@@ -490,6 +517,12 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     place("wallS", new THREE.PlaneGeometry(w, h), [0, h / 2, d / 2], [0, Math.PI, 0]);
     place("wallE", new THREE.PlaneGeometry(d, h), [w / 2, h / 2, 0], [0, -Math.PI / 2, 0]);
     place("wallW", new THREE.PlaneGeometry(d, h), [-w / 2, h / 2, 0], [0, Math.PI / 2, 0]);
+    // Faces down into the room, and slightly oversized so no seam can open at
+    // the wall junction when the camera grazes a corner.
+    ceiling.geometry.dispose();
+    ceiling.geometry = new THREE.PlaneGeometry(w * 1.02, d * 1.02);
+    ceiling.position.set(0, h, 0);
+    ceiling.rotation.set(Math.PI / 2, 0, 0);
 
     const span = Math.max(w, d);
     sun.position.set(w * 0.8, h * 2.2 + 1.5, d * 0.6);
@@ -537,6 +570,11 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     mat.map = texture;
     mat.color.set(0xffffff);
     mat.roughness = product.glossy ? 0.28 : 0.8;
+    // Re-tiling redefines what "opaque" means for this surface, so the glass
+    // blend has to be told its new baseline or the next frame would blend
+    // toward the PREVIOUS product's roughness.
+    rec.baseRoughness = mat.roughness;
+    rec.glass = null;
     mat.needsUpdate = true;
     applied[sid] = { product, opts: normalized };
     updateAriaLabel();
@@ -984,15 +1022,108 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     requestRender();
   }
 
-  // ---- Open-room wall hiding by camera azimuth -----------------------------
+  // ---- Glass edges instead of cut-away walls -------------------------------
+  // THE COVERAGE RULE (operator, 2026-08-03): the screen is always covered and
+  // an edge is never shown. See docs/specs/cinematic-journey.md.
+  //
+  // This used to set `mesh.visible = false` on any wall the camera had moved
+  // behind, so the room read as open. That is precisely what the rule forbids:
+  // a hidden wall is an exposed edge and a hole onto the background, and it
+  // POPS — a boolean has no in-between frame.
+  //
+  // A wall now becomes GLASS rather than being cut away. It keeps its tiling,
+  // ghosted, and keeps occupying the frame, so there is no edge to catch. The
+  // ramp is smooth, so the transition is continuous at every camera speed.
+  // GLASS IS CAMERA COVERAGE ONLY — a hard contract, not a convention.
+  // It touches nothing but render state: never `applied[sid]` (the selected
+  // product), never assignments, quantities, the estimate, the saved design or
+  // its specification. `readFixtures()` and `updateAriaLabel()` read `applied`,
+  // so both are blind to it by construction. A wall returns to its EXACT prior
+  // opaque state, restored field by field from the snapshot taken before the
+  // first blend rather than recomputed — recomputation is how "almost the same"
+  // creeps in over a session.
   const camDir = new THREE.Vector3();
-  function updateWallVisibility() {
+  const GLASS = {
+    enter: 0.14,    // camera has crossed outside this far -> become glass
+    exit: 0.02,     // ...and must come back this far before turning solid again
+    floor: 0.14,    // minimum presence: never fully invisible, never an edge
+    tau: 0.22,      // blend time constant, seconds
+    tauReduced: 0.09,
+  };
+
+  /** The hysteresis gap between enter and exit is the whole point: with a
+   *  single threshold, camera jitter or idle drift sitting exactly on it makes
+   *  a wall pulse between opaque and glass every frame. Latching the intent and
+   *  requiring a real excursion to flip it back removes that entirely. */
+  function updateWallVisibility(dt) {
     camera.getWorldPosition(camDir).sub(controls.target);
     camDir.y = 0;
-    if (camDir.lengthSq() < 1e-6) return;
+    if (camDir.lengthSq() < 1e-6) return false;
     camDir.normalize();
+    let blending = false;
+    const tau = reducedMotion ? GLASS.tauReduced : GLASS.tau;
+    // Exponential approach, frame-rate independent: equal wall-clock time
+    // produces equal progress whether the device runs at 60 or 120 Hz.
+    const k = 1 - Math.exp(-Math.max(dt, 0) / tau);
     for (const sid of ["wallN", "wallE", "wallS", "wallW"]) {
-      surfaceRecs[sid].mesh.visible = camDir.dot(OUTWARD[sid]) <= 0.35;
+      const rec = surfaceRecs[sid];
+      const facing = camDir.dot(OUTWARD[sid]);   // >0 = camera outside this wall
+      if (rec.glassWanted) { if (facing < GLASS.exit) rec.glassWanted = 0; }
+      else if (facing > GLASS.enter) rec.glassWanted = 1;
+      const want = rec.glassWanted ? 1 : 0;
+      const cur = rec.glass ?? 0;
+      const next = Math.abs(want - cur) < 0.001 ? want : cur + (want - cur) * k;
+      if (next !== cur) { applyGlass(rec, next); blending = true; }
+    }
+    return blending;
+  }
+
+  /** Blend one surface between its exact opaque state and glass.
+   *  `needsUpdate` recompiles the shader program, so it is set ONLY when the
+   *  transparent flag actually flips — never per frame. */
+  function applyGlass(rec, g) {
+    const mat = rec.mesh.material;
+    if (!rec.opaqueState) {
+      rec.opaqueState = {
+        transparent: mat.transparent, opacity: mat.opacity,
+        depthWrite: mat.depthWrite, roughness: mat.roughness,
+        renderOrder: rec.mesh.renderOrder,
+      };
+    }
+    const o = rec.opaqueState;
+    const wasTransparent = mat.transparent;
+    rec.glass = g;
+    if (g <= 0.002) {
+      // Restore verbatim, then forget — so the next blend re-snapshots from a
+      // known-good opaque state rather than from a half-faded one.
+      mat.transparent = o.transparent; mat.opacity = o.opacity;
+      mat.depthWrite = o.depthWrite; mat.roughness = o.roughness;
+      rec.mesh.renderOrder = o.renderOrder;
+      rec.glass = 0;
+      rec.opaqueState = null;
+    } else {
+      mat.transparent = true;
+      mat.opacity = o.opacity - g * (o.opacity - GLASS.floor);
+      // A transparent surface must not write depth or it punches a hole in what
+      // is behind it; sorting decides order instead. renderOrder 1 keeps glass
+      // drawn after every opaque surface, which is what stops two simultaneous
+      // glass walls at a corner from flickering against each other.
+      mat.depthWrite = false;
+      rec.mesh.renderOrder = 1;
+      mat.roughness = o.roughness * (1 - g) + 0.06 * g;
+    }
+    if (wasTransparent !== mat.transparent) mat.needsUpdate = true;
+  }
+
+  /** Force every surface opaque immediately. Any capture path (thumbnail,
+   *  snapshot, specification render) MUST call this first: a frame taken
+   *  mid-blend would bake a camera state into a stored artefact, which is
+   *  exactly what contract 1 forbids. */
+  function forceOpaqueSurfaces() {
+    for (const sid of ["wallN", "wallE", "wallS", "wallW"]) {
+      const rec = surfaceRecs[sid];
+      rec.glassWanted = 0;
+      if (rec.glass) applyGlass(rec, 0);
     }
   }
 
@@ -1006,6 +1137,64 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     requestRender();
   }
 
+  // ---- Cinematic director --------------------------------------------------
+  // The journey declares intent; director3d computes the movement. See that
+  // file for why the motion is spring-driven rather than tweened.
+  const director = createDirector({
+    camera, controls, dims, surfaceRecs,
+    requestFrame: () => requestRender(),
+    // Semantic fixture targets ('vanity', 'cabinets', 'bath'...) resolve
+    // against the placed fixtures by kind, so the guide names what the customer
+    // named and the catalogue can grow without touching the target table.
+    resolveFixture: (name) => {
+      const want = String(name || "").toLowerCase();
+      const rec = fixtureRecs.find((r) => String(r?.f?.kind || "").toLowerCase() === want);
+      return rec ? rec.group : null;
+    },
+  });
+  let cinematic = false;
+  let lastFrameT = 0;
+  // Mirrored here as well as in the director: the glass blend is engine-side
+  // and must shorten under reduced motion even when nothing is directing.
+  let reducedMotion = typeof matchMedia === "function"
+    && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // A living camera cannot be damage-driven: it needs a frame every frame. This
+  // is the ONE place the module's on-demand rendering contract is suspended,
+  // and only while the journey is actually directing. It stops the moment the
+  // tab is hidden — a background tab must not hold the GPU awake, and the
+  // context-loss guards above exist precisely because this app runs near the
+  // browser's live-context ceiling.
+  function startCinematic() {
+    if (disposed || cinematic) return;
+    cinematic = true;
+    controls.enabled = false;   // the director owns the camera; no tug of war
+    lastFrameT = 0;
+    requestRender();
+  }
+  function stopCinematic() {
+    cinematic = false;
+    controls.enabled = true;
+    // Hand OrbitControls back a state consistent with where the camera ended up.
+    controls.update();
+  }
+  function onVisibility() {
+    if (document.visibilityState === "visible" && cinematic) { lastFrameT = 0; requestRender(); }
+  }
+  document.addEventListener("visibilitychange", onVisibility);
+
+  // Touching the room hands control to the user mid-movement; letting go lets
+  // the room breathe again from wherever they left it, rather than snapping
+  // back to a canned pose.
+  function onCinematicGrab() { if (cinematic) { director.yieldToUser(); stopCinematic(); } }
+  function onCinematicRelease() {
+    if (!director.isIdle() || disposed) return;
+    director.settleIntoDrift();
+    startCinematic();
+  }
+  canvasEl.addEventListener("pointerdown", onCinematicGrab);
+  canvasEl.addEventListener("pointerup", onCinematicRelease);
+
   let raf = 0;
   let readyFired = false;
 
@@ -1013,16 +1202,34 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   // the controls' 'change' event (which OrbitControls also fires from inside
   // update() while damping settles, so the glide still animates), by resize, by
   // every content mutation and by each model arriving.
-  function renderFrame() {
+  function renderFrame(now) {
     raf = 0;
     if (disposed) return;
-    controls.update();
-    updateWallVisibility();
+    // First frame after a resume has no meaningful delta; clamp the rest so a
+    // long stall advances one plausible step instead of integrating a
+    // two-second gap and flinging the camera.
+    const t = typeof now === "number" ? now : performance.now();
+    const dt = lastFrameT ? Math.min((t - lastFrameT) / 1000, 0.05) : 1 / 60;
+    lastFrameT = t;
+    let again = false;
+    if (cinematic) {
+      again = director.update(dt) && document.visibilityState !== "hidden";
+      // NOT controls.update(): OrbitControls re-derives camera.position from its
+      // own spherical state, which would overwrite the director's transform
+      // every frame. While directing, the look-at is applied straight.
+      camera.lookAt(controls.target);
+    } else {
+      controls.update();
+    }
+    // The glass blend runs on its own clock, so a wall mid-transition keeps the
+    // loop alive even when the camera itself has settled.
+    if (updateWallVisibility(dt)) again = true;
     renderer.render(scene, camera);
     if (!readyFired) {
       readyFired = true;
       if (typeof onReady === "function") onReady();
     }
+    if (again) requestRender();
   }
   function requestRender() {
     if (disposed || raf) return;
@@ -1144,6 +1351,27 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       requestRender();
     },
 
+    // ---- Cinematic direction ----------------------------------------------
+    // Declarative: the journey names a target and an intent, never a transform.
+    camera: {
+      focusSurface(sid, o) { startCinematic(); director.focusSurface(sid, o); },
+      inspectMaterial(sid, o) { startCinematic(); director.inspectMaterial(sid, o); },
+      orbitSelection(sid, o) { startCinematic(); director.orbitSelection(sid, o); },
+      followGroutLine(sid, o) { startCinematic(); director.followGroutLine(sid, o); },
+      focusObject(obj, o) { startCinematic(); director.focusObject(obj, o); },
+      returnToOverview() { startCinematic(); director.returnToOverview(); },
+      settleIntoDrift() { startCinematic(); director.settleIntoDrift(); },
+      stop() { stopCinematic(); },
+      // Reduced motion: short dissolve, no ceremonial orbit, no continuous
+      // drift. Set on BOTH — the glass blend is engine-side and would otherwise
+      // keep its full-length transition while the camera had gone still.
+      setReducedMotion(v) { reducedMotion = !!v; director.setReducedMotion(v); },
+      /** Any capture path must call this before rendering a stored frame.
+       *  Glass is camera state; a thumbnail is a record of the DESIGN. */
+      forceOpaqueSurfaces() { forceOpaqueSurfaces(); requestRender(); },
+      get debug() { return { ...director.debug, cinematic }; },
+    },
+
     // ---- Additive surface (the contract's four methods are unchanged) ------
     getFixtures() { return readFixtures(); },
 
@@ -1172,6 +1400,11 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       canvasEl.removeEventListener("keydown", onKeyDown);
       canvasEl.removeEventListener("webglcontextlost", onContextLost);
       canvasEl.removeEventListener("webglcontextrestored", onContextRestored);
+      canvasEl.removeEventListener("pointerdown", onCinematicGrab);
+      canvasEl.removeEventListener("pointerup", onCinematicRelease);
+      document.removeEventListener("visibilitychange", onVisibility);
+      cinematic = false;
+      director.dispose();
       canvasEl.style.touchAction = "pan-y";
       controls.dispose();
       recByGroup.clear();
