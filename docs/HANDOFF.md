@@ -48,10 +48,29 @@ Three things, none of which need `scene3d.js` to survive:
 
 ---
 
-## ⚠ THE BLOCKING BUG — do this first, before any consolidation
+## ⚠ THE BLOCKING BUG — ✅ CLOSED 2026-08-03, commit `1087608`
 
-**`js/room3d.js` does not have the context-loss protection that
-`js/scene3d.js` got today.** Verified by grep:
+**Fixed and verified live.** `js/room3d.js` now has: a rebuildable
+`buildEnvironment()`, a `webglcontextlost` handler that calls
+`preventDefault()`, a `webglcontextrestored` handler that rebuilds the
+environment and draws synchronously, `retainPrototypes()` moved below the
+renderer constructor, and a teardown that removes both listeners,
+null-guards the env disposal, drops the stale `disposeObject(scene, true)`
+argument and surrenders the context with `forceContextLoss()`.
+
+Verified by losing and restoring the real context on a mounted `#/soba3d`:
+mean frame luminance 213.7 → 213.7, **0 of 6912** sampled pixels changed
+(broken scene3d had measured 206.2 → 141.4 with 34384 of 38376 changed).
+Teardown after the restore ran clean. One deliberate divergence from
+scene3d: no `markShadowsDirty()` is needed — room3d leaves
+`shadow.autoUpdate` at its default so the depth pass re-rasterises every
+frame; **if damage-driven shadows are ported during consolidation, re-arm
+them in the restore handler too** (the comment in the code says the same).
+
+The original description follows, kept for the mechanism write-up.
+
+**`js/room3d.js` did not have the context-loss protection that
+`js/scene3d.js` got on 2026-08-03.** Verified by grep at the time:
 
 ```
 webglcontextrestored | rebuildEnvironment | markShadowsDirty
@@ -150,8 +169,9 @@ All committed and pushed to `github.com/manbeardog13/Akvaterm`, `main`.
 
 ## STATE OF THE APP — what is open
 
-1. **The `room3d.js` context-loss fix.** Blocking. See above.
+1. ~~The `room3d.js` context-loss fix.~~ **Done, commit `1087608`.** See above.
 2. **Consolidation** onto the 3D room; retire `scene3d.js` + `dizajner.js`.
+   Now the top item.
 3. **The dashboard/catalogue redesign.** A four-direction design panel produced
    a full spec; only its contrast fixes and missing i18n keys were applied. The
    larger proposals — a new `ploca.js` dashboard, a site-wide palette migration,
