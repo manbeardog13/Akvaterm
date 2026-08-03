@@ -1,5 +1,10 @@
 # Akvaterm — Katalog i dizajner prostora
 
+>
+> ### ▶ Picking this up mid-stream? Read [docs/HANDOFF.md](docs/HANDOFF.md) first.
+> The decision to consolidate on the 3D room engine, one blocking bug, and the
+> rules that cost the most.
+
 > ### ▶ Read [docs/HOUSE_STANDARD.md](docs/HOUSE_STANDARD.md) first
 > Sora + Inter, soft UI, left drawer, light/dark, and the login-screen
 > contract. **Binding for this project and for every future one** — a new
