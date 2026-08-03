@@ -266,28 +266,50 @@ html[${AUTH_ATTR}] #main{
    source was confidently wrong. */
 .pr-mark{
   margin:0;font-size:clamp(27px,8.5vw,32px);line-height:1.12;
-  /* ASC throws a drop-shadow in its BRAND colour under the mark
-     (css/styles.css:1308, rgba(255,78,27,.35)). Ours is two-tone, so it takes
-     two: navy under AKVA, red under TERM. drop-shadow follows the glyph
-     outline rather than the box, which is the whole point - a box-shadow here
-     would draw a rectangle behind the text. */
+  /* ASC throws a coloured glow under its mark (css/styles.css:1308). Ours is
+     two-tone, so it takes two - navy under AKVA, red under TERM - and they are
+     applied per half on the spans below. See the note there for why they are
+     text-shadow and not the drop-shadow ASC can use: ASC's mark is an <img>,
+     which has a box a filter can be regioned to. Ours is live text. */
 }
-/* THE GLOW WAS BEING CLIPPED, for two reasons that compound:
-     1. .pr-card computes contain:paint, which clips ALL descendant painting to
-        the card's box - a filter's overflow included.
-     2. .akva/.term are INLINE. A filter on an inline box is regioned to the
-        text fragment, so a 16px blur hanging below the baseline gets cut at
-        the fragment edge rather than spreading.
-   inline-block gives each half a real box for the filter region, and the
-   padding below buys the blur somewhere to land inside that box. Both are
-   needed - inline-block alone still clips at the glyph box. */
-.pr-mark .akva,.pr-mark .term{display:inline-block;padding-bottom:10px;margin-bottom:-10px}
-.pr-mark .akva{filter:drop-shadow(0 5px 14px rgba(0,0,140,.50))}
-.pr-mark .term{filter:drop-shadow(0 5px 14px rgba(214,37,46,.50))}
-:root[data-theme="dark"] .pr-mark .akva{filter:drop-shadow(0 5px 16px rgba(90,120,255,.55))}
+/* THE GLOW IS text-shadow, NOT filter: drop-shadow. This is the third attempt
+   and the first correct one, so the reasoning is worth keeping.
+
+   drop-shadow is ALWAYS regioned to a box. Whatever box you give it, the blur
+   is cut at that box's edge - which is why the previous fix (inline-block plus
+   padding to buy room) did not remove the clipping, it only MOVED it, and the
+   result was a hard rectangular edge around the wordmark exactly where the
+   padding box ended. .pr-card computing contain:paint made it worse, but it
+   was never the whole cause: a regioned filter clips with or without it.
+
+   text-shadow has no region. It is painted as part of the glyph rasterisation,
+   spreads as far as its blur radius says, and is unaffected by contain:paint,
+   by overflow, and by whether the element is inline. It also survives a theme
+   change cleanly, which drop-shadow did not - the operator saw the cut appear
+   specifically after switching to dark and back, because the filter region was
+   computed once and not recomputed on the repaint.
+
+   Two shadows per half rather than one: a tight bright core and a wide soft
+   halo, which is what reads as a glow rather than as a smudge. */
+.pr-mark .akva{
+  text-shadow:0 2px 6px rgba(0,0,140,.42),
+              0 6px 20px rgba(0,0,140,.34);
+}
+.pr-mark .term{
+  text-shadow:0 2px 6px rgba(214,37,46,.42),
+              0 6px 20px rgba(214,37,46,.34);
+}
+:root[data-theme="dark"] .pr-mark .akva{
+  text-shadow:0 2px 6px rgba(90,120,255,.50),
+              0 6px 22px rgba(90,120,255,.40);
+}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-mark .akva{filter:drop-shadow(0 5px 16px rgba(90,120,255,.55))}
+  :root:not([data-theme="light"]) .pr-mark .akva{
+    text-shadow:0 2px 6px rgba(90,120,255,.50),
+                0 6px 22px rgba(90,120,255,.40);
+  }
 }
+
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
