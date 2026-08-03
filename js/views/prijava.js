@@ -192,24 +192,33 @@ html[${AUTH_ATTR}] #main{
   transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
 }
 .pr-theme:focus-visible{outline:2px solid var(--pr-link);outline-offset:3px}
-/* The two under-glows. -1 z-index inside the button's own stacking context
-   keeps them behind the thumb but in front of the track fill. */
-.pr-theme::before,.pr-theme::after{
-  content:"";position:absolute;inset:2px;border-radius:inherit;pointer-events:none;
-  transition:opacity 420ms var(--smooth);
-}
-/* Light state -> the WARM half, TERM red. */
-.pr-theme::before{
-  box-shadow:0 3px 14px -2px rgba(214,37,46,.62),inset 0 0 10px -2px rgba(214,37,46,.34);
-  opacity:1;
-}
-/* Dark state -> the COOL half, AKVA navy, lifted so it reads on a dark ground. */
+/* THE UNDER-GLOW IS A ONE-SHOT, AND IT IS ONLY UNDERNEATH.
+   Operator instruction, 2026-08-02: "the glow only happens when pressed, and
+   only inside/below the switch, not outside -- only below the switch you see
+   that little glow that appears when the slider moves. Very subtle, very
+   stylish, professional, not glowing at all times."
+
+   The first version was wrong twice: it was lit permanently, and it was an
+   inset+outset shadow on the whole track, so it haloed the control on every
+   side. This is a single soft bar sitting UNDER the track, at zero opacity
+   until the switch is actually thrown.
+
+   It is triggered from JS with a class rather than by a state selector,
+   because CSS has no way to express "this value just changed" -- an
+   [aria-pressed] rule can only describe where the switch IS, not that it
+   moved, so it can only produce a permanent glow. The class is removed on
+   animationend, so nothing accumulates.
+
+   The colour is the wordmark, and it names the destination rather than the
+   current state: going TO dark lights AKVA navy, going TO light lights TERM
+   red. Set from JS as --pr-glow at the moment of the press. */
 .pr-theme::after{
-  box-shadow:0 3px 14px -2px rgba(60,90,255,.66),inset 0 0 10px -2px rgba(60,90,255,.38);
-  opacity:0;
+  content:"";position:absolute;left:14%;right:14%;bottom:-4px;height:7px;
+  border-radius:50%;pointer-events:none;opacity:0;
+  background:radial-gradient(closest-side,var(--pr-glow,transparent),transparent 76%);
 }
-.pr-theme[aria-pressed="true"]::before{opacity:0}
-.pr-theme[aria-pressed="true"]::after{opacity:1}
+.pr-theme.is-flip::after{animation:prGlow 640ms var(--smooth) both}
+@keyframes prGlow{0%{opacity:0}30%{opacity:.85}100%{opacity:0}}
 
 /* The thumb carries the two glyphs and slides. transform only. */
 .pr-themeic{
@@ -220,13 +229,18 @@ html[${AUTH_ATTR}] #main{
   transition:transform 380ms var(--spring),color var(--dur) var(--smooth);
 }
 .pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(25px)}
-.pr-themeic svg{position:absolute;width:15px;height:15px;transition:opacity 240ms var(--snap),transform 300ms var(--snap)}
+.pr-themeic svg{position:absolute;width:14px;height:14px;transition:opacity 240ms var(--snap),transform 300ms var(--snap)}
 .pr-themeic svg:nth-child(2){opacity:0;transform:rotate(-40deg) scale(.7)}
 .pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(1){opacity:0;transform:rotate(40deg) scale(.7)}
 .pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(2){opacity:1;transform:none}
+/* The track is a plain neutral pill, as ASC's is - the colour on this control
+   is the under-glow, and a tinted track underneath it would muddy the one
+   signal it carries. */
+.pr-theme{background:var(--pr-field-bg);border-color:var(--line)}
 
 @media(prefers-reduced-motion:reduce){
-  .pr-theme::before,.pr-theme::after,.pr-themeic,.pr-themeic svg{transition-duration:1ms}
+  .pr-themeic,.pr-themeic svg{transition-duration:1ms}
+  .pr-theme.is-flip::after{animation:none}
 }
 
 /* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
@@ -301,6 +315,17 @@ html[${AUTH_ATTR}] #main{
    glow thrown well below the button (0 12px 28px -12px of the brand colour),
    not a neutral drop shadow. That is what lifts the primary off the card. */
 .pr-card{
+  /* THE GLASS RIM IS NEUTRAL HERE. css/styles.css builds .glass-* rims out of
+     the teal identity (--glass-rim-top and friends carry --teal-300), and on a
+     card this large it shows as a cyan cast down the top-left edge - visible in
+     the side-by-side against ASC's clean white card, and the last of the green
+     the operator asked to remove. Rebound locally to plain white so the glass
+     still has a lit edge without a hue. */
+  --glass-rim-top:rgba(255,255,255,.72);
+  --glass-rim-bottom:rgba(255,255,255,.30);
+  --glass-rim-side:rgba(255,255,255,.20);
+  --glass-hairline:rgba(255,255,255,.38);
+  --pr-field-bg:#F4F5F7;
   --pr-brand-1:#3355EE;
   --pr-brand-2:#2B3FD8;
   --pr-brand-3:#1E32AE;
@@ -309,9 +334,15 @@ html[${AUTH_ATTR}] #main{
   --pr-r-ctl:14px;
   --pr-r-field:16px;
 }
-:root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34)}
+:root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+  --pr-field-bg:rgba(255,255,255,.06);
+  --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
+  --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34)}
+  :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+    --pr-field-bg:rgba(255,255,255,.06);
+    --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
+    --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 }
 
 /* The primary. ASC geometry, ASC shadow, this brand's blue. */
@@ -355,7 +386,7 @@ html[${AUTH_ATTR}] #main{
    the sheet, so an override here would lose to them at equal specificity.
    That is exactly what kept the fields capsule-shaped after the shape was
    supposedly changed. */
-.pr-input:focus-within{border-color:var(--pr-brand-2);box-shadow:0 0 0 4px var(--pr-brand-ring)}
+.pr-input:focus-within{border-color:var(--pr-brand-2);background:var(--surface);box-shadow:0 0 0 4px var(--pr-brand-ring)}
 /* Every accent tier on this card moves off the teal with it. */
 .pr-eyebrow{color:var(--pr-link)}
 .pr-footlink{color:var(--pr-link)}
@@ -414,7 +445,11 @@ html[${AUTH_ATTR}] #main{
 .pr-field{display:block;margin-bottom:12px}
 .pr-input{
   display:flex;align-items:center;gap:11px;padding:0 20px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--pr-r-field,16px);
+  /* FILLED AND BORDERLESS, which is ASC's field and the clearest difference in
+     the side-by-side: --input-bg with no outline at rest, so the row reads as a
+     recess in the card rather than as a drawn box sitting on it. The hairline
+     only appears on focus, where it is doing real work. */
+  background:var(--pr-field-bg);border:1px solid transparent;border-radius:var(--pr-r-field,16px);
   transition:border-color var(--dur) var(--smooth),box-shadow var(--dur) var(--smooth),background var(--dur) var(--smooth);
 }
 .pr-input:focus-within{border-color:var(--accent-ink);box-shadow:0 0 0 4px var(--accent-ring)}
@@ -459,9 +494,12 @@ html[${AUTH_ATTR}] #main{
 .pr-msg.is-ok{color:var(--ok-ink)}
 
 /* Sentence case, not uppercase micro-caps — ASC's reads "ili e-mailom". */
+/* ASC: uppercase, 11.5px, 1.6px tracking (css/styles.css .auth-divider). The
+   lowercase version read as a sentence fragment rather than as a separator. */
 .pr-div{
-  display:flex;align-items:center;gap:14px;margin:18px 0;
-  font-size:12px;font-weight:500;letter-spacing:0;color:var(--muted);
+  display:flex;align-items:center;gap:14px;margin:20px 2px 16px;
+  font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);
 }
 .pr-div::before,.pr-div::after{content:"";flex:1;height:1px;background:var(--line)}
 
@@ -836,6 +874,15 @@ function wireCardTop(container) {
       // what makes it take effect now.
       try { localStorage.setItem("akv:theme", dark ? "light" : "dark"); } catch { /* storage blocked */ }
       document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+      // The glow names where the switch is GOING, not where it was: heading
+      // into dark lights AKVA navy, back into light lights TERM red.
+      themeBtn.style.setProperty("--pr-glow", dark ? "rgba(214,37,46,.85)" : "rgba(60,90,255,.9)");
+      themeBtn.classList.remove("is-flip");
+      // Reading offsetWidth restarts the animation: without it a second press
+      // inside the 640ms window re-adds a class the element already has and
+      // the keyframes do not replay.
+      void themeBtn.offsetWidth;
+      themeBtn.classList.add("is-flip");
       sync();
     });
   }
