@@ -222,65 +222,72 @@ html[${AUTH_ATTR}] #main{
    side, against controls that are 54px tall.
    Concentric corners still hold: side padding 28px, so an inset panel lands on
    var(--r-2xl) - 28. Controls are pills and opt out of that arithmetic. */
-.pr-card{padding:32px 24px 26px;border-radius:var(--glass-radius-lg);position:relative}
+/* ---- COLOUR AND SHAPE ----------------------------------------------------
+   Operator instruction, 2026-08-02: "cut out the green in Akvaterm, have more
+   pretty colours", and "look at how the ASC login button shape and shadowing
+   looks and apply it".
 
-/* ---- THE ANIMATED GLASS EDGE ---------------------------------------------
-   Operator instruction, 2026-08-02: "forget the running light, cut that effect
-   out. Turn the panel into a liquid glass card that has an animated edge in
-   the colours of Akvaterm."
+   THE GREEN IS GONE. The app-wide accent is a teal (--accent #139EB1) which
+   reads green on a large filled control, and the sign-in button was the largest
+   one on the screen. It is replaced here by a blue that belongs to this brand
+   rather than to the palette: AKVA is #00008C navy, so a saturated blue is the
+   logo's own family, and it is the one hue that can sit beside the red half of
+   the wordmark without arguing with it. These are scoped to this view - the
+   app-wide palette is a separate piece of work.
+     white on --pr-brand-2 #2B3FD8   7.49:1
+     white on --pr-brand-3 #1E32AE   9.89:1
+   The link tier has to flip by theme: #2B3FD8 is 6.69:1 on light --paper but
+   only 2.23:1 on the dark one, so dark mode lifts it to #A9B8FF (8.72:1).
 
-   So: the whole rim carries a slow gradient flowing through Akvaterm's own
-   colours -- teal into amber into teal, water into heat -- and nothing else on
-   the card is tinted. Not a dot, not a panel wash.
+   SHAPE IS ASC'S, and it is NOT a pill. css/styles.css:813 sets .btn-amber to
+   border-radius 13px at min-height 56px, and the fields to --radius 16px - soft
+   rectangles, not capsules. The pill was this view's own invention and it is
+   what made the card read rounder and softer than ASC's.
 
-   HOW IT IS DRAWN, AND WHY IT IS GUARDED. A gradient BORDER has no CSS
-   property. The mask-free construction (a padding-box layer of the card colour
-   under a border-box gradient) needs an OPAQUE interior, which would destroy
-   the glass -- the one thing this card is. So it has to be the mask: paint the
-   whole box, then punch the middle out with two masks composited xor.
+   SHADOW IS ASC'S TOO, and it is the detail that does the work: a wide COLOURED
+   glow thrown well below the button (0 12px 28px -12px of the brand colour),
+   not a neutral drop shadow. That is what lifts the primary off the card. */
+.pr-card{
+  --pr-brand-1:#3355EE;
+  --pr-brand-2:#2B3FD8;
+  --pr-brand-3:#1E32AE;
+  --pr-brand-ring:rgba(43,63,216,.42);
+  --pr-link:#2B3FD8;
+  --pr-r-ctl:14px;
+  --pr-r-field:16px;
+}
+:root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34)}
+}
 
-   That is exactly what failed silently twice earlier in this file's history,
-   which is why it now sits behind @supports. If an engine cannot composite
-   masks, this element paints NOTHING instead of painting a solid gradient over
-   the entire card. A decoration that fails to a blank is acceptable; one that
-   fails to a coloured slab covering the sign-in form is not.
-
-   z-index 3 is deliberate and is the other half of the earlier failure: the
-   card is .glass-strong, backdrop-filter makes it a stacking context, and a
-   z-index:-1 layer inside one is swallowed. A positive z-index child paints.
-   It is pointer-events:none and sits on the 1.5px rim, where no text lives. */
-.pr-edge{display:none}
-@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)){
-  .pr-edge{
-    display:block;position:absolute;inset:0;z-index:3;pointer-events:none;
-    border-radius:inherit;padding:1.5px;
-    background-image:linear-gradient(140deg,
-      var(--accent-bright) 0%,
-      var(--teal-300) 12%,
-      var(--accent-2) 30%,
-      var(--amber-600) 40%,
-      var(--accent-2) 50%,
-      var(--teal-300) 70%,
-      var(--accent-bright) 88%,
-      var(--teal-300) 100%);
-    background-size:100% 300%;
-    opacity:.9;
-    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-            mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-    -webkit-mask-composite:xor;
-            mask-composite:exclude;
-    animation:prEdge 14s linear infinite;
+/* The primary. ASC geometry, ASC shadow, this brand's blue. */
+.pr-card .btn-primary{
+  min-height:56px;border-radius:var(--pr-r-ctl);border-color:transparent;
+  background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
+  color:#fff;font-weight:700;letter-spacing:.02em;
+  box-shadow:0 12px 28px -12px var(--pr-brand-ring),inset 0 1px 0 rgba(255,255,255,.18);
+  transition:transform 180ms var(--spring),box-shadow 160ms ease,filter 160ms ease;
+}
+@media(hover:hover) and (pointer:fine){
+  .pr-card .btn-primary:hover{
+    filter:brightness(1.05);transform:translateY(-1px);
+    box-shadow:0 16px 34px -12px var(--pr-brand-ring),inset 0 1px 0 rgba(255,255,255,.18);
   }
 }
-/* Linear, and slow. An eased loop on a continuous run reads as a stutter at the
-   seam, and this one never stops, so there is no arrival to ease into. */
-@keyframes prEdge{
-  from{background-position:0 0}
-  to{background-position:0 -300%}
-}
-@media(prefers-reduced-motion:reduce){ .pr-edge{animation:none} }
-@media(prefers-contrast:more){ .pr-edge{display:none} }
-@media(forced-colors:active){ .pr-edge{display:none} }
+.pr-card .btn-primary:active{transform:scale(.99)}
+
+/* Fields and the Google button follow the same corner, not a capsule. */
+.pr-input{border-radius:var(--pr-r-field)}
+.pr-google{border-radius:var(--pr-r-ctl)}
+.pr-input:focus-within{border-color:var(--pr-brand-2);box-shadow:0 0 0 4px var(--pr-brand-ring)}
+/* Every accent tier on this card moves off the teal with it. */
+.pr-eyebrow{color:var(--pr-link)}
+.pr-footlink{color:var(--pr-link)}
+.pr-forgot:hover{color:var(--pr-link)}
+.pr-theme:focus-visible,.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline-color:var(--pr-link)}
+
+.pr-card{padding:32px 24px 26px;border-radius:var(--glass-radius-lg);position:relative}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
@@ -640,7 +647,6 @@ function signInMarkup(configured) {
   return `
     <div class="pr-wrap">
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
-        <span class="pr-edge" aria-hidden="true"></span>
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(signup
           ? tf("prijava.createTitle", "Otvorite račun")
@@ -660,7 +666,6 @@ function signedInMarkup(email) {
   return `
     <div class="pr-wrap">
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
-        <span class="pr-edge" aria-hidden="true"></span>
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(tf("prijava.signedInTitle", "Prijavljeni ste"))}</h1>
         <div class="pr-who">
