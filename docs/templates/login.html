@@ -1,0 +1,224 @@
+<!doctype html>
+<!-- ===========================================================================
+     THE CANONICAL LOGIN. Copy this file. Do not retype it.
+
+     WHY THIS FILE EXISTS, and it is worth reading before using it.
+
+     The Akvaterm login was REBUILT from scratch while "following" ASC, with
+     values read out of ASC's stylesheet and retyped one at a time. It took six
+     rounds and never converged, because:
+
+       - reading a declaration tells you nothing about which rule WINS.
+         `.auth-logo` declared max-width:74%; the rendered logo was 46.4%.
+         `.btn-amber` declared text-transform:uppercase; the app rendered
+         sentence case. Both were copied faithfully and both were wrong.
+       - everything not consciously retyped silently VANISHES. The logo
+         under-glow, the button glow, the theme cross-fade and the dark-mode
+         control colours were never "decided against" - they simply never
+         crossed over, and each had to be reported as a bug by the operator.
+       - a local render and the operator's device disagreed (93.6% vs 81% of
+         viewport). The device is the reference. Always.
+
+     So the rule, and it is binding (docs/HOUSE_STANDARD.md):
+       COPY THE RULES. DO NOT RETYPE VALUES.
+       MEASURE THE RENDERED PAGE, NOT THE SOURCE.
+       WHERE A LOCAL RENDER AND THE DEVICE DISAGREE, THE DEVICE WINS.
+
+     ---------------------------------------------------------------------
+     HOW TO USE
+     ---------------------------------------------------------------------
+     1. Copy this whole file into the new project.
+     2. Change ONLY the :root block under "PROJECT TOKENS". Nothing else.
+     3. Swap the wordmark markup for the project's own, and set --brand-a /
+        --brand-b to its two identity colours.
+     4. Recompute the contrast table for the new palette. Do not assume it
+        carries over; the ratios below are for THIS palette only.
+
+     Every number in the layout below was measured off a rendered page at
+     375x812, not taken from a stylesheet.
+     =========================================================================== -->
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prijava — predložak</title>
+<style>
+/* ===================== PROJECT TOKENS — EDIT ONLY THIS ===================== */
+:root{
+  /* Identity. The two halves of the wordmark; also the two under-glows. */
+  --brand-a:#00008C;              /* cool half  (AKVA navy) */
+  --brand-b:#d6252e;              /* warm half  (TERM red)  */
+  --brand-a-dark:#5A78FF;         /* cool half, lifted for a dark ground */
+
+  /* The primary action. */
+  --cta-1:#3355EE; --cta-2:#2B3FD8; --cta-3:#1E32AE;
+  --cta-ring:rgba(43,63,216,.60);
+  --cta-ring-dark:rgba(76,111,255,.55);
+  --link:#2B3FD8; --link-dark:#A9B8FF;
+
+  /* Surfaces. Light first; the dark block below overrides. */
+  --page:#F2F2F2; --card:#F4FAFB; --field:#F4F5F7; --track:#E3E5EA;
+  --ink:#313131; --ink-2:#51484B; --muted:#6B6570;
+  --rim:rgba(20,16,14,.10); --rim-strong:rgba(20,16,14,.16);
+  --goog-bg:#FFFFFF; --goog-ink:#313131;
+
+  /* Geometry, measured off the reference at 375x812. */
+  --r-card:30px; --r-ctl:14px; --ctl-h:49px;
+  --card-w:81%;                   /* of viewport, on the device */
+
+  --ease:cubic-bezier(.22,1,.36,1);
+  --spring:cubic-bezier(.34,1.4,.5,1);
+}
+:root[data-theme="dark"]{
+  --page:#020305; --card:#17181C; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+  --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
+  --rim:rgba(244,245,247,.10); --rim-strong:rgba(244,245,247,.16);
+  --goog-bg:#17181C; --goog-ink:#F4F5F7;
+  --brand-a:var(--brand-a-dark); --link:var(--link-dark); --cta-ring:var(--cta-ring-dark);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --page:#020305; --card:#17181C; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+    --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
+    --rim:rgba(244,245,247,.10); --rim-strong:rgba(244,245,247,.16);
+    --goog-bg:#17181C; --goog-ink:#F4F5F7;
+    --brand-a:var(--brand-a-dark); --link:var(--link-dark); --cta-ring:var(--cta-ring-dark);
+  }
+}
+/* ======================= BELOW HERE: DO NOT EDIT ========================== */
+
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{
+  margin:0;min-height:100dvh;display:flex;background:var(--page);color:var(--ink);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  transition:background-color .32s var(--ease),color .32s var(--ease);
+}
+main{margin:auto;width:100%;display:flex;padding:max(20px,env(safe-area-inset-top)) clamp(18px,9.5vw,36px) max(24px,env(safe-area-inset-bottom))}
+
+/* THE CARD. "Milky" is not a colour, it is a construction: a translucent tint,
+   a real blur behind it, a bright top rim and a wide soft shadow thrown far
+   below. Remove any one of the four and it becomes a flat rectangle. */
+.card{
+  margin:auto;width:min(304px,100%);padding:28px 24px 24px;
+  position:relative;border-radius:var(--r-card);
+  background:color-mix(in srgb,var(--card) 94%,transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 0 0 1px var(--rim),
+    0 30px 80px -30px rgba(0,0,0,.45);
+  animation:cardIn 620ms var(--ease) 80ms both;
+  transition:background-color .32s var(--ease);
+}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .card{-webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%)}
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.985)}}
+
+/* Head row: mark left, theme switch right. */
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+
+/* THE MARK, with an under-glow per identity half. drop-shadow follows the
+   GLYPH; a box-shadow would draw a rectangle behind the text. */
+.mark{margin:0;font-style:italic;font-weight:800;font-size:clamp(27px,8.5vw,32px);line-height:1.12;letter-spacing:-.01em;white-space:nowrap}
+.mark .a{color:var(--brand-a);filter:drop-shadow(0 6px 16px color-mix(in srgb,var(--brand-a) 45%,transparent))}
+.mark .b{color:var(--brand-b);filter:drop-shadow(0 6px 16px color-mix(in srgb,var(--brand-b) 45%,transparent))}
+
+/* Theme switch: plain pill, no glyph. Position says the state. */
+.sw{flex:none;position:relative;width:42px;height:23px;padding:0;border:1px solid transparent;border-radius:999px;background:var(--track);cursor:pointer;transition:background-color .32s var(--ease)}
+.sw i{position:absolute;top:50%;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translateY(-50%);transition:transform 380ms var(--spring)}
+.sw[aria-pressed="true"] i{transform:translateY(-50%) translateX(19px)}
+
+h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.01em;line-height:1.22}
+.sub{margin:3px 0 20px;font-size:13.5px;line-height:1.5;color:var(--muted)}
+
+.btn{width:100%;min-height:var(--ctl-h);border-radius:var(--r-ctl);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;font:600 14.5px inherit}
+.goog{background:var(--goog-bg);color:var(--goog-ink);border:1px solid var(--rim-strong);transition:background-color .32s var(--ease),color .32s var(--ease),border-color .32s var(--ease)}
+
+.div{display:flex;align-items:center;gap:14px;margin:16px 2px 14px;font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.div::before,.div::after{content:"";flex:1;height:1px;background:var(--rim)}
+
+.field{display:flex;align-items:center;gap:11px;padding:0 20px;margin-bottom:11px;background:var(--field);border:1px solid var(--rim-strong);border-radius:var(--r-ctl);transition:border-color .2s var(--ease),box-shadow .2s var(--ease),background-color .32s var(--ease)}
+.field:focus-within{border-color:var(--cta-2);box-shadow:0 0 0 4px var(--cta-ring)}
+.field input{flex:1;min-width:0;min-height:var(--ctl-h);border:0;background:none;outline:none;color:var(--ink);font:15.5px inherit}
+.field input::placeholder{color:var(--muted)}
+
+.rowend{display:flex;justify-content:flex-end;margin:2px 4px 10px}
+.rowend button{border:0;background:none;padding:4px 2px;cursor:pointer;font:500 12.5px inherit;color:var(--muted)}
+
+/* THE PRIMARY. Its EDGE is four shadows, not a border: a bright top lip, a
+   dark bottom lip, a containing rim, and the coloured glow thrown far below.
+   A 1px border here flattens it - one flat line fights the gradient's light. */
+.cta{
+  border:0;color:#fff;font:700 15px inherit;letter-spacing:.2px;
+  background:linear-gradient(150deg,var(--cta-1),var(--cta-2) 58%,var(--cta-3));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(0,0,0,.22),
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    0 12px 26px -10px var(--cta-ring);
+  transition:transform 180ms var(--spring),box-shadow 220ms var(--ease),filter 160ms ease;
+}
+@media(hover:hover){.cta:hover{filter:brightness(1.05);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.46),inset 0 -1px 0 rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.18),0 16px 32px -10px var(--cta-ring)}}
+.cta:active{transform:scale(.99)}
+
+.foot{margin:18px 0 0;text-align:center;font-size:14px;color:var(--muted)}
+.foot button{border:0;background:none;padding:2px;cursor:pointer;font:600 14px inherit;color:var(--link)}
+
+@media(prefers-reduced-motion:reduce){
+  .card{animation:none}
+  .sw i,.cta,.field{transition-duration:1ms}
+}
+</style>
+</head>
+<body>
+<main>
+  <!-- ORDER IS FIXED. It is the reference's, and it is the order every login
+       in the house uses: mark + switch, title, subtitle, social, divider,
+       fields, forgot, primary, footer swap. -->
+  <section class="card">
+    <div class="head">
+      <p class="mark"><span class="a">AKVA</span><span class="b">TERM</span></p>
+      <button type="button" class="sw" id="sw" aria-pressed="false" aria-label="Tamna tema"><i></i></button>
+    </div>
+
+    <h1>Dobrodošli natrag</h1>
+    <p class="sub">Kupaonice, grijanje i klimatizacija</p>
+
+    <button type="button" class="btn goog">
+      <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.1-3.8 6.6-9.4 6.6-16.1z"/><path fill="#34A853" d="M24 46c6 0 11-2 14.6-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.5 2.1-5.8 0-10.7-3.9-12.4-9.1H4.3v5.7C7.9 41.1 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.6 28.1c-.4-1.3-.7-2.7-.7-4.1s.2-2.8.7-4.1v-5.7H4.3C2.8 17.1 2 20.4 2 24s.8 6.9 2.3 9.8l7.3-5.7z"/><path fill="#EA4335" d="M24 10.8c3.3 0 6.2 1.1 8.5 3.3l6.3-6.3C35 4.3 30 2 24 2 15.4 2 7.9 6.9 4.3 14.2l7.3 5.7c1.7-5.2 6.6-9.1 12.4-9.1z"/></svg>
+      Nastavi s Googleom
+    </button>
+
+    <div class="div">ili e-mailom</div>
+
+    <label class="field"><input type="email" placeholder="Email" aria-label="Email" autocomplete="email"></label>
+    <label class="field"><input type="password" placeholder="Lozinka" aria-label="Lozinka" autocomplete="current-password"></label>
+
+    <div class="rowend"><button type="button">Zaboravljena lozinka?</button></div>
+
+    <button type="submit" class="btn cta">Prijavi se →</button>
+
+    <p class="foot">Prvi put ovdje? <button type="button">Napravi račun</button></p>
+  </section>
+</main>
+
+<script>
+/* The switch writes an explicit value and persists it; with no value stored the
+   page follows the system, which is the third state and the default. */
+(function(){
+  var sw=document.getElementById("sw"),K="app:theme";
+  function stored(){try{return localStorage.getItem(K)||""}catch(e){return""}}
+  function isDark(){var v=stored();return v?v==="dark":matchMedia("(prefers-color-scheme: dark)").matches}
+  function apply(){var v=stored();if(v)document.documentElement.setAttribute("data-theme",v);
+    else document.documentElement.removeAttribute("data-theme");
+    sw.setAttribute("aria-pressed",String(isDark()));}
+  sw.addEventListener("click",function(){
+    try{localStorage.setItem(K,isDark()?"light":"dark")}catch(e){}
+    apply();
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

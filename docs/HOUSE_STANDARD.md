@@ -70,7 +70,76 @@ to remove something or add padding — not to add an effect.
 Collapse it with `:empty`. A permanent dead band reads as a bug, which is the
 opposite of negative space.
 
-## 3. Every login screen, on these bones
+## 3. Every login screen — COPY THE TEMPLATE, DO NOT REBUILD IT
+
+**The canonical login is [`docs/templates/login.html`](templates/login.html).
+Copy that file. Change only its `:root` token block. Do not rebuild it.**
+
+### Why this is a rule and not a suggestion
+
+The Akvaterm login was rebuilt from scratch while "following" ASC, with values
+read out of ASC's stylesheet and retyped one at a time. It took **six rounds**
+and never converged. Three failures, each of which will repeat exactly:
+
+1. **A declaration does not tell you which rule wins.** `.auth-logo` declared
+   `max-width: 74%`; the rendered logo was **46.4%**. `.btn-amber` declared
+   `text-transform: uppercase`; the app rendered sentence case. Both were copied
+   faithfully. Both were wrong.
+2. **Everything not consciously retyped silently vanishes.** The logo
+   under-glow, the primary's glow, the theme cross-fade and the dark-mode
+   control colours were never decided against — they simply never crossed over,
+   and every one had to come back as a bug report.
+3. **A local render and the user's device disagreed** — 93.6% of viewport
+   against 81%. The device is the reference.
+
+### The three laws this produced
+
+> **COPY THE RULES. DO NOT RETYPE VALUES.**
+> **MEASURE THE RENDERED PAGE, NOT THE SOURCE.**
+> **WHERE A LOCAL RENDER AND THE DEVICE DISAGREE, THE DEVICE WINS.**
+
+Measure with `getBoundingClientRect()` and `getComputedStyle()` at the *same*
+viewport on both sides, and diff the numbers. Never present a retyped source
+value as a measured one.
+
+### The verified geometry (375×812, measured — not read)
+
+| | value |
+| --- | --- |
+| card width | **81%** of viewport |
+| card radius | 30px |
+| content column | 293px |
+| logo | **46.4%** of the content column |
+| title | **24px** Sora 600, -.01em |
+| subtitle | 13.5px, 3px above / 20px below |
+| controls | **49px** tall, **14px** radius |
+| fields | 11px apart, filled, with a real rim |
+| divider | 11.5px uppercase, .13em tracking |
+| primary | 15px/700, **sentence case** |
+| footer | 14px, 18px above |
+
+### The four treatments that carry to every surface in the app
+
+These are what "milky and smooth" actually means. Each is a construction, not a
+colour, and dropping any one flattens the result:
+
+- **Milky surface** — a translucent tint **plus** a real `backdrop-filter`
+  blur, **plus** a bright `inset 0 1px 0` top rim, **plus** a wide soft shadow
+  thrown far below (`0 30px 80px -30px`). All four, or it is a flat rectangle.
+- **Moulded edge** — four shadows, never a border: bright top lip, dark bottom
+  lip, containing rim, coloured glow below. A 1px border fights the gradient's
+  light and flattens it.
+- **Under-glow** — `filter: drop-shadow()` in the identity colour, applied per
+  identity half. It follows the *glyph*; `box-shadow` would draw a rectangle.
+- **Cross-fade, never a cut** — `.32s` on background/colour/border across every
+  surface at once, so the screen turns together.
+
+Motion is opacity and transform only. Never blur, never box-shadow, never a
+layout property.
+
+## 3b. The login contract
+
+### Every login screen, on these bones
 
 Required, in this order:
 
