@@ -360,13 +360,13 @@ html[${AUTH_ATTR}] #main{
    lighter than --paper, which is why it read as a grey block sitting ON the
    page rather than as the page. Dropped to a near-paper tone with the
    separation carried by the rim and the shadow instead of by the fill. */
-:root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+:root[data-theme="dark"] .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+  :root:not([data-theme="light"]) .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
@@ -460,47 +460,30 @@ html[${AUTH_ATTR}] #main{
 
    The inset rims differ by theme and are ASC's own values, not derived. */
 .pr-wrap .pr-card{
-  /* THE MATERIAL, resolved off ASC's running card rather than off token names.
-     --shadow-card is the one that was silently wrong: Akvaterm's own is a
-     WARM BROWN card shadow (rgba(93,79,79,...)), ASC's is three stacked
-     BLACKS at increasing distance. On a near-black page a warm shadow does
-     nothing at all - which is why this card looked pasted on rather than
-     resting on the page, no matter what the fill was. */
-  --pr-shell:rgba(30,32,38,.55);
-  --pr-shell-solid:rgba(30,32,38,.88);
-  --pr-rim-top:rgba(255,255,255,.16);
-  --pr-shadow:0 1px 2px -1px rgba(0,0,0,.5),
-              0 8px 20px -10px rgba(0,0,0,.55),
-              0 24px 48px -24px rgba(0,0,0,.62);
   position:relative;z-index:1;
   width:min(412px,100%);
   border-radius:30px;
   padding:30px 26px 24px;
-  /* The SOLID value is the base. @supports swaps in the translucent one only
-     where there is a blur to put behind it - which is the correct order, and
-     the reason ASC ships two fills rather than one. */
-  background:var(--pr-shell-solid);
-  border-top:1px solid var(--pr-rim-top);
-  box-shadow:var(--pr-shadow),
+  border-top:1px solid var(--glass-rim-top);
+  box-shadow:var(--shadow-card),
              inset 0 1px 0 rgba(255,255,255,.55),
              inset 0 -1px 0 rgba(2,3,5,.05);
   animation:prCard 560ms var(--smooth) both;
 }
 :root[data-theme="dark"] .pr-wrap .pr-card{
-  box-shadow:var(--pr-shadow),
+  box-shadow:var(--shadow-card),
              inset 0 1px 0 rgba(255,255,255,.09),
              inset 0 -1px 0 rgba(0,0,0,.3);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]) .pr-wrap .pr-card{
-    box-shadow:var(--pr-shadow),
+    box-shadow:var(--shadow-card),
                inset 0 1px 0 rgba(255,255,255,.09),
                inset 0 -1px 0 rgba(0,0,0,.3);
   }
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .pr-wrap .pr-card{
-    background:var(--pr-shell);
     -webkit-backdrop-filter:blur(34px) saturate(150%) brightness(108%);
             backdrop-filter:blur(34px) saturate(150%) brightness(108%);
   }
