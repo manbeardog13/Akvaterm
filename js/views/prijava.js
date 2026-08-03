@@ -118,8 +118,8 @@
 
 import { t } from "../i18n.js";
 import {
-  authConfigured, getSession, signIn, signInWithGoogle, signOut,
-  rememberedEmail, rememberEmail,
+  authConfigured, getSession, signIn, signInWithGoogle, signUp,
+  requestPasswordReset, signOut, rememberedEmail, rememberEmail,
 } from "../db.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -154,8 +154,45 @@ html[${AUTH_ATTR}] #main{
 
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
+/* THE CARD TOP: mark left, theme switch right — ASC's .auth-shell row. */
+.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.pr-theme{
+  flex:none;width:38px;height:38px;display:grid;place-items:center;
+  border:1px solid var(--line);border-radius:var(--r-pill);
+  background:var(--glass-wash);color:var(--ink-2);cursor:pointer;
+  transition:background var(--dur) var(--smooth),color var(--dur) var(--smooth);
+}
+.pr-theme:hover{color:var(--ink)}
+.pr-theme:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+/* The two glyphs cross-fade in place so the control never changes width. */
+.pr-themeic{position:relative;display:block;width:17px;height:17px}
+.pr-themeic svg{position:absolute;inset:0;transition:opacity 200ms var(--snap),transform 260ms var(--snap)}
+.pr-themeic svg:nth-child(2){opacity:0;transform:rotate(-35deg)}
+.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(1){opacity:0;transform:rotate(35deg)}
+.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(2){opacity:1;transform:none}
+
+/* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
+   a link: it acts on the address already typed, it does not navigate. */
+.pr-rowend{display:flex;justify-content:flex-end;margin:2px 6px 12px}
+.pr-forgot{
+  border:0;background:none;padding:4px 2px;cursor:pointer;
+  font-family:var(--font-text);font-size:12.5px;font-weight:500;color:var(--muted);
+  transition:color var(--dur) var(--smooth);
+}
+.pr-forgot:hover{color:var(--accent-ink);text-decoration:underline}
+.pr-forgot:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
+
+/* The footer swap — ASC's .auth-create. */
+.pr-foot{margin:16px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.pr-footlink{
+  border:0;background:none;padding:2px;cursor:pointer;
+  font-family:var(--font-text);font-size:13px;font-weight:700;color:var(--accent-ink);
+}
+.pr-footlink:hover{text-decoration:underline}
+.pr-footlink:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
+
 .pr-brand{display:flex;flex-direction:column;align-items:center;gap:12px}
-.pr-mark{margin:0;font-size:clamp(30px,8.5vw,38px);line-height:1.15}
+.pr-mark{margin:0;font-size:clamp(24px,6.4vw,29px);line-height:1.15}
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
@@ -329,7 +366,7 @@ html[${AUTH_ATTR}] #main{
 /* ---- entrance. The router already fades and lifts .pr-wrap (styles.css
    riseIn); these layer the brand, the rule and the card on top of it so the
    card settles a beat after the mark, the way ASC's sheetIn does. ---- */
-.pr-brand{animation:prMark 520ms var(--spring) 40ms both}
+.pr-cardtop{animation:prMark 520ms var(--spring) 40ms both}
 .pr-rule{animation:prRule 620ms var(--snap) 220ms both}
 .pr-card{animation:prCard 620ms var(--smooth) 120ms both}
 @keyframes prMark{from{opacity:0;transform:translateY(10px) scale(.96)}}
@@ -337,7 +374,7 @@ html[${AUTH_ATTR}] #main{
 @keyframes prCard{from{opacity:0;transform:translateY(24px) scale(.985)}}
 
 @media (prefers-reduced-motion:reduce){
-  .pr-brand,.pr-rule,.pr-card{animation:none}
+  .pr-cardtop,.pr-rule,.pr-card{animation:none}
   .pr-sheen{transition:none}
   .pr-input,.pr-card .btn{transition-duration:1ms}
 }
@@ -364,6 +401,8 @@ const ICON_LOCK = SVG(`<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><
 const ICON_EYE = SVG(`<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>`);
 const ICON_EYE_OFF = SVG(`<path d="M3 3l18 18"/><path d="M10.6 6.1A9.9 9.9 0 0 1 12 5.5c6.5 0 10 6.5 10 6.5a17 17 0 0 1-3.6 4.3M6.5 7.7A17 17 0 0 0 2 12s3.5 6.5 10 6.5a9.7 9.7 0 0 0 3.4-.6"/><path d="M9.7 9.9a2.6 2.6 0 0 0 3.7 3.6"/>`);
 const ICON_ARROW = SVG(`<path d="M5 12h14M13 6l6 6-6 6"/>`, 16);
+const ICON_SUN = SVG(`<circle cx="12" cy="12" r="4.1"/><path d="M12 2.6v2.3M12 19.1v2.3M4.36 4.36l1.63 1.63M18.01 18.01l1.63 1.63M2.6 12h2.3M19.1 12h2.3M4.36 19.64l1.63-1.63M18.01 5.99l1.63-1.63"/>`, 17);
+const ICON_MOON = SVG(`<path d="M20.4 13.4A8.3 8.3 0 0 1 10.6 3.6a8.4 8.4 0 1 0 9.8 9.8z"/>`, 17);
 const ICON_INFO = SVG(`<circle cx="12" cy="12" r="8.6"/><path d="M12 11.4v4.6M12 8.2v.1"/>`, 17);
 
 // Google's "G". The only mark in this app that is NOT re-coloured to the Iris
@@ -381,11 +420,28 @@ function cardHead(titleKey, titleFallback) {
     <h1 class="pr-title" id="prTitle">${esc(tf(titleKey, titleFallback))}</h1>`;
 }
 
-function brandMark() {
+// THE LOGO LIVES INSIDE THE CARD NOW, with the theme switch opposite it.
+// Operator instruction, 2026-08-02: "put the Akvaterm logo within this card and
+// the light dark mode button as well ... look at how ASC place their elements
+// and copy that precisely". ASC's login card opens with exactly this row — the
+// mark top-left, the controls top-right (js/app.js:508-521, .auth-shell holding
+// .auth-logo and .auth-seg) — and the card owns both.
+//
+// It used to sit above the card on the page ground, which is why the contrast
+// note in this file's header measures it against --paper. It is measured
+// against the GLASS now: --logo-navy #00008C on the worst-case strong-glass
+// composite #D7DCDD is 11.28:1, --logo-red #d6252e is 3.74:1, and the mark is
+// set at 26-30px weight 800, so the 3:1 large-text threshold is the one that
+// applies and the red clears it. In dark theme AKVA takes --ink, exactly as
+// css/styles.css already does for every other placement of the mark.
+function cardTop() {
   return `
-    <div class="pr-brand">
+    <div class="pr-cardtop">
       <p class="pr-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></p>
-      <span class="pr-rule" aria-hidden="true"></span>
+      <button type="button" class="pr-theme" id="prTheme" aria-pressed="false"
+              aria-label="${esc(tf("theme.label", "Tamna tema"))}">
+        <span class="pr-themeic">${ICON_SUN}${ICON_MOON}</span>
+      </button>
     </div>`;
 }
 
@@ -418,7 +474,15 @@ function field(id, labelKey, labelFallback, opts) {
     </div>`;
 }
 
+// mode: "signin" | "signup". ASC switches between the two INSIDE one card
+// rather than routing to a second screen (js/app.js paintLogin), and that is
+// the arrangement being copied: the card keeps its position, its logo and its
+// theme switch, and only the body under the title changes.
+let mode = "signin";
+
 function signInMarkup(configured) {
+  const signup = mode === "signup";
+
   const notice = configured ? "" : `
       <div class="pr-notice">
         <span class="pr-nic">${ICON_INFO}</span>
@@ -431,31 +495,46 @@ function signInMarkup(configured) {
   const fields =
     field("prEmail", "prijava.email", "Email", {
       icon: ICON_MAIL, type: "email", name: "email", autocomplete: "email", inputmode: "email",
-      placeholderKey: "prijava.emailPlaceholder", placeholderFallback: "ime@tvrtka.hr",
       value: rememberedEmail(),
     }) +
     field("prPass", "prijava.password", "Lozinka", {
-      icon: ICON_LOCK, type: "password", name: "password", autocomplete: "current-password", eye: true,
-      placeholderKey: "prijava.passwordPlaceholder", placeholderFallback: "Vaša lozinka",
+      icon: ICON_LOCK, type: "password", name: "password",
+      // new-password on the signup pass, or a password manager offers the
+      // saved one instead of generating a fresh one.
+      autocomplete: signup ? "new-password" : "current-password", eye: true,
     });
 
-  // <fieldset disabled> is a NATIVE disable: on the demo the controls are not
-  // focusable and the form cannot be submitted at all, so there is no path on
-  // which a password is typed into something that will never check it.
+  // Sign-in only. There is nothing to recover on a form that is creating the
+  // account, and offering it there invites the user to reset a password that
+  // does not exist yet.
+  const forgot = signup ? "" : `
+        <div class="pr-rowend">
+          <button type="button" class="pr-forgot" id="prForgot">${esc(tf("prijava.forgot", "Zaboravljena lozinka?"))}</button>
+        </div>`;
+
+  const cta = signup
+    ? esc(tf("prijava.signupCta", "Napravi račun"))
+    : esc(tf("prijava.submit", "Prijavi se"));
+
+  // <fieldset disabled> is a NATIVE disable: on a build with no backend the
+  // controls are not focusable and the form cannot be submitted at all, so
+  // there is no path on which a password is typed into something that will
+  // never check it.
   const form = `
     <form class="pr-form" id="prForm" novalidate autocomplete="on">
       <fieldset${configured ? "" : " disabled"}>
         ${fields}
+        ${forgot}
         <button type="submit" class="btn btn-primary btn-lg" id="prSubmit">
-          ${esc(tf("prijava.submit", "Prijavi se"))}${ICON_ARROW}
+          ${cta}${ICON_ARROW}
         </button>
       </fieldset>
       <p class="pr-msg" id="prMsg" role="status" aria-live="polite"></p>
     </form>`;
 
-  // Disabled rather than hidden on the demo, and for the same reason the email
-  // form is: a control that is present but plainly unavailable explains the
-  // build, where a missing control just looks like a feature nobody built.
+  // Disabled rather than hidden without a backend, and for the same reason the
+  // email form is: a control that is present but plainly unavailable explains
+  // the build, where a missing control just looks like a feature nobody built.
   const google = `
       <button type="button" class="btn btn-block pr-google" id="prGoogle"${configured ? "" : " disabled"}>
         ${ICON_GOOGLE}
@@ -463,24 +542,41 @@ function signInMarkup(configured) {
       </button>
       <p class="pr-msg" id="prGoogleMsg" role="status" aria-live="polite"></p>`;
 
-  // The guest action is the ONLY enabled primary on the demo, and an ordinary
-  // link either way, so the catalogue stays reachable even if no listener in
-  // this file ever attached.
-  const guestClass = configured ? "btn btn-block pr-guest" : "btn btn-primary btn-lg pr-guest";
+  // The switch between the two modes. A <button>, not a link: it changes what
+  // this card is, it does not navigate anywhere.
+  const swap = signup
+    ? `<p class="pr-foot">${esc(tf("prijava.haveAccount", "Već imate račun?"))}
+         <button type="button" class="pr-footlink" id="prSwap">${esc(tf("prijava.toSignin", "Prijavite se"))}</button></p>`
+    : `<p class="pr-foot">${esc(tf("prijava.firstTime", "Prvi put ovdje?"))}
+         <button type="button" class="pr-footlink" id="prSwap">${esc(tf("prijava.createAccount", "Napravi račun"))}</button></p>`;
+
+  // ORDER IS ASC'S, copied deliberately (see docs/HOUSE_STANDARD.md):
+  // logo + theme switch, title, subtitle, Google, divider, fields, forgot,
+  // primary, status, footer swap. On the signup side ASC puts the primary and
+  // the divider the other way round - the fastest path stays first for a
+  // RETURNING user, and for a NEW one the form is the point - and that
+  // inversion is copied too rather than smoothed over.
+  const body = signup
+    ? `${form}
+       <div class="pr-div">${esc(tf("prijava.or", "ili"))}</div>
+       ${google}`
+    : `${google}
+       <div class="pr-div">${esc(tf("prijava.orEmail", "ili e-mailom"))}</div>
+       ${form}`;
 
   return `
     <div class="pr-wrap">
-      ${brandMark()}
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
-        ${cardHead("prijava.title", "Dobrodošli natrag")}
-        <p class="pr-sub">${esc(tf("prijava.sub", "Kupaonice, grijanje i klimatizacija"))}</p>
+        ${cardTop()}
+        <h1 class="pr-title" id="prTitle">${esc(signup
+          ? tf("prijava.createTitle", "Otvorite račun")
+          : tf("prijava.title", "Dobrodošli natrag"))}</h1>
+        <p class="pr-sub">${esc(signup
+          ? tf("prijava.createSub", "Spremite favorite i dizajne na svoj račun")
+          : tf("prijava.sub", "Kupaonice, grijanje i klimatizacija"))}</p>
         ${notice}
-        ${google}
-        <div class="pr-div">${esc(tf("prijava.orEmail", "ili e-mailom"))}</div>
-        ${form}
-        <a class="${guestClass}" href="#/">${esc(tf("prijava.guest", "Nastavi kao gost"))}</a>
-        ${configured ? "" : `<p class="pr-note">${esc(tf("prijava.guestHint", "Katalog, dizajner i 3D soba rade bez prijave."))}</p>`}
-        <p class="pr-note">${esc(tf("prijava.localNote", "Favoriti i dizajni spremaju se na ovaj uređaj."))}</p>
+        ${body}
+        ${swap}
       </section>
     </div>`;
 }
@@ -489,9 +585,9 @@ function signedInMarkup(email) {
   const initial = (email || "?").trim().charAt(0).toUpperCase() || "?";
   return `
     <div class="pr-wrap">
-      ${brandMark()}
       <section class="pr-card glass-strong" aria-labelledby="prTitle">
-        ${cardHead("prijava.signedInTitle", "Prijavljeni ste")}
+        ${cardTop()}
+        <h1 class="pr-title" id="prTitle">${esc(tf("prijava.signedInTitle", "Prijavljeni ste"))}</h1>
         <div class="pr-who">
           <span class="pr-avatar" aria-hidden="true">${esc(initial)}</span>
           <span class="pr-whotext">
@@ -560,6 +656,69 @@ export async function render(container) {
   wirePointerSheen(container);
   if (session) wireSignedIn(container);
   else if (configured) { wireForm(container); wireGoogle(container); }
+  wireCardTop(container);
+}
+
+// The theme switch and the mode swap. Wired even when there is no backend:
+// the theme is a client preference and the swap only changes what this card
+// renders, so neither depends on accounts being switched on.
+function wireCardTop(container) {
+  const themeBtn = container.querySelector("#prTheme");
+  if (themeBtn) {
+    const sync = () => {
+      const stored = (() => { try { return localStorage.getItem("akv:theme") || ""; } catch { return ""; } })();
+      const dark = stored ? stored === "dark"
+        : Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+      themeBtn.setAttribute("aria-pressed", String(dark));
+      return dark;
+    };
+    sync();
+    themeBtn.addEventListener("click", () => {
+      const dark = themeBtn.getAttribute("aria-pressed") === "true";
+      // Written through the SAME key js/app.js owns, so the switch here and the
+      // one in the drawer are one setting rather than two that disagree. app.js
+      // re-reads it on its own next applyTheme(); the attribute write below is
+      // what makes it take effect now.
+      try { localStorage.setItem("akv:theme", dark ? "light" : "dark"); } catch { /* storage blocked */ }
+      document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+      sync();
+    });
+  }
+
+  const swap = container.querySelector("#prSwap");
+  swap?.addEventListener("click", () => {
+    mode = mode === "signup" ? "signin" : "signup";
+    if (container.isConnected) render(container);
+  });
+}
+
+// "Zaboravljena lozinka?" — a real reset mail, not a placeholder.
+//
+// The success wording is deliberately conditional ("if that address is
+// registered"): Supabase does not reveal whether an address exists, because an
+// endpoint that did would be an account-enumeration oracle. Saying "sent" would
+// claim something this cannot actually know.
+function wireForgot(container, say, emailInput) {
+  const btn = container.querySelector("#prForgot");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const value = emailInput.value.trim();
+    if (!value || !EMAIL_RE.test(value)) {
+      setFieldError(emailInput, tf("prijava.forgotNeedEmail", "Upišite svoju e-mail adresu pa ponovno pritisnite."));
+      emailInput.focus();
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await requestPasswordReset(value);
+      say(tf("prijava.forgotSent", "Ako je adresa registrirana, poslali smo poveznicu za promjenu lozinke."), "is-ok");
+    } catch (err) {
+      const code = ERR_FALLBACK[err?.code] ? err.code : "other";
+      say(tf("prijava.err." + code, ERR_FALLBACK[code]), "is-err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 // Google is wired separately from wireForm() because it is NOT part of the
@@ -682,6 +841,8 @@ function wireForm(container) {
     input.addEventListener("blur", () => { if (submitted) setFieldError(input, check()); });
   }
 
+  wireForgot(container, say, emailInput);
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     submitted = true;
@@ -698,6 +859,21 @@ function wireForm(container) {
     say("", "");
     busy(true);
     try {
+      if (mode === "signup") {
+        const { needsConfirmation } = await signUp(emailInput.value.trim(), passInput.value);
+        rememberEmail(emailInput.value.trim());
+        if (needsConfirmation) {
+          // The third state: the account exists but there is no session,
+          // because the project confirms addresses by mail. Saying "welcome"
+          // here would be a lie, and saying "failed" would be a worse one.
+          say(tf("prijava.confirmSent", "Račun je otvoren. Provjerite e-poštu i potvrdite adresu."), "is-ok");
+          return;
+        }
+        say(tf("prijava.createdOk", "Račun je otvoren."), "is-ok");
+        window.AKV?.toast?.(tf("prijava.createdOk", "Račun je otvoren."));
+        location.hash = "#/";
+        return;
+      }
       await signIn(emailInput.value.trim(), passInput.value);
       rememberEmail(emailInput.value.trim());
       say(tf("prijava.success", "Prijavljeni ste."), "is-ok");

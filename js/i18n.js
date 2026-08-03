@@ -482,6 +482,23 @@ const DICT = {
      Google's branding guidelines require it verbatim in the sign-in label. */
   "prijava.google": "Nastavi s Google računom",
   "prijava.googleRedirect": "Otvaramo Google prijavu…",
+  /* Account creation + recovery. Both are REAL calls (db.js signUp /
+     requestPasswordReset), not placeholders — see docs/HOUSE_STANDARD.md on
+     never shipping a control that does nothing. */
+  "prijava.forgot": "Zaboravljena lozinka?",
+  "prijava.forgotNeedEmail": "Upišite svoju e-mail adresu pa ponovno pritisnite.",
+  /* Conditional on purpose: Supabase will not confirm whether an address is
+     registered, so neither may this string. */
+  "prijava.forgotSent": "Ako je adresa registrirana, poslali smo poveznicu za promjenu lozinke.",
+  "prijava.firstTime": "Prvi put ovdje?",
+  "prijava.createAccount": "Napravi račun",
+  "prijava.haveAccount": "Već imate račun?",
+  "prijava.toSignin": "Prijavite se",
+  "prijava.createTitle": "Otvorite račun",
+  "prijava.createSub": "Spremite favorite i dizajne na svoj račun",
+  "prijava.signupCta": "Napravi račun",
+  "prijava.createdOk": "Račun je otvoren.",
+  "prijava.confirmSent": "Račun je otvoren. Provjerite e-poštu i potvrdite adresu.",
   "prijava.guest": "Nastavi kao gost",
   "prijava.guestHint": "Katalog, dizajner i 3D soba rade bez prijave.",
   "prijava.localNote": "Favoriti i dizajni spremaju se na ovaj uređaj.",

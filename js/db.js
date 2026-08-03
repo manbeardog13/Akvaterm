@@ -142,6 +142,62 @@ export async function signIn(email, password) {
   return sessionCache;
 }
 
+/** Create an account with email + password.
+ *
+ *  Resolves to { session, needsConfirmation }. needsConfirmation is the case
+ *  that gets missed: when the project has "Confirm email" switched on — it IS
+ *  on for this one — Supabase returns a user with NO session and sends a
+ *  confirmation mail instead. Treating that as a failure would tell someone
+ *  their signup broke moments after it succeeded, and treating it as a success
+ *  would drop them into an app they are not signed in to. It is a third state
+ *  and the caller has to render it as one.
+ *
+ *  Throws an Error with `.code` on the same scale as signIn(). */
+export async function signUp(email, password) {
+  const sb = await initSupabase();
+  if (!sb) throw authError("unavailable");
+  let result;
+  try {
+    result = await sb.auth.signUp({
+      email: String(email ?? "").trim().toLowerCase(),
+      password: String(password ?? ""),
+      // Where the confirmation link lands. Same allow-listed address the OAuth
+      // return uses; anything else is rejected by the project's redirect list
+      // and silently swapped for the Site URL.
+      options: { emailRedirectTo: CONFIG.appUrl || undefined },
+    });
+  } catch (err) {
+    throw authError(authCode(err), err?.message);
+  }
+  if (result?.error) throw authError(authCode(result.error), result.error.message);
+  const session = result?.data?.session ?? null;
+  sessionCache = session;
+  return { session, needsConfirmation: !session && Boolean(result?.data?.user) };
+}
+
+/** Send a password-reset mail.
+ *
+ *  Resolves to true whether or not the address exists, and that is deliberate,
+ *  not laziness: Supabase itself does not distinguish, because an endpoint that
+ *  says "no such user" is an account-enumeration oracle. The UI must therefore
+ *  say "if that address is registered, a link is on its way" rather than
+ *  "sent", which would be a claim this cannot actually make. */
+export async function requestPasswordReset(email) {
+  const sb = await initSupabase();
+  if (!sb) throw authError("unavailable");
+  let result;
+  try {
+    result = await sb.auth.resetPasswordForEmail(
+      String(email ?? "").trim().toLowerCase(),
+      { redirectTo: CONFIG.appUrl || undefined },
+    );
+  } catch (err) {
+    throw authError(authCode(err), err?.message);
+  }
+  if (result?.error) throw authError(authCode(result.error), result.error.message);
+  return true;
+}
+
 /** Google sign-in. Unlike signIn(), this does NOT resolve to a session: on
  *  success the browser LEAVES this page for accounts.google.com and comes back
  *  with ?code=... in the query string, which supabaseClient.js's PKCE settings
