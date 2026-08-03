@@ -355,13 +355,13 @@ html[${AUTH_ATTR}] #main{
    lighter than --paper, which is why it read as a grey block sitting ON the
    page rather than as the page. Dropped to a near-paper tone with the
    separation carried by the rim and the shadow instead of by the fill. */
-:root[data-theme="dark"] .pr-card{background-color:#17181C;--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+:root[data-theme="dark"] .pr-card{background-color:rgba(23,24,28,.94);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{background-color:#17181C;--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+  :root:not([data-theme="light"]) .pr-card{background-color:rgba(23,24,28,.94);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
@@ -430,7 +430,27 @@ html[${AUTH_ATTR}] #main{
 .pr-card,.pr-input,.pr-google,.pr-theme,.pr-themeic{
   transition:background-color .32s var(--smooth),color .32s var(--smooth),border-color .32s var(--smooth);
 }
-.pr-card{padding:28px 24px 24px;border-radius:var(--glass-radius-lg);position:relative}
+/* THE MILKY SURFACE, copied from docs/templates/login.html rather than
+   re-derived. Measured here first: the card was rendering with
+   backdrop-filter:none and a tight 0 4px 14px card shadow - so it had none of
+   the four things that make this surface, and looked like a flat panel.
+
+   All four are required and each is doing a separate job:
+     tint      translucent, so there is something for the blur to show through
+     blur      the actual glass; without it the tint is just a lighter fill
+     top rim   inset 0 1px 0, the lit edge
+     far shadow 0 30px 80px -30px, which is what makes it float rather than sit
+   Dropping any one gives a flat rectangle. */
+.pr-wrap .pr-card{
+  padding:28px 24px 24px;border-radius:30px;position:relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 0 0 1px var(--line),
+    0 30px 80px -30px rgba(0,0,0,.45);
+}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .pr-wrap .pr-card{-webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%)}
+}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only

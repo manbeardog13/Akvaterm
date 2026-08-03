@@ -54,10 +54,10 @@ global font variable.
 
 | Thing | Value |
 | --- | --- |
-| Controls (inputs, buttons) | height **52–54px**, `border-radius` = half the height (a full pill) |
-| Gap between stacked controls | 12px |
+| Controls (inputs, buttons) | height **49px**, `border-radius` **14px** — NOT pills (measured off the reference) |
+| Gap between stacked controls | 11px |
 | Card / sheet radius | 22–36px |
-| Card padding | 38–44px top, 28px sides — **generous** |
+| Card padding | 28px top, 24px sides (measured) |
 | Card shadow | wide and soft: `0 30px 80px -30px` at low alpha, never a hard drop |
 | Easing | `cubic-bezier(.22,1,.36,1)` |
 | Entrance | staggered rise, ~40ms apart, opacity + transform **only** |
@@ -145,21 +145,27 @@ Required, in this order:
 
 1. Wordmark
 2. Heading, **sentence case, left aligned**, with a muted one-line subtitle
-3. **Social sign-in FIRST** — full-width pill, official mark, opaque **white**
-   ground in both themes
+3. **Social sign-in FIRST** — full width, official mark, and it **follows the
+   theme** (light ground in light, `--surface` in dark). The MARK is never
+   re-coloured, which is all Google's guidelines actually require — they publish
+   a dark button for exactly this. A permanently white button on a near-black
+   card is the thing that looks broken.
 4. Hairline divider with a lowercase label ("ili e-mailom")
-5. Email + password as **pill fields with no visible labels** — the field name
-   lives in the `placeholder` and in `aria-label`, so the accessible name is
-   unchanged and a row of uppercase micro-type leaves the screen
-6. Primary action, full-width pill, with a trailing arrow
-7. A quiet way past the screen
+5. Email + password as **filled fields with a real rim and no visible labels**
+   — the field name lives in the `placeholder` and in `aria-label`, so the
+   accessible name is unchanged and a row of uppercase micro-type leaves the
+   screen. **Not pills**: the radius is 14px. A filled row with a rim reads as
+   a recess IN the card; a white bordered box reads as sitting ON it.
+6. Right-aligned "Zaboravljena lozinka?"
+7. Primary action, full width, 14px radius, trailing arrow
+8. Footer swap: "Prvi put ovdje? Napravi račun"
 
 Two rules that are easy to get wrong:
 
-- **The social button's label and border must be literal hex, not tokens.** Its
-  ground is `#FFFFFF` in both themes because the brand mark may not be
-  re-coloured. An `--ink` token renders white-on-white in dark mode —
-  invisible, and *only* in dark mode, so it survives every light-theme review.
+- **The social button needs its OWN theme tokens, not the app's.** Give it
+  `--goog-bg` / `--goog-ink` that flip with the theme. Reusing `--ink` on a
+  hardcoded white ground renders white-on-white in dark mode — invisible, and
+  *only* in dark mode, so it survives every light-theme review.
 - **Never ship a link that does nothing.** No "Forgot password?" until password
   reset exists.
 
