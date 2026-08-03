@@ -176,7 +176,7 @@ html[${AUTH_ATTR}] #main{
    ratio against ASC's 1.504. That ratio difference is the "elongated vs
    squashed" complaint: same content in a narrower column simply runs taller.
    Width is what fixes the shape; the height follows from it. */
-.pr-wrap{margin:auto;width:min(351px,100%);display:flex;flex-direction:column;gap:20px}
+.pr-wrap{margin:auto;width:100%;display:flex;flex-direction:column;gap:20px}
 
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
@@ -435,29 +435,83 @@ html[${AUTH_ATTR}] #main{
 .pr-card,.pr-input,.pr-google,.pr-theme,.pr-themeic{
   transition:background-color .32s var(--smooth),color .32s var(--smooth),border-color .32s var(--smooth);
 }
-/* THE MILKY SURFACE, copied from docs/templates/login.html rather than
-   re-derived. Measured here first: the card was rendering with
-   backdrop-filter:none and a tight 0 4px 14px card shadow - so it had none of
-   the four things that make this surface, and looked like a flat panel.
+/* ===== THE CARD, PORTED FROM ASC VERBATIM =====================================
+   Extracted from the RUNNING ASC login (the rules are inline in its
+   app/login.html, not in any stylesheet - which is why reading css/styles.css
+   never found them and why this surface was missing pieces for six rounds).
+   Copied rule for rule; only the colour tokens are re-pointed.
 
-   All four are required and each is doing a separate job:
-     tint      translucent, so there is something for the blur to show through
-     blur      the actual glass; without it the tint is just a lighter fill
-     top rim   inset 0 1px 0, the lit edge
-     far shadow 0 30px 80px -30px, which is what makes it float rather than sit
-   Dropping any one gives a flat rectangle. */
+   FOUR LAYERS, and the two I never had are the reason it looked flat:
+
+     base      radius 30, padding 30/26/24, --shadow-card, a lit top border,
+               and a sheetIn entrance
+     @supports blur(34px) saturate(150%) brightness(108%) over a TRANSLUCENT
+               fill. The brightness lift is what stops a .55-alpha dark pane
+               from reading as a hole.
+     ::before  a pointer-tracked sheen -
+               radial-gradient(240px 180px at var(--gx) var(--gy)) at .16
+               light / .07 dark. wirePointerSheen() below already writes
+               --gx/--gy, so this needed no JS.
+     ::after   *** THE GRAIN ***  an inline SVG feTurbulence fractalNoise at
+               opacity .035 and mix-blend-mode:overlay. THIS is what makes the
+               surface read as milky frosted glass instead of a flat tint. It
+               was the single biggest missing piece and no amount of adjusting
+               blur or alpha would ever have produced it.
+
+   The inset rims differ by theme and are ASC's own values, not derived. */
 .pr-wrap .pr-card{
-  padding:30px 26px 24px;border-radius:30px;position:relative;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.55),
-    inset 0 0 0 1px var(--line),
-    0 1px 2px -1px rgba(0,0,0,.5),
-    0 8px 20px -10px rgba(0,0,0,.55),
-    0 30px 80px -30px rgba(0,0,0,.45);
+  position:relative;z-index:1;
+  width:min(412px,100%);
+  border-radius:30px;
+  padding:30px 26px 24px;
+  border-top:1px solid var(--glass-rim-top);
+  box-shadow:var(--shadow-card),
+             inset 0 1px 0 rgba(255,255,255,.55),
+             inset 0 -1px 0 rgba(2,3,5,.05);
+  animation:prCard 560ms var(--smooth) both;
+}
+:root[data-theme="dark"] .pr-wrap .pr-card{
+  box-shadow:var(--shadow-card),
+             inset 0 1px 0 rgba(255,255,255,.09),
+             inset 0 -1px 0 rgba(0,0,0,.3);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .pr-wrap .pr-card{
+    box-shadow:var(--shadow-card),
+               inset 0 1px 0 rgba(255,255,255,.09),
+               inset 0 -1px 0 rgba(0,0,0,.3);
+  }
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .pr-wrap .pr-card{-webkit-backdrop-filter:blur(34px) saturate(150%) brightness(1.08);backdrop-filter:blur(34px) saturate(150%) brightness(1.08)}
+  .pr-wrap .pr-card{
+    -webkit-backdrop-filter:blur(34px) saturate(150%) brightness(108%);
+            backdrop-filter:blur(34px) saturate(150%) brightness(108%);
+  }
 }
+/* The sheen. --gx/--gy come from wirePointerSheen(). */
+.pr-wrap .pr-card::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:0;
+  background:radial-gradient(240px 180px at var(--gx,30%) var(--gy,0%),rgba(255,255,255,.16),transparent 70%);
+  transition:opacity .3s;
+}
+:root[data-theme="dark"] .pr-wrap .pr-card::before{
+  background:radial-gradient(240px 180px at var(--gx,30%) var(--gy,0%),rgba(255,255,255,.07),transparent 70%);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .pr-wrap .pr-card::before{
+    background:radial-gradient(240px 180px at var(--gx,30%) var(--gy,0%),rgba(255,255,255,.07),transparent 70%);
+  }
+}
+/* THE GRAIN. Verbatim from ASC, data URI and all. */
+.pr-wrap .pr-card::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:0;
+  opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Content sits above both decorative layers. */
+.pr-wrap .pr-card>*{position:relative;z-index:1}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
