@@ -480,7 +480,7 @@ const DICT = {
   "prijava.orEmail": "ili e-mailom",
   /* "Google" stays untranslated and capitalised — it is a product name, and
      Google's branding guidelines require it verbatim in the sign-in label. */
-  "prijava.google": "Nastavi s Google računom",
+  "prijava.google": "Nastavi s Googleom",
   "prijava.googleRedirect": "Otvaramo Google prijavu…",
   /* Account creation + recovery. Both are REAL calls (db.js signUp /
      requestPasswordReset), not placeholders — see docs/HOUSE_STANDARD.md on

@@ -145,7 +145,16 @@ html[${AUTH_ATTR}] .topbar,
 html[${AUTH_ATTR}] .tabbar{display:none}
 html[${AUTH_ATTR}] #main{
   display:flex;
-  padding:max(20px,env(safe-area-inset-top,0px)) 16px max(24px,env(safe-area-inset-bottom,0px));
+  /* SIDE MARGIN SCALES WITH THE PHONE. A flat 16px left the card almost
+     touching both edges on a 375px screen -- 343px of card in 375px of
+     glass -- which is what made it feel cramped rather than placed.
+     9vw gives the gutter a share of the viewport instead of a fixed
+     number, so a 375px phone gets ~34px a side and the card lands near
+     307px: about 10% narrower, which is the amount asked for. It is
+     clamped at both ends so a 320px phone still gets 24px of air and a
+     desktop does not run the gutter away (the card caps at 360px there
+     regardless, so the upper bound only guards the tablet range). */
+  padding:max(20px,env(safe-area-inset-top,0px)) clamp(24px,9vw,34px) max(24px,env(safe-area-inset-bottom,0px));
 }
 
 /* margin:auto rather than align-items:center — an auto margin centres without
@@ -618,7 +627,7 @@ function signInMarkup(configured) {
   const google = `
       <button type="button" class="btn btn-block pr-google" id="prGoogle"${configured ? "" : " disabled"}>
         ${ICON_GOOGLE}
-        <span class="pr-glabel">${esc(tf("prijava.google", "Nastavi s Google računom"))}</span>
+        <span class="pr-glabel">${esc(tf("prijava.google", "Nastavi s Googleom"))}</span>
       </button>
       <p class="pr-msg" id="prGoogleMsg" role="status" aria-live="polite"></p>`;
 
