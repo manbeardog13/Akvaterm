@@ -92,6 +92,8 @@ const SHELL = [
      tree; this was the only stale entry. */
   "./js/room3d.js",
   "./js/director3d.js",   // room3d imports it statically — a missing entry here is a broken 3D room offline, not a degraded one
+  "./js/motion.js",       // director3d imports it statically — same reasoning, one level deeper
+  "./js/journey.js",      // static import of atelier.js — the journey definition + state machine
   "./js/terma.js",
   "./js/qrshare.js",
   "./js/splash.js",   // post-login transition; lazy-imported, so precached rather than blocking
@@ -133,6 +135,7 @@ const SHELL = [
   "./js/views/proizvod.js",
   "./js/views/dizajner.js",
   "./js/views/soba3d.js",
+  "./js/views/atelier.js",   // #/atelier — the guided journey, additive to soba3d
   "./js/views/savjetnik.js",
   "./js/views/favoriti.js",
   "./js/views/dizajni.js",

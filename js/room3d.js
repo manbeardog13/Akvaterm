@@ -316,7 +316,7 @@ const PRIMITIVE_BUILDERS = { radijator: buildRadijator, klima: buildKlima };
 // Mount
 // ============================================================================
 
-export async function mountRoom(el, { room = {}, assignments = {}, products = [], onReady } = {}) {
+export async function mountRoom(el, { room = {}, assignments = {}, products = [], onReady, onIdleReturn } = {}) {
   const dims = {
     widthM: clampDim(room.widthM, 3),
     depthM: clampDim(room.depthM, 2.5),
@@ -1226,17 +1226,49 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   }
   document.addEventListener("visibilitychange", onVisibility);
 
-  // Touching the room hands control to the user mid-movement; letting go lets
-  // the room breathe again from wherever they left it, rather than snapping
-  // back to a canned pose.
-  function onCinematicGrab() { if (cinematic) { director.yieldToUser(); stopCinematic(); } }
+  // Touching the room hands control to the user; letting go does NOT snap back
+  // — it starts a grace period, and only once that idle period passes with no
+  // further touch does the room ease itself home. Free look is real (the user
+  // can linger, orbit, lean in), but the room's resting state is always
+  // whatever the guide is currently asking about: a caller-supplied
+  // `onIdleReturn` is invoked to re-declare that intent (director3d's normal
+  // verbs), so the RETURN uses the exact same spring easing as the original
+  // move there — never a teleport back. Without a caller-supplied callback
+  // (the free-form /soba3d room, which has no "step" to return to) this falls
+  // back to settleIntoDrift(): breathe wherever the user left it, unchanged
+  // from before this behaviour existed.
+  const IDLE_RETURN_MS = 1800;   // a pause, not a delay — long enough to look around, short enough to feel attentive
+  let idleReturnTimer = 0;
+
+  function armIdleReturn() {
+    clearTimeout(idleReturnTimer);
+    idleReturnTimer = setTimeout(() => {
+      if (disposed) return;
+      if (typeof onIdleReturn === "function") onIdleReturn();
+      else director.settleIntoDrift();
+      startCinematic();
+    }, reducedMotion ? 0 : IDLE_RETURN_MS);
+  }
+
+  function onCinematicGrab() {
+    // Cancel any pending return unconditionally: a re-grab during the grace
+    // period (a second stroke of the same look-around gesture) must extend the
+    // pause, not let a timer armed by the FIRST release fire underneath it.
+    clearTimeout(idleReturnTimer);
+    if (cinematic) { director.yieldToUser(); stopCinematic(); }
+  }
   function onCinematicRelease() {
     if (!director.isIdle() || disposed) return;
-    director.settleIntoDrift();
-    startCinematic();
+    armIdleReturn();
   }
   canvasEl.addEventListener("pointerdown", onCinematicGrab);
   canvasEl.addEventListener("pointerup", onCinematicRelease);
+  // A drag that ends off-canvas fires neither of the above on this element;
+  // without these the room would be stranded in manual mode with no return
+  // ever armed. Mirrors the pointercancel/lostpointercapture pair the fixture
+  // drag elsewhere in this file already relies on for the same reason.
+  canvasEl.addEventListener("pointercancel", onCinematicRelease);
+  canvasEl.addEventListener("lostpointercapture", onCinematicRelease);
 
   let raf = 0;
   let readyFired = false;
@@ -1404,6 +1436,11 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       focusObject(obj, o) { startCinematic(); director.focusObject(obj, o); },
       returnToOverview() { startCinematic(); director.returnToOverview(); },
       settleIntoDrift() { startCinematic(); director.settleIntoDrift(); },
+      // The ambient showcase — an opt-in standing state, never guide-triggered.
+      // Grabbing the camera or any other verb (a chapter change) supersedes it
+      // exactly like every other move; see director3d.js's playTour/stopTour.
+      playTour(o) { startCinematic(); director.playTour(o); },
+      stopTour() { director.stopTour(); },
       stop() { stopCinematic(); },
       // Reduced motion: short dissolve, no ceremonial orbit, no continuous
       // drift. Set on BOTH — the glass blend is engine-side and would otherwise
@@ -1444,7 +1481,10 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       canvasEl.removeEventListener("webglcontextrestored", onContextRestored);
       canvasEl.removeEventListener("pointerdown", onCinematicGrab);
       canvasEl.removeEventListener("pointerup", onCinematicRelease);
+      canvasEl.removeEventListener("pointercancel", onCinematicRelease);
+      canvasEl.removeEventListener("lostpointercapture", onCinematicRelease);
       document.removeEventListener("visibilitychange", onVisibility);
+      clearTimeout(idleReturnTimer);   // an armed return firing into a disposed room is exactly what dispose() exists to prevent
       cinematic = false;
       director.dispose();
       canvasEl.style.touchAction = "pan-y";

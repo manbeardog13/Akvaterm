@@ -227,6 +227,17 @@ const ROUTES = [
   { pattern: /^\/dizajner$/,           load: () => import("./views/dizajner.js") },
   { pattern: /^\/dizajner\/([^/]+)$/,  load: () => import("./views/dizajner.js") },
   { pattern: /^\/soba3d$/,             load: () => import("./views/soba3d.js") },
+  // The guided commissioning journey. ADDITIVE: /soba3d (the free-form room)
+  // is untouched — this is a second front door into the same room3d engine,
+  // driven by js/journey.js and director3d's camera verbs. See
+  // docs/specs/cinematic-journey.md. Deliberately NOT added to NAV below: the
+  // tab bar's corner clearance was hand-measured in-browser for its current
+  // five columns (four NAV entries + "Više" — see .tabbar__surface's comment
+  // in css/styles.css), and a sixth column changes that geometry. The route
+  // works standalone regardless — ROUTES and NAV are independent — so this is
+  // reachable at #/atelier without touching chrome that could not be
+  // re-verified visually in this session. Wiring nav entry is a follow-up.
+  { pattern: /^\/atelier$/,            load: () => import("./views/atelier.js") },
   { pattern: /^\/savjetnik$/,          load: () => import("./views/savjetnik.js") },
   { pattern: /^\/favoriti$/,           load: () => import("./views/favoriti.js") },
   { pattern: /^\/dizajni$/,            load: () => import("./views/dizajni.js") },

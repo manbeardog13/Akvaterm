@@ -236,6 +236,13 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     // the spring carries its current position AND velocity into it, so the
     // change of mind is a redirection, not a restart.
     cancel("superseded");
+    // A standing state (orbit, tour) that was active must be cleared here too,
+    // not just have its activeMove promise cancelled — cancel() only resolves
+    // the PROMISE. Without this, update()'s `if (tour) {...}` block would keep
+    // silently overwriting the basePos/baseTarget this call is about to set,
+    // on every subsequent frame, fighting a move that believes it already won.
+    orbit = null;
+    tour = null;
     basePos.copy(pos);
     baseTarget.copy(target);
     smoothTime = reducedMotion ? Math.min(time, 0.45) : time;
@@ -306,12 +313,19 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
       .addScaledVector(up, sid === "floor" ? 0 : (uv[1] - 0.5) * f.h * 0.4);
     if (reducedMotion) return makeResult(target, false, "reduced-motion");
     cancel("superseded");
+    tour = null;
     orbit = { anchor, normal: f.normal.clone(), tangent, radius, speed, phase: 0, sid };
     smoothTime = SMOOTH.orbit;
     manual = false;
     driftScale = 0;
     requestFrame && requestFrame();
-    return makeResult(target, true, null);
+    // Linked into activeMove (not just returned standalone) so a LATER verb's
+    // cancel("superseded") resolves THIS promise as cancelled instead of
+    // leaving it pending forever — a standing state still owes its caller a
+    // real settlement eventually, even though "settled" itself never fires
+    // for it (see the exclusion in update()).
+    activeMove = makeResult(target, true, null);
+    return activeMove;
   }
 
   /** Track along a grout line at close range — the movement that sells the
@@ -321,6 +335,8 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     const f = surfaceFrame(target);
     const sid = f && f.sid;
     if (!f) return makeResult(target, false, "unknown-target");
+    cancel("superseded");
+    tour = null;
     const up = new THREE.Vector3(0, 1, 0);
     const tangent = f.normal.clone().cross(up).normalize();
     orbit = {
@@ -332,7 +348,66 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     manual = false;
     driftScale = 0;
     requestFrame && requestFrame();
-    return makeResult(target, true, null);
+    activeMove = makeResult(target, true, null);   // see orbitSelection's comment on why
+    return activeMove;
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE ROOM TOUR — an ambient showcase the customer opts into, not something
+  // the guide ever triggers on its own.
+  //
+  // A handful of wide establishing angles around the room, held with a slow
+  // settle and connected by ordinary spring travel, looping until the customer
+  // interrupts it — grabs the camera, advances the guide, or presses stop.
+  // Nothing new under the hood: a tour is goto()-shaped poses advanced on a
+  // hold timer, generated from the room's own dimensions rather than authored
+  // per preset, so it works for any room the journey produces.
+  //
+  // Azimuths are deliberately OFF the room's own axes: dead-on to a wall is
+  // the least interesting frame a wide shot can hold, and axis-aligned angles
+  // are exactly where the glass-coverage hysteresis thresholds sit closest to
+  // the camera's crossing — off-axis avoids grazing them needlessly.
+  // ---------------------------------------------------------------------------
+  const TOUR = {
+    azimuthsDeg: [35, 125, 215, 305],
+    elevation: 1.18,
+    holdSeconds: 4.4,
+    smoothTime: 2.6,   // slower than orbit's 2.2 — a tour is an unhurried look, not an inspection
+  };
+
+  function tourPose(azimuthDeg) {
+    const r = Math.max(dims.widthM, dims.depthM) * 1.05 + 0.4;
+    const rad = THREE.MathUtils.degToRad(azimuthDeg);
+    return {
+      pos: new THREE.Vector3(Math.sin(rad) * r, dims.heightM * TOUR.elevation, Math.cos(rad) * r),
+      target: new THREE.Vector3(0, dims.heightM * 0.35, 0),
+    };
+  }
+
+  let tour = null;
+
+  function playTour(opts = {}) {
+    if (destroyed) return makeResult("tour", false, "disposed");
+    cancel("superseded");
+    orbit = null;
+    const azimuths = Array.isArray(opts.azimuths) && opts.azimuths.length ? opts.azimuths : TOUR.azimuthsDeg;
+    tour = { azimuths, index: 0, hold: opts.holdSeconds ?? TOUR.holdSeconds, holding: 0 };
+    smoothTime = reducedMotion ? Math.min(TOUR.smoothTime, 0.45) : TOUR.smoothTime;
+    const first = tourPose(azimuths[0]);
+    basePos.copy(first.pos);
+    baseTarget.copy(first.target);
+    manual = false;
+    driftScale = 0;
+    requestFrame && requestFrame();
+    activeMove = makeResult("tour", true, null);
+    return activeMove;
+  }
+
+  /** Explicit stop. Resolves the tour's own promise as cancelled — a tour
+   *  ending is an intentional halt, never a "settle". */
+  function stopTour() {
+    tour = null;
+    cancel("tour-stopped");
   }
 
   function focusObject(object3d, { distance = 1.5 } = {}, name) {
@@ -347,6 +422,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
   function returnToOverview() {
     if (destroyed) return makeResult("overview", false, "disposed");
     orbit = null;
+    tour = null;
     const o = overviewPose();
     return goto(o.pos, o.target, SMOOTH.recover, "overview");
   }
@@ -355,6 +431,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
   function settleIntoDrift() {
     cancel("settled-into-drift");
     orbit = null;
+    tour = null;
     basePos.copy(camera.position);
     baseTarget.copy(controls.target);
     smoothTime = SMOOTH.travel;
@@ -367,6 +444,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     cancel("user-took-control");
     manual = true;
     orbit = null;
+    tour = null;
     basePos.copy(camera.position);
     baseTarget.copy(controls.target);
     posVel.set(0, 0, 0);
@@ -386,6 +464,25 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     // Ease drift back in only once the travel has mostly resolved, so a long
     // move is clean and the wander appears as the camera settles.
     driftScale = Math.min(1, driftScale + step * 0.55);
+
+    // Tour advancement: hold at the current waypoint until the camera has
+    // actually ARRIVED (not just until a timer elapses — a slow first travel
+    // must not have its hold eaten by transit time) and stayed for `hold`
+    // seconds, then hand the NEXT waypoint to basePos/baseTarget. Nothing
+    // downstream needs to know this happened: it flows through the ordinary
+    // `else` branch below exactly like any other goto(), because a tour IS
+    // just basePos/baseTarget changing on a timer rather than by a single call.
+    if (tour) {
+      const arrived = isSettled(camera.position.distanceTo(basePos), posVel.length());
+      tour.holding = arrived ? tour.holding + step : 0;
+      if (arrived && tour.holding >= tour.hold) {
+        tour.index = (tour.index + 1) % tour.azimuths.length;
+        const next = tourPose(tour.azimuths[tour.index]);
+        basePos.copy(next.pos);
+        baseTarget.copy(next.target);
+        tour.holding = 0;
+      }
+    }
 
     if (orbit) {
       orbit.phase += step * orbit.speed * (reducedMotion ? 0 : 1);
@@ -422,9 +519,11 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
 
     // Arrival is measured against the BASE pose, never the drifted one: the
     // wander is deliberately perpetual, so a move compared against it could
-    // never be declared settled and `done` would hang forever. An orbit is a
-    // standing state rather than a journey, so it never settles either.
-    if (activeMove && !orbit) {
+    // never be declared settled and `done` would hang forever. Orbit and tour
+    // are both standing states rather than a single journey, so neither ever
+    // settles — a standing state ends by being explicitly stopped or by a
+    // later verb superseding it (see cancel() calls at each entry point).
+    if (activeMove && !orbit && !tour) {
       if (isSettled(camera.position.distanceTo(basePos), posVel.length())) {
         activeMove._finish("settled");
         activeMove = null;
@@ -445,6 +544,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
   return {
     focusSurface, inspectMaterial, orbitSelection, followGroutLine,
     focusObject, returnToOverview, settleIntoDrift, yieldToUser, update,
+    playTour, stopTour,
     setReducedMotion(v) { reducedMotion = !!v; },
     isIdle: () => manual,
     // Live transform, not just the goal — the difference between the two is
@@ -455,7 +555,8 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
         target: controls.target.toArray().map((n) => +n.toFixed(4)),
         wantPos: basePos.toArray().map((n) => +n.toFixed(4)),
         speed: +posVel.length().toFixed(4),
-        orbit: !!orbit, manual, driftScale: +driftScale.toFixed(3),
+        orbit: !!orbit, tour: tour ? { index: tour.index, holding: +tour.holding.toFixed(2) } : false,
+        manual, driftScale: +driftScale.toFixed(3),
       };
     },
     cancel,

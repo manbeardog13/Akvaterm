@@ -321,5 +321,72 @@ test("walls receive but never cast shadows", () => {
 });
 
 // ---------------------------------------------------------------------------
+console.log("\n[contract] the ambient showcase (room tour) and idle-return");
+// ---------------------------------------------------------------------------
+
+test("playTour and stopTour are standing states, not one-shot moves", () => {
+  const start = director3d.indexOf("function playTour");
+  assert(start > 0, "playTour missing");
+  const block = director3d.slice(start, start + 700);
+  assert(/orbit = null/.test(block), "playTour does not clear a conflicting orbit");
+  assert(/activeMove = makeResult\("tour"/.test(block), "playTour's result must be linked to activeMove, or it can never resolve as cancelled");
+});
+
+test("goto() clears both standing states, not just the active-move promise", () => {
+  // The bug this guards: cancel() only resolves activeMove's PROMISE. Without
+  // goto() also nulling `orbit`/`tour`, update()'s standing-state branch would
+  // keep overwriting the position goto() just set, on every following frame.
+  const start = director3d.indexOf("function goto(pos, target, time, name)");
+  const block = director3d.slice(start, start + 800);
+  assert(/orbit = null/.test(block) && /tour = null/.test(block),
+    "goto() does not clear orbit/tour — a running tour would fight a fresh chapter move");
+});
+
+test("every exit path (yieldToUser, settleIntoDrift, returnToOverview) clears the tour", () => {
+  for (const fn of ["function yieldToUser", "function settleIntoDrift", "function returnToOverview"]) {
+    const start = director3d.indexOf(fn);
+    assert(start > 0, `${fn} missing`);
+    const block = director3d.slice(start, start + 300);
+    assert(/tour = null/.test(block), `${fn} does not clear tour`);
+  }
+});
+
+test("tour and settle are both excluded from the settled-promise check", () => {
+  assert(/if \(activeMove && !orbit && !tour\)/.test(director3d),
+    "a standing state must never be reported as settled — it ends by being stopped or superseded, not by arriving");
+});
+
+test("the room's idle-return defaults to settleIntoDrift when no chapter owns it", () => {
+  // /soba3d (the free-form room) passes no onIdleReturn — the free-form room
+  // must keep its original "breathe wherever the user left it" behaviour.
+  const i = room3d.indexOf("function armIdleReturn");
+  const block = room3d.slice(i, i + 500);
+  assert(/typeof onIdleReturn === "function"/.test(block), "no fallback branch for a caller that supplied no callback");
+  assert(/director\.settleIntoDrift\(\)/.test(block), "missing the unchanged free-form fallback");
+});
+
+test("a re-grab during the idle grace period cancels the pending return", () => {
+  const i = room3d.indexOf("function onCinematicGrab");
+  const block = room3d.slice(i, i + 300);
+  assert(/clearTimeout\(idleReturnTimer\)/.test(block),
+    "onCinematicGrab must cancel any pending return unconditionally, or a second look-around stroke gets yanked back mid-gesture");
+});
+
+test("the idle-return timer is cleared on disposal", () => {
+  const i = room3d.indexOf("dispose() {");
+  const block = room3d.slice(i, i + 1500);
+  assert(/clearTimeout\(idleReturnTimer\)/.test(block),
+    "an armed return firing after dispose() would touch a destroyed renderer");
+});
+
+test("the guide never uses utilitarian control vocabulary in user-visible copy", () => {
+  const atelier = src("js/views/atelier.js");
+  // Spot-check the specific phrasing this was corrected away from — a raw
+  // regression here means the premium-vocabulary instruction silently eroded.
+  assert(!/>\s*Play tour\s*</i.test(atelier), "a 'Play tour' label leaked into markup");
+  assert(!/window\.confirm/.test(atelier), "a native confirm() dialog leaked back in — it reads as raw OS chrome inside a glass UI");
+});
+
+// ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) process.exit(1);
