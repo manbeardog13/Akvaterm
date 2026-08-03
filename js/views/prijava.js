@@ -174,6 +174,7 @@ html[${AUTH_ATTR}] #main{
 /* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
    a link: it acts on the address already typed, it does not navigate. */
 .pr-rowend{display:flex;justify-content:flex-end;margin:2px 6px 12px}
+.pr-form fieldset{border:0;margin:0;padding:0;min-inline-size:0}
 .pr-forgot{
   border:0;background:none;padding:4px 2px;cursor:pointer;
   font-family:var(--font-text);font-size:12.5px;font-weight:500;color:var(--muted);
@@ -183,7 +184,7 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 /* The footer swap — ASC's .auth-create. */
-.pr-foot{margin:16px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.pr-foot{margin:20px 0 0;text-align:center;font-size:13px;color:var(--muted)}
 .pr-footlink{
   border:0;background:none;padding:2px;cursor:pointer;
   font-family:var(--font-text);font-size:13px;font-weight:700;color:var(--accent-ink);
@@ -216,7 +217,89 @@ html[${AUTH_ATTR}] #main{
    side, against controls that are 54px tall.
    Concentric corners still hold: side padding 28px, so an inset panel lands on
    var(--r-2xl) - 28. Controls are pills and opt out of that arithmetic. */
-.pr-card{padding:38px 28px 28px;border-radius:var(--glass-radius-lg)}
+.pr-card{padding:38px 28px 28px;border-radius:var(--glass-radius-lg);position:relative}
+
+/* ---- THE THERMAL LOOP ----------------------------------------------------
+   Operator instruction, 2026-08-02: "since this is a platform that deals with
+   heating and cooling, grab some effect that has a loop on running like hot and
+   cold water and apply it to the login page ... as if it's cooling and heating
+   the card".
+
+   Two layers, deliberately, because heating and cooling are not the same event
+   and one gradient cannot say both:
+
+     ::after  is the EDGE - a cool-to-warm band travelling around the card's
+              rim, which is the water moving THROUGH it. A pipe reads by its
+              run, so this one travels.
+     ::before is the BODY - a wide, very soft bloom that swells warm and fades
+              cool in ANTIPHASE with the edge, which is the heat arriving after
+              the water does. A room reads by its temperature, so this one does
+              not travel; it breathes.
+
+   The 22s cycle is deliberate and it is the difference between an effect and a
+   distraction. This sits under a password field, so it must be something you
+   notice only if you stop and look - fast enough to be alive, slow enough that
+   it never competes with the caret.
+
+   HOW THE EDGE IS DRAWN. The rim is a gradient BORDER, which CSS has no
+   property for: the standard construction is two masks composited with xor, so
+   the fill is punched out and only the padding ring survives. That is a paint
+   trick with no element and no dependency. -webkit- prefixes are required for
+   iOS Safari, which is most of this audience.
+
+   BUDGET. Neither layer animates blur, box-shadow or any layout property.
+   background-position on a masked ring is the same technique css/styles.css
+   already uses for the splash's patience shimmer, and the bloom moves on
+   opacity and transform alone. */
+/* THE EDGE. Drawn as a gradient panel sitting 2px PROUD of the card and one
+   layer BEHIND it, so the card's own glass covers the middle and only the ring
+   escapes. That is deliberate: the textbook way to do a gradient border is two
+   masks composited with xor, and it silently rendered nothing here - a masked
+   ring is one unsupported mask-composite away from being invisible, and it
+   fails without an error. A layer behind an opaque-enough surface cannot fail
+   that way; there is no feature to not support. */
+.pr-card::after{
+  content:"";position:absolute;inset:-2px;border-radius:calc(var(--glass-radius-lg) + 2px);
+  pointer-events:none;z-index:-1;
+  background-image:linear-gradient(160deg,
+    var(--accent-bright) 0%, var(--teal-300) 14%,
+    var(--accent-2) 34%, var(--amber-600) 46%,
+    var(--teal-300) 66%, var(--accent-bright) 82%,
+    var(--accent-2) 100%);
+  background-size:100% 300%;
+  opacity:.85;
+  animation:prFlow 22s linear infinite;
+}
+.pr-card::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:0;
+  background:
+    radial-gradient(58% 44% at 18% 8%,var(--accent-2-tint),transparent 68%),
+    radial-gradient(54% 40% at 86% 96%,var(--accent-tint),transparent 66%);
+  opacity:.5;
+  animation:prTemper 22s var(--smooth) infinite;
+}
+/* The card's own children must sit above the body bloom. */
+.pr-card>*{position:relative;z-index:1}
+
+@keyframes prFlow{
+  from{background-position:0 0}
+  to{background-position:0 -300%}
+}
+@keyframes prTemper{
+  0%,100%{opacity:.34;transform:scale(1)}
+  50%{opacity:.72;transform:scale(1.04)}
+}
+/* Ambient decoration on a screen someone is typing a password into. Motion
+   sensitivity is exactly the case it yields to, and the rim keeps its gradient
+   so the card does not lose its edge - it simply stops running. */
+@media(prefers-reduced-motion:reduce){
+  .pr-card::after,.pr-card::before{animation:none}
+  .pr-card::before{opacity:.42}
+}
+/* Hardened modes drop it entirely rather than tint what is behind text. */
+@media(prefers-contrast:more){ .pr-card::before{display:none} }
+@media(forced-colors:active){ .pr-card::before,.pr-card::after{display:none} }
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
    so no blur is ever animated, and pointer devices only. */
@@ -232,16 +315,24 @@ html[${AUTH_ATTR}] #main{
    way and the calm comes from all three together. Centred uppercase display
    type is the loud version of the same words. */
 .pr-title{
-  margin:10px 0 0;font-family:var(--font-display);font-weight:600;
+  margin:0;font-family:var(--font-display);font-weight:600;
   font-size:clamp(25px,6.6vw,30px);line-height:1.2;letter-spacing:-.025em;
   color:var(--ink);text-wrap:balance;
 }
-.pr-sub{margin:7px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
+/* ASC's rhythm, taken from design/login-arched-v2.html rather than guessed:
+   .form .sub carries margin 6px top / 26px BOTTOM, and that bottom margin is
+   the gap that separates the heading block from the first control. Without it
+   the subtitle sits directly on the Google button and the card reads as one
+   undifferentiated column - which is what "spacing between the elements is
+   not good" was pointing at. The rest of the scale below is the same file:
+   divider 18px, fields 12px apart, primary 12px after the forgot row,
+   footer 20px. */
+.pr-sub{margin:6px 0 26px;font-size:14px;line-height:1.5;color:var(--muted)}
 
 /* ---- honest notice (CONFIG empty) ---- */
 .pr-notice{
   display:flex;gap:11px;align-items:flex-start;
-  margin:16px 0 0;padding:12px 13px;border-radius:var(--r-sm,12px);
+  margin:0 0 18px;padding:12px 13px;border-radius:var(--r-sm,12px);
   background:var(--glass-wash);border:1px solid var(--line);
 }
 .pr-notice .pr-nic{flex:none;margin-top:1px;color:var(--accent-2-ink)}
@@ -255,7 +346,7 @@ html[${AUTH_ATTR}] #main{
    aria-label, so nothing is lost to a screen reader and a whole row of
    uppercase micro-type leaves the screen. That subtraction is most of the
    difference in density between the two cards. */
-.pr-form{margin:16px 0 0}
+.pr-form{margin:0}
 .pr-field{display:block;margin-bottom:12px}
 .pr-input{
   display:flex;align-items:center;gap:11px;padding:0 20px;
