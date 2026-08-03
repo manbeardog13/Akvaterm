@@ -250,7 +250,8 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 /* The footer swap — ASC's .auth-create. */
-.pr-foot{margin:18px 0 0;text-align:center;font-size:14px;color:var(--muted)}
+/* 46px is ASC's measured gap from the primary to this line. */
+.pr-foot{margin:46px 0 0;text-align:center;font-size:13px;color:var(--muted)}
 .pr-footlink{
   border:0;background:none;padding:2px;cursor:pointer;
   font-family:var(--font-text);font-size:13px;font-weight:700;color:var(--accent-ink);
@@ -375,6 +376,16 @@ html[${AUTH_ATTR}] #main{
   --glass-hairline:rgba(255,255,255,.38);
   --pr-field-bg:#F4F5F7;
   --pr-track:#E3E5EA;
+  /* THE GREENISH CAST WAS .glass-strong. Its tint is hsl(187 44% 97%) - the
+     Iris TEAL - so the card was a pale green pane, not a milky white one.
+     ASC's light card is pure WHITE at .44 alpha over a #eef0f1 page. Both
+     fills and the rim are re-pointed here; the page follows in styles.css. */
+  --pr-shell:rgba(255,255,255,.44);
+  --pr-shell-solid:rgba(255,255,255,.70);
+  --pr-rim-top:rgba(255,255,255,.75);
+  --pr-shadow:0 1px 2px -1px rgba(20,18,15,.10),
+              0 6px 16px -8px rgba(20,18,15,.15),
+              0 24px 48px -24px rgba(20,18,15,.20);
   /* The Google button follows the theme, as ASC's does - its --surface goes
      #17181c in dark. The MARK is untouched either way, which is what Google's
      guidelines actually require; they publish a dark button precisely for this.
@@ -389,6 +400,7 @@ html[${AUTH_ATTR}] #main{
   --pr-brand-ring:rgba(43,63,216,.60);
   --pr-link:#2B3FD8;
   --pr-r-ctl:14px;
+  --pr-ctl-h:50px;
   --pr-r-field:14px;
 }
 /* ASC's card is barely separable from its page - #17181C on a #020305 canvas -
@@ -396,13 +408,21 @@ html[${AUTH_ATTR}] #main{
    lighter than --paper, which is why it read as a grey block sitting ON the
    page rather than as the page. Dropped to a near-paper tone with the
    separation carried by the rim and the shadow instead of by the fill. */
-:root[data-theme="dark"] .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+:root[data-theme="dark"] .pr-card{
+  --pr-shell:rgba(30,32,38,.55);
+  --pr-shell-solid:rgba(30,32,38,.88);
+  --pr-rim-top:rgba(255,255,255,.16);
+  --pr-shadow:0 1px 2px -1px rgba(0,0,0,.5),0 8px 20px -10px rgba(0,0,0,.55),0 24px 48px -24px rgba(0,0,0,.62);background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
+  :root:not([data-theme="light"]) .pr-card{
+  --pr-shell:rgba(30,32,38,.55);
+  --pr-shell-solid:rgba(30,32,38,.88);
+  --pr-rim-top:rgba(255,255,255,.16);
+  --pr-shadow:0 1px 2px -1px rgba(0,0,0,.5),0 8px 20px -10px rgba(0,0,0,.55),0 24px 48px -24px rgba(0,0,0,.62);background-color:rgba(30,32,38,.55);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
@@ -424,7 +444,7 @@ html[${AUTH_ATTR}] #main{
    rectangle, and it is why the rim brightens rather than the whole control
    lifting on hover. */
 .pr-card .btn-primary{
-  min-height:49px;border-radius:var(--pr-r-ctl);border:0;
+  min-height:var(--pr-ctl-h,50px);border-radius:var(--pr-r-ctl);border:0;
   background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
   /* SENTENCE CASE. css/styles.css:815 sets .btn-amber to text-transform
      uppercase, but the shipped ASC login renders "Prijavi se" - so the rule is
@@ -506,26 +526,28 @@ html[${AUTH_ATTR}] #main{
   width:min(412px,100%);
   border-radius:30px;
   padding:28px 24px 22px;
-  border-top:1px solid var(--glass-rim-top);
-  box-shadow:var(--shadow-card),
+  background-color:var(--pr-shell-solid);
+  border-top:1px solid var(--pr-rim-top);
+  box-shadow:var(--pr-shadow),
              inset 0 1px 0 rgba(255,255,255,.55),
              inset 0 -1px 0 rgba(2,3,5,.05);
   animation:prCard 560ms var(--smooth) both;
 }
 :root[data-theme="dark"] .pr-wrap .pr-card{
-  box-shadow:var(--shadow-card),
+  box-shadow:var(--pr-shadow),
              inset 0 1px 0 rgba(255,255,255,.09),
              inset 0 -1px 0 rgba(0,0,0,.3);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]) .pr-wrap .pr-card{
-    box-shadow:var(--shadow-card),
+    box-shadow:var(--pr-shadow),
                inset 0 1px 0 rgba(255,255,255,.09),
                inset 0 -1px 0 rgba(0,0,0,.3);
   }
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .pr-wrap .pr-card{
+    background-color:var(--pr-shell);
     -webkit-backdrop-filter:blur(34px) saturate(150%) brightness(108%);
             backdrop-filter:blur(34px) saturate(150%) brightness(108%);
   }
@@ -617,7 +639,7 @@ html[${AUTH_ATTR}] #main{
 /* The global input rule owns font-size:16px (iOS must not zoom on focus); only
    the chrome is stripped here so the icon and the field read as one control. */
 .pr-field input{
-  flex:1;min-width:0;min-height:49px;font-size:15.5px;padding:9px 0;
+  flex:1;min-width:0;min-height:var(--pr-ctl-h,50px);font-size:15.5px;padding:9px 0;
   border:0;background:none;box-shadow:none;border-radius:0;
 }
 .pr-field input:focus{outline:none;border:0;box-shadow:none}
@@ -664,8 +686,8 @@ html[${AUTH_ATTR}] #main{
 /* ASC: uppercase, 11.5px, 1.6px tracking (css/styles.css .auth-divider). The
    lowercase version read as a sentence fragment rather than as a separator. */
 .pr-div{
-  display:flex;align-items:center;gap:14px;margin:16px 2px 14px;
-  font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  display:flex;align-items:center;gap:14px;margin:16px 0;
+  font-size:11px;font-weight:600;letter-spacing:.88px;text-transform:uppercase;
   color:var(--muted);
 }
 .pr-div::before,.pr-div::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -687,7 +709,7 @@ html[${AUTH_ATTR}] #main{
    is 10.96:1 and holds in either theme. Same reason the border is a literal:
    --line is a light-on-dark rgba in dark mode and disappears against white. */
 .pr-google{
-  width:100%;min-height:49px;display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;min-height:var(--pr-ctl-h,50px);display:flex;align-items:center;justify-content:center;gap:12px;
   background:var(--pr-goog-bg);color:var(--pr-goog-ink);
   border:1px solid var(--pr-goog-rim);border-radius:var(--pr-r-ctl,14px);
   font-size:14.5px;font-weight:600;

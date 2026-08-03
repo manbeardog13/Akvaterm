@@ -477,7 +477,7 @@ const DICT = {
   "prijava.submit": "Prijavi se",
   "prijava.busy": "Prijava u tijeku…",
   "prijava.or": "ili",
-  "prijava.orEmail": "ili e-mailom",
+  "prijava.orEmail": "ili email",
   /* "Google" stays untranslated and capitalised — it is a product name, and
      Google's branding guidelines require it verbatim in the sign-in label. */
   "prijava.google": "Nastavi s Googleom",
@@ -490,7 +490,7 @@ const DICT = {
   /* Conditional on purpose: Supabase will not confirm whether an address is
      registered, so neither may this string. */
   "prijava.forgotSent": "Ako je adresa registrirana, poslali smo poveznicu za promjenu lozinke.",
-  "prijava.firstTime": "Prvi put ovdje?",
+  "prijava.firstTime": "Prvi put?",
   "prijava.createAccount": "Napravi račun",
   "prijava.haveAccount": "Već imate račun?",
   "prijava.toSignin": "Prijavite se",

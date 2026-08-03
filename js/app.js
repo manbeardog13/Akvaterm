@@ -471,7 +471,7 @@ function themeIsDark() {
 function setThemeColor(dark) {
   let m = document.querySelector('meta[name="theme-color"]');
   if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
-  m.setAttribute("content", dark ? "#0A0C11" : "#F2F2F2");
+  m.setAttribute("content", dark ? "#0A0C11" : "#EEF0F1");
 }
 
 function applyTheme() {
