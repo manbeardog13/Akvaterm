@@ -41,6 +41,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- black-translucent, NOT default: with "default" iOS reserves the status-bar
+     strip and the installed app starts below it, giving a cut-off band under
+     the notch. The env(safe-area-inset-*) padding is inert until this is set. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Prijava — predložak</title>
 <style>
 /* ===================== PROJECT TOKENS — EDIT ONLY THIS ===================== */
@@ -57,7 +62,11 @@
   --link:#2B3FD8; --link-dark:#A9B8FF;
 
   /* Surfaces. Light first; the dark block below overrides. */
-  --page:#F2F2F2; --card:#F4FAFB; --field:#F4F5F7; --track:#E3E5EA;
+  --page:#F2F2F2; --field:#F4F5F7; --track:#E3E5EA;
+  --card-glass:rgba(255,255,255,.55); --card-solid:rgba(255,255,255,.88);
+  --rim-top:rgba(255,255,255,.55); --rim-hi:rgba(255,255,255,.55); --rim-lo:rgba(2,3,5,.05);
+  --sheen:rgba(255,255,255,.16);
+  --shadow-card:0 1px 2px -1px rgba(2,3,5,.10),0 8px 20px -10px rgba(2,3,5,.14),0 24px 48px -24px rgba(2,3,5,.18);
   --ink:#313131; --ink-2:#51484B; --muted:#6B6570;
   --rim:rgba(20,16,14,.10); --rim-strong:rgba(20,16,14,.16);
   --goog-bg:#FFFFFF; --goog-ink:#313131;
@@ -70,7 +79,12 @@
   --spring:cubic-bezier(.34,1.4,.5,1);
 }
 :root[data-theme="dark"]{
-  --page:#020305; --card:#17181C; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+  --page:#0A0C11; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+  --card-glass:rgba(30,32,38,.55); --card-solid:rgba(30,32,38,.88);
+  --rim-top:rgba(255,255,255,.16); --rim-hi:rgba(255,255,255,.09); --rim-lo:rgba(0,0,0,.3);
+  --sheen:rgba(255,255,255,.07);
+  --shadow-card:0 1px 2px -1px rgba(0,0,0,.5),0 8px 20px -10px rgba(0,0,0,.55),0 24px 48px -24px rgba(0,0,0,.62);
+
   --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
   --rim:rgba(244,245,247,.10); --rim-strong:rgba(244,245,247,.16);
   --goog-bg:#17181C; --goog-ink:#F4F5F7;
@@ -78,7 +92,12 @@
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --page:#020305; --card:#17181C; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+    --page:#0A0C11; --field:rgba(244,245,247,.04); --track:rgba(255,255,255,.16);
+  --card-glass:rgba(30,32,38,.55); --card-solid:rgba(30,32,38,.88);
+  --rim-top:rgba(255,255,255,.16); --rim-hi:rgba(255,255,255,.09); --rim-lo:rgba(0,0,0,.3);
+  --sheen:rgba(255,255,255,.07);
+  --shadow-card:0 1px 2px -1px rgba(0,0,0,.5),0 8px 20px -10px rgba(0,0,0,.55),0 24px 48px -24px rgba(0,0,0,.62);
+
     --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
     --rim:rgba(244,245,247,.10); --rim-strong:rgba(244,245,247,.16);
     --goog-bg:#17181C; --goog-ink:#F4F5F7;
@@ -99,30 +118,63 @@ main{margin:auto;width:100%;display:flex;padding:max(20px,env(safe-area-inset-to
 /* THE CARD. "Milky" is not a colour, it is a construction: a translucent tint,
    a real blur behind it, a bright top rim and a wide soft shadow thrown far
    below. Remove any one of the four and it becomes a flat rectangle. */
+/* FOUR LAYERS. Each is a separate job; drop one and it is a flat rectangle.
+   The SOLID fill is the base and @supports swaps in the translucent one only
+   where there is a blur to sit behind it - one fill alone leaves the card 45%
+   transparent on an engine without backdrop-filter. */
 .card{
-  margin:auto;width:min(304px,100%);padding:28px 24px 24px;
+  margin:auto;width:min(412px,100%);padding:30px 26px 24px;
   position:relative;border-radius:var(--r-card);
-  background:color-mix(in srgb,var(--card) 94%,transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.55),
-    inset 0 0 0 1px var(--rim),
-    0 30px 80px -30px rgba(0,0,0,.45);
-  animation:cardIn 620ms var(--ease) 80ms both;
+  background:var(--card-solid);
+  border-top:1px solid var(--rim-top);
+  box-shadow:var(--shadow-card),
+    inset 0 1px 0 var(--rim-hi),
+    inset 0 -1px 0 var(--rim-lo);
+  animation:cardIn 560ms var(--ease) both;
   transition:background-color .32s var(--ease);
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .card{-webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%)}
+  /* brightness(108%) is NOT optional: without it a .55-alpha dark pane reads
+     as a hole punched in the page rather than as glass. */
+  .card{background:var(--card-glass);
+    -webkit-backdrop-filter:blur(34px) saturate(150%) brightness(108%);
+            backdrop-filter:blur(34px) saturate(150%) brightness(108%)}
 }
+/* Layer 3 - pointer-tracked sheen. --gx/--gy are written by the JS below. */
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  background:radial-gradient(240px 180px at var(--gx,30%) var(--gy,0%),var(--sheen),transparent 70%);transition:opacity .3s}
+/* Layer 4 - THE GRAIN. This is what "milky" actually means; no amount of blur
+   or alpha produces it. Verbatim, data URI and all. */
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+.card>*{position:relative;z-index:1}
 @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.985)}}
 
 /* Head row: mark left, theme switch right. */
 .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
 
-/* THE MARK, with an under-glow per identity half. drop-shadow follows the
-   GLYPH; a box-shadow would draw a rectangle behind the text. */
+/* ===== THE LOGO GLOW — CHECK WHICH KIND OF LOGO YOU HAVE ==================
+   TWO RULES. Picking the wrong one produces a hard RECTANGULAR edge around the
+   mark that only appears AFTER a theme switch, which is close to undebuggable
+   if you do not know this.
+
+   RULE 1 - the logo is an <img>:   use filter: drop-shadow().
+     An image has a real box for the filter to be regioned to.
+       .logo{ filter:drop-shadow(0 8px 22px rgba(R,G,B,.35)) }
+
+   RULE 2 - the logo is TEXT (this file): use text-shadow. NEVER drop-shadow.
+     drop-shadow is ALWAYS regioned to a box. A bigger box does not remove the
+     clipping, it moves it. text-shadow has no region: it rasterises with the
+     glyphs and ignores contain:paint, overflow and inline-ness. It also
+     survives a theme change, which a filter region does not - the region is
+     computed once and not recomputed on that repaint.
+
+   Two shadows per half, a tight core plus a wide halo, is what reads as a glow
+   rather than a smudge. One per identity colour on a two-tone mark. */
 .mark{margin:0;font-style:italic;font-weight:800;font-size:clamp(27px,8.5vw,32px);line-height:1.12;letter-spacing:-.01em;white-space:nowrap}
-.mark .a{color:var(--brand-a);filter:drop-shadow(0 6px 16px color-mix(in srgb,var(--brand-a) 45%,transparent))}
-.mark .b{color:var(--brand-b);filter:drop-shadow(0 6px 16px color-mix(in srgb,var(--brand-b) 45%,transparent))}
+.mark .a{color:var(--brand-a);text-shadow:0 2px 6px color-mix(in srgb,var(--brand-a) 42%,transparent),0 6px 20px color-mix(in srgb,var(--brand-a) 34%,transparent)}
+.mark .b{color:var(--brand-b);text-shadow:0 2px 6px color-mix(in srgb,var(--brand-b) 42%,transparent),0 6px 20px color-mix(in srgb,var(--brand-b) 34%,transparent)}
 
 /* Theme switch: plain pill, no glyph. Position says the state. */
 .sw{flex:none;position:relative;width:42px;height:23px;padding:0;border:1px solid transparent;border-radius:999px;background:var(--track);cursor:pointer;transition:background-color .32s var(--ease)}
@@ -218,6 +270,17 @@ h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600
     apply();
   });
   apply();
+
+  // Feeds the card's ::before sheen. Pointer devices with motion allowed only;
+  // the write is a CSS variable, so nothing lays out.
+  var card=document.querySelector(".card");
+  if(card && matchMedia("(hover:hover) and (pointer:fine) and (prefers-reduced-motion: no-preference)").matches){
+    card.addEventListener("pointermove",function(e){
+      var r=card.getBoundingClientRect(); if(!r.width||!r.height) return;
+      card.style.setProperty("--gx",(((e.clientX-r.left)/r.width)*100).toFixed(1)+"%");
+      card.style.setProperty("--gy",(((e.clientY-r.top)/r.height)*100).toFixed(1)+"%");
+    });
+  }
 })();
 </script>
 </body>

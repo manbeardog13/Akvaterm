@@ -118,24 +118,92 @@ value as a measured one.
 | primary | 15px/700, **sentence case** |
 | footer | 14px, 18px above |
 
-### The four treatments that carry to every surface in the app
+### The card material — the exact recipe, extracted not reconstructed
 
-These are what "milky and smooth" actually means. Each is a construction, not a
-colour, and dropping any one flattens the result:
+Every value below was read off ASC's **running** card. They are inline in its
+`app/login.html`, **not** in `css/styles.css` — which is why six rounds of
+"reading ASC's stylesheet" kept missing pieces. Before copying anything,
+confirm which file actually defines it.
 
-- **Milky surface** — a translucent tint **plus** a real `backdrop-filter`
-  blur, **plus** a bright `inset 0 1px 0` top rim, **plus** a wide soft shadow
-  thrown far below (`0 30px 80px -30px`). All four, or it is a flat rectangle.
-- **Moulded edge** — four shadows, never a border: bright top lip, dark bottom
-  lip, containing rim, coloured glow below. A 1px border fights the gradient's
-  light and flattens it.
-- **Under-glow** — `filter: drop-shadow()` in the identity colour, applied per
-  identity half. It follows the *glyph*; `box-shadow` would draw a rectangle.
-- **Cross-fade, never a cut** — `.32s` on background/colour/border across every
-  surface at once, so the screen turns together.
+| token | value | role |
+| --- | --- | --- |
+| `--shell` | `rgba(30,32,38,.55)` | translucent fill, used **with** the blur |
+| `--shell-solid` | `rgba(30,32,38,.88)` | the no-`backdrop-filter` fallback |
+| `--rim-top` | `rgba(255,255,255,.16)` | lit top border |
+| `--shadow-card` | `0 1px 2px -1px rgba(0,0,0,.50)`, `0 8px 20px -10px rgba(0,0,0,.55)`, `0 24px 48px -24px rgba(0,0,0,.62)` | three stacked blacks |
+| page | `#0a0c11` | the ground it rests on |
 
-Motion is opacity and transform only. Never blur, never box-shadow, never a
-layout property.
+**Ship TWO fills, not one.** The solid `.88` is the base; `@supports` swaps in
+the translucent `.55` only where there is a blur to sit behind it. One fill
+leaves the card 45% transparent on an engine without `backdrop-filter`.
+
+**A shadow token name means nothing across projects.** Akvaterm's own
+`--shadow-card` is a *warm brown*; ASC's is three blacks. On a near-black page
+a warm shadow does nothing at all, and the card looks pasted on rather than
+resting. Reading the rule gives `var(--shadow-card)` and looks correct —
+**resolve the token, don't read it.**
+
+### The four layers of a card
+
+Each is a separate job. Drop any one and it is a flat rectangle.
+
+1. **Fill + blur** — `backdrop-filter: blur(34px) saturate(150%) brightness(108%)`.
+   The **brightness lift is not optional**: without it a `.55`-alpha dark pane
+   reads as a hole punched in the page rather than as glass.
+2. **Rims** — `inset 0 1px 0` bright on top, `inset 0 -1px 0` dark on the
+   bottom. Per theme: `.55`/`.05` light, `.09`/`.3` dark.
+3. **Sheen** (`::before`) — pointer-tracked
+   `radial-gradient(240px 180px at var(--gx,30%) var(--gy,0%), …)` at `.16`
+   light / `.07` dark. Needs a tiny JS hook writing `--gx`/`--gy`.
+4. **Grain** (`::after`) — an inline SVG `feTurbulence fractalNoise`,
+   `baseFrequency 0.75`, at `opacity: .035` and `mix-blend-mode: overlay`.
+
+> **The grain is what "milky" actually means.** No amount of tuning blur radius
+> or alpha produces it. Every attempt to get a frosted look without it failed,
+> and had to fail.
+
+Content must carry `position: relative; z-index: 1` to clear layers 3 and 4.
+
+### THE LOGO GLOW — two rules, and you must check which applies
+
+The coloured glow under a wordmark is done **two different ways depending on
+what the logo is.** Getting this wrong produces a hard rectangular edge around
+the mark that appears *after a theme switch* — the single most confusing bug in
+this whole exercise.
+
+**Rule 1 — the logo is an IMAGE (`<img>`): use `filter: drop-shadow()`.**
+This is ASC's way and it is correct there. An image has a real box for the
+filter to be regioned to.
+```css
+.auth-logo { filter: drop-shadow(0 8px 22px rgba(255,78,27,.35)); }
+```
+
+**Rule 2 — the logo is TEXT: use `text-shadow`. Never `drop-shadow`.**
+This is Akvaterm's way, and it exists because `drop-shadow` **is always
+regioned to a box**. Giving it a bigger box does not remove the clipping, it
+only *moves* it. `text-shadow` has no region at all: it rasterises with the
+glyphs and ignores `contain: paint`, `overflow`, and inline-ness.
+```css
+.mark .a { text-shadow: 0 2px 6px rgba(0,0,140,.42), 0 6px 20px rgba(0,0,140,.34); }
+.mark .b { text-shadow: 0 2px 6px rgba(214,37,46,.42), 0 6px 20px rgba(214,37,46,.34); }
+```
+Two shadows per half — a tight core plus a wide halo — is what reads as a glow
+rather than a smudge. On a two-tone mark, apply one per half.
+
+**Why the theme switch triggered it:** a filter region is computed once and is
+not recomputed on that repaint, so the glow ends up drawn against a region that
+no longer matches. That is why it looked fine until you toggled and came back.
+
+### Installed-app chrome — the notch
+
+`apple-mobile-web-app-status-bar-style` must be **`black-translucent`**, not
+`default`. With `default`, iOS *reserves* the status-bar strip and the
+installed app begins below it — a visible cut-off band under the notch. With
+`black-translucent` the app extends underneath and the `env(safe-area-inset-*)`
+padding every fixed surface already pays finally does its job. Those insets are
+inert until this is set.
+
+Pair it with `viewport-fit=cover`.
 
 ## 3b. The login contract
 

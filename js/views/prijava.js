@@ -154,7 +154,11 @@ html[${AUTH_ATTR}] #main{
      clamped at both ends so a 320px phone still gets 24px of air and a
      desktop does not run the gutter away (the card caps at 360px there
      regardless, so the upper bound only guards the tablet range). */
-  padding:max(20px,env(safe-area-inset-top,0px)) 12px max(24px,env(safe-area-inset-bottom,0px));
+  /* 24px a side puts the card at 326px on a 375 viewport - 7% down from the
+     351px that matched ASC exactly, at the operator's request. Padding below
+     comes down with it so the HEIGHT scales too rather than the card just
+     getting narrower and taller. */
+  padding:max(20px,env(safe-area-inset-top,0px)) 24px max(24px,env(safe-area-inset-bottom,0px));
 }
 
 /* margin:auto rather than align-items:center — an auto margin centres without
@@ -501,7 +505,7 @@ html[${AUTH_ATTR}] #main{
   position:relative;z-index:1;
   width:min(412px,100%);
   border-radius:30px;
-  padding:30px 26px 24px;
+  padding:28px 24px 22px;
   border-top:1px solid var(--glass-rim-top);
   box-shadow:var(--shadow-card),
              inset 0 1px 0 rgba(255,255,255,.55),
