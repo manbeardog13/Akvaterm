@@ -224,8 +224,8 @@ html[${AUTH_ATTR}] #main{
   border-radius:50%;
   background:#FFFFFF;
   box-shadow:0 1px 3px rgba(20,16,14,.28),0 0 0 .5px rgba(20,16,14,.06);
-  transition:transform 380ms var(--spring);
   transform:translateY(-50%);
+  transition:transform 380ms var(--spring),background-color .32s var(--smooth);
 }
 .pr-theme[aria-pressed="true"] .pr-themeic{transform:translateY(-50%) translateX(19px)}
 
@@ -432,7 +432,13 @@ html[${AUTH_ATTR}] #main{
    background-color .3s / color .3s) rather than cutting. Applied to every
    surface on this card, so the whole screen turns together instead of the
    card snapping while the page eases. */
-.pr-card,.pr-input,.pr-google,.pr-theme,.pr-themeic{
+/* .pr-themeic is deliberately NOT in this list. transition is a SHORTHAND, so
+   naming the thumb here reset its transform off the transition entirely - and
+   this rule sits later in the sheet than the thumb's own, so it won. The
+   result was a thumb that JUMPED between ends instead of sliding, with no
+   error and nothing in the diff pointing at the switch. The thumb keeps its
+   own complete declaration below, which lists both properties. */
+.pr-card,.pr-input,.pr-google,.pr-theme{
   transition:background-color .32s var(--smooth),color .32s var(--smooth),border-color .32s var(--smooth);
 }
 /* ===== THE CARD, PORTED FROM ASC VERBATIM =====================================
