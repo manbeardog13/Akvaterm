@@ -206,51 +206,26 @@ html[${AUTH_ATTR}] #main{
   transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
 }
 .pr-theme:focus-visible{outline:2px solid var(--pr-link);outline-offset:3px}
-/* THE UNDER-GLOW IS A ONE-SHOT, AND IT IS ONLY UNDERNEATH.
-   Operator instruction, 2026-08-02: "the glow only happens when pressed, and
-   only inside/below the switch, not outside -- only below the switch you see
-   that little glow that appears when the slider moves. Very subtle, very
-   stylish, professional, not glowing at all times."
+/* NO GLOW. It was added on request and is removed on request: on a control
+   this small it read as a smudge under the pill rather than as a signal, and
+   the thumb's travel already says everything the glow was saying. */
 
-   The first version was wrong twice: it was lit permanently, and it was an
-   inset+outset shadow on the whole track, so it haloed the control on every
-   side. This is a single soft bar sitting UNDER the track, at zero opacity
-   until the switch is actually thrown.
-
-   It is triggered from JS with a class rather than by a state selector,
-   because CSS has no way to express "this value just changed" -- an
-   [aria-pressed] rule can only describe where the switch IS, not that it
-   moved, so it can only produce a permanent glow. The class is removed on
-   animationend, so nothing accumulates.
-
-   The colour is the wordmark, and it names the destination rather than the
-   current state: going TO dark lights AKVA navy, going TO light lights TERM
-   red. Set from JS as --pr-glow at the moment of the press. */
-.pr-theme::after{
-  content:"";position:absolute;left:14%;right:14%;bottom:-4px;height:7px;
-  border-radius:50%;pointer-events:none;opacity:0;
-  background:radial-gradient(closest-side,var(--pr-glow,transparent),transparent 76%);
-}
-.pr-theme.is-flip::after{animation:prGlow 640ms var(--smooth) both}
-@keyframes prGlow{0%{opacity:0}30%{opacity:.85}100%{opacity:0}}
-
-/* The thumb carries the two glyphs and slides. transform only. */
 /* The thumb. No glyph inside it: ASC's control is a plain pill and the
    operator asked for the indicator to go. What the control says, it says by
    POSITION and by the one-shot glow underneath - which is enough, and is why
    the sun/moon pair was noise rather than information. */
 .pr-themeic{
-  position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;z-index:1;
+  position:absolute;top:50%;left:2px;width:18px;height:18px;z-index:1;
   border-radius:50%;
   background:#FFFFFF;
   box-shadow:0 1px 3px rgba(20,16,14,.28),0 0 0 .5px rgba(20,16,14,.06);
   transition:transform 380ms var(--spring);
+  transform:translateY(-50%);
 }
-.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(19px)}
+.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateY(-50%) translateX(19px)}
 
 @media(prefers-reduced-motion:reduce){
   .pr-themeic,.pr-themeic svg{transition-duration:1ms}
-  .pr-theme.is-flip::after{animation:none}
 }
 
 /* Right-aligned "Zaboravljena lozinka?" — ASC's .auth-row--end. A button, not
@@ -284,7 +259,20 @@ html[${AUTH_ATTR}] #main{
    375x812. The 74% used before came from .auth-logo in the stylesheet, which
    does not govern this breakpoint; the running page is the reference and the
    source was confidently wrong. */
-.pr-mark{margin:0;font-size:clamp(22px,6.8vw,26px);line-height:1.12}
+.pr-mark{
+  margin:0;font-size:clamp(27px,8.5vw,32px);line-height:1.12;
+  /* ASC throws a drop-shadow in its BRAND colour under the mark
+     (css/styles.css:1308, rgba(255,78,27,.35)). Ours is two-tone, so it takes
+     two: navy under AKVA, red under TERM. drop-shadow follows the glyph
+     outline rather than the box, which is the whole point - a box-shadow here
+     would draw a rectangle behind the text. */
+}
+.pr-mark .akva{filter:drop-shadow(0 6px 16px rgba(0,0,140,.45))}
+.pr-mark .term{filter:drop-shadow(0 6px 16px rgba(214,37,46,.45))}
+:root[data-theme="dark"] .pr-mark .akva{filter:drop-shadow(0 6px 18px rgba(90,120,255,.50))}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .pr-mark .akva{filter:drop-shadow(0 6px 18px rgba(90,120,255,.50))}
+}
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
@@ -346,10 +334,18 @@ html[${AUTH_ATTR}] #main{
   --glass-hairline:rgba(255,255,255,.38);
   --pr-field-bg:#F4F5F7;
   --pr-track:#E3E5EA;
+  /* The Google button follows the theme, as ASC's does - its --surface goes
+     #17181c in dark. The MARK is untouched either way, which is what Google's
+     guidelines actually require; they publish a dark button precisely for this.
+     A permanently white button on a near-black card is the thing that looks
+     wrong, not the dark one. */
+  --pr-goog-bg:#FFFFFF; --pr-goog-ink:#313131;
+  --pr-goog-rim:rgba(0,0,0,.14); --pr-goog-rim-hi:rgba(0,0,0,.26);
+  --pr-field-rim:rgba(20,16,14,.10);
   --pr-brand-1:#3355EE;
   --pr-brand-2:#2B3FD8;
   --pr-brand-3:#1E32AE;
-  --pr-brand-ring:rgba(43,63,216,.42);
+  --pr-brand-ring:rgba(43,63,216,.60);
   --pr-link:#2B3FD8;
   --pr-r-ctl:14px;
   --pr-r-field:14px;
@@ -359,13 +355,16 @@ html[${AUTH_ATTR}] #main{
    lighter than --paper, which is why it read as a grey block sitting ON the
    page rather than as the page. Dropped to a near-paper tone with the
    separation carried by the rim and the shadow instead of by the fill. */
-:root[data-theme="dark"] .pr-card{background-color:rgba(35,38,44,.96);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+:root[data-theme="dark"] .pr-card{background-color:#17181C;--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
+  --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{background-color:rgba(35,38,44,.96);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+  :root:not([data-theme="light"]) .pr-card{background-color:#17181C;--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.55);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
+    --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
+  --pr-goog-bg:#17181C;--pr-goog-ink:#F4F5F7;--pr-goog-rim:rgba(244,245,247,.16);--pr-goog-rim-hi:rgba(244,245,247,.30);--pr-field-rim:rgba(244,245,247,.16);
     --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
     --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 }
@@ -397,7 +396,7 @@ html[${AUTH_ATTR}] #main{
     inset 0 1px 0 rgba(255,255,255,.34),
     inset 0 -1px 0 rgba(0,0,0,.22),
     inset 0 0 0 1px rgba(255,255,255,.10),
-    0 12px 28px -12px var(--pr-brand-ring);
+    0 12px 26px -10px var(--pr-brand-ring);
   transition:transform 180ms var(--spring),box-shadow 220ms var(--smooth),filter 160ms ease;
 }
 @media(hover:hover) and (pointer:fine){
@@ -407,7 +406,7 @@ html[${AUTH_ATTR}] #main{
       inset 0 1px 0 rgba(255,255,255,.46),
       inset 0 -1px 0 rgba(0,0,0,.22),
       inset 0 0 0 1px rgba(255,255,255,.18),
-      0 16px 34px -12px var(--pr-brand-ring);
+      0 16px 32px -10px var(--pr-brand-ring);
   }
 }
 .pr-card .btn-primary:active{transform:scale(.99)}
@@ -424,6 +423,13 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:hover{color:var(--pr-link)}
 .pr-theme:focus-visible,.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline-color:var(--pr-link)}
 
+/* ASC cross-fades its surfaces when the theme flips (css/styles.css:191,
+   background-color .3s / color .3s) rather than cutting. Applied to every
+   surface on this card, so the whole screen turns together instead of the
+   card snapping while the page eases. */
+.pr-card,.pr-input,.pr-google,.pr-theme,.pr-themeic{
+  transition:background-color .32s var(--smooth),color .32s var(--smooth),border-color .32s var(--smooth);
+}
 .pr-card{padding:28px 24px 24px;border-radius:var(--glass-radius-lg);position:relative}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
@@ -480,7 +486,7 @@ html[${AUTH_ATTR}] #main{
      the side-by-side: --input-bg with no outline at rest, so the row reads as a
      recess in the card rather than as a drawn box sitting on it. The hairline
      only appears on focus, where it is doing real work. */
-  background:var(--pr-field-bg);border:1px solid transparent;border-radius:var(--pr-r-field,16px);
+  background:var(--pr-field-bg);border:1px solid var(--pr-field-rim);border-radius:var(--pr-r-field,16px);
   transition:border-color var(--dur) var(--smooth),box-shadow var(--dur) var(--smooth),background var(--dur) var(--smooth);
 }
 .pr-input:focus-within{border-color:var(--accent-ink);box-shadow:0 0 0 4px var(--accent-ring)}
@@ -552,10 +558,11 @@ html[${AUTH_ATTR}] #main{
    --line is a light-on-dark rgba in dark mode and disappears against white. */
 .pr-google{
   width:100%;min-height:49px;display:flex;align-items:center;justify-content:center;gap:12px;
-  background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--pr-r-ctl,14px);
+  background:var(--pr-goog-bg);color:var(--pr-goog-ink);
+  border:1px solid var(--pr-goog-rim);border-radius:var(--pr-r-ctl,14px);
   font-size:14.5px;font-weight:600;
 }
-.pr-google:hover:not(:disabled){background:#FFFFFF;border-color:rgba(0,0,0,.26)}
+.pr-google:hover:not(:disabled){border-color:var(--pr-goog-rim-hi)}
 .pr-google[disabled]{opacity:.55;cursor:not-allowed}
 .pr-google svg{flex:none}
 /* The label carries the pending state; the mark must not spin or fade, so
@@ -905,15 +912,6 @@ function wireCardTop(container) {
       // what makes it take effect now.
       try { localStorage.setItem("akv:theme", dark ? "light" : "dark"); } catch { /* storage blocked */ }
       document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
-      // The glow names where the switch is GOING, not where it was: heading
-      // into dark lights AKVA navy, back into light lights TERM red.
-      themeBtn.style.setProperty("--pr-glow", dark ? "rgba(214,37,46,.85)" : "rgba(60,90,255,.9)");
-      themeBtn.classList.remove("is-flip");
-      // Reading offsetWidth restarts the animation: without it a second press
-      // inside the 640ms window re-adds a class the element already has and
-      // the keyframes do not replay.
-      void themeBtn.offsetWidth;
-      themeBtn.classList.add("is-flip");
       sync();
     });
   }
