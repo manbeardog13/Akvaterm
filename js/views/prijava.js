@@ -272,11 +272,21 @@ html[${AUTH_ATTR}] #main{
      outline rather than the box, which is the whole point - a box-shadow here
      would draw a rectangle behind the text. */
 }
-.pr-mark .akva{filter:drop-shadow(0 6px 16px rgba(0,0,140,.45))}
-.pr-mark .term{filter:drop-shadow(0 6px 16px rgba(214,37,46,.45))}
-:root[data-theme="dark"] .pr-mark .akva{filter:drop-shadow(0 6px 18px rgba(90,120,255,.50))}
+/* THE GLOW WAS BEING CLIPPED, for two reasons that compound:
+     1. .pr-card computes contain:paint, which clips ALL descendant painting to
+        the card's box - a filter's overflow included.
+     2. .akva/.term are INLINE. A filter on an inline box is regioned to the
+        text fragment, so a 16px blur hanging below the baseline gets cut at
+        the fragment edge rather than spreading.
+   inline-block gives each half a real box for the filter region, and the
+   padding below buys the blur somewhere to land inside that box. Both are
+   needed - inline-block alone still clips at the glyph box. */
+.pr-mark .akva,.pr-mark .term{display:inline-block;padding-bottom:10px;margin-bottom:-10px}
+.pr-mark .akva{filter:drop-shadow(0 5px 14px rgba(0,0,140,.50))}
+.pr-mark .term{filter:drop-shadow(0 5px 14px rgba(214,37,46,.50))}
+:root[data-theme="dark"] .pr-mark .akva{filter:drop-shadow(0 5px 16px rgba(90,120,255,.55))}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-mark .akva{filter:drop-shadow(0 6px 18px rgba(90,120,255,.50))}
+  :root:not([data-theme="light"]) .pr-mark .akva{filter:drop-shadow(0 5px 16px rgba(90,120,255,.55))}
 }
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
