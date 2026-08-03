@@ -316,7 +316,6 @@ const PRIMITIVE_BUILDERS = { radijator: buildRadijator, klima: buildKlima };
 // ============================================================================
 
 export async function mountRoom(el, { room = {}, assignments = {}, products = [], onReady } = {}) {
-  retainPrototypes();
   const dims = {
     widthM: clampDim(room.widthM, 3),
     depthM: clampDim(room.depthM, 2.5),
@@ -324,7 +323,12 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   };
   let disposed = false;
 
+  // The renderer FIRST, and the refcount only once it exists. On a device
+  // without WebGL this constructor throws, and a retain taken above it would
+  // never be matched by the release in dispose(), because there is no handle
+  // to dispose — the prototype cache would be pinned for the session.
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  retainPrototypes();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // + shadow.radius = soft edges (PCFSoft is deprecated in r185)
@@ -347,11 +351,29 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   scene.background = new THREE.Color(IRIS.paper);   // --paper #F2F2F2
 
   // RoomEnvironment IBL + one shadow-casting directional (the contract's pair).
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = new RoomEnvironment();
-  const envRT = pmrem.fromScene(envScene, 0.04);
-  scene.environment = envRT.texture;
-  if (typeof envScene.dispose === "function") envScene.dispose();
+  //
+  // Rebuildable, and that is the whole reason this is a function: PMREM's
+  // result is RENDERED into a WebGLRenderTarget, not uploaded from CPU-side
+  // data, so after a lost-and-restored context three has no source to
+  // re-upload it from and scene.environment samples as nothing — every
+  // polished surface in gfx3d.js MATERIAL_TUNING collapses to flat matte
+  // (a metal has no diffuse term; the environment is all it has to reflect).
+  // See js/scene3d.js buildEnvironment() for the measured numbers. The
+  // generator is rebuilt too, not reused: its internal targets and blur
+  // materials belong to the context that just died.
+  let pmrem = null;
+  let envRT = null;
+  function buildEnvironment() {
+    scene.environment = null;
+    if (envRT) { envRT.dispose(); envRT = null; }
+    if (pmrem) { pmrem.dispose(); pmrem = null; }
+    pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new RoomEnvironment();
+    envRT = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envRT.texture;
+    if (typeof envScene.dispose === "function") envScene.dispose();
+  }
+  buildEnvironment();
 
   const sun = new THREE.DirectionalLight(0xfff6ea, 2.2);
   sun.castShadow = true;
@@ -1008,6 +1030,31 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   }
   controls.addEventListener("change", requestRender);
 
+  // ---- Context loss --------------------------------------------------------
+  // A dropped WebGL context is the browser doing its job, not an exotic
+  // failure: live contexts are capped at roughly 16 per browser, and this
+  // room holds one while the user browses saved designs. Without
+  // preventDefault() on the lost event the context is never restorable — the
+  // default is to give up permanently.
+  function onContextLost(e) { e.preventDefault(); }
+  // three's own restore listener was registered when the renderer was
+  // constructed, so it runs before this one — which is what makes rebuilding
+  // here safe. It re-uploads every texture and buffer that still has its
+  // source data on the CPU; the PMREM environment is the one thing here it
+  // cannot restore (rendered, not uploaded — see buildEnvironment()). Unlike
+  // the Dizajner there is no one-shot shadow depth map to re-arm: this
+  // renderer leaves shadow.autoUpdate at its default, so the depth pass
+  // re-rasterises on the next frame anyway. (If damage-driven shadows are
+  // ever ported over in the consolidation, re-arm them here too.) The frame
+  // is drawn synchronously because rendering is damage-driven — nothing else
+  // would repaint a still room — and rAF is paused in a background tab.
+  function onContextRestored() {
+    buildEnvironment();
+    renderFrame();
+  }
+  canvasEl.addEventListener("webglcontextlost", onContextLost);
+  canvasEl.addEventListener("webglcontextrestored", onContextRestored);
+
   resize();
   const ro = new ResizeObserver(resize);
   ro.observe(el);
@@ -1123,18 +1170,26 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       canvasEl.removeEventListener("lostpointercapture", onPointerUp);
       canvasEl.removeEventListener("pointerleave", onPointerLeave);
       canvasEl.removeEventListener("keydown", onKeyDown);
+      canvasEl.removeEventListener("webglcontextlost", onContextLost);
+      canvasEl.removeEventListener("webglcontextrestored", onContextRestored);
       canvasEl.style.touchAction = "pan-y";
       controls.dispose();
       recByGroup.clear();
       fixtureRecs.length = 0;
-      disposeObject(scene, true);
+      disposeObject(scene);
       // Refcounted: the shared GLB prototypes are only actually freed when the
       // last consumer (this room, a mounted Dizajner scene, an in-flight
       // thumbnail render) lets go. See gfx3d.js.
       releasePrototypes();
-      envRT.dispose();
-      pmrem.dispose();
+      if (envRT) { envRT.dispose(); envRT = null; }
+      if (pmrem) { pmrem.dispose(); pmrem = null; }
       renderer.dispose();
+      // The browser caps live WebGL contexts at ~16 and this view mounts and
+      // unmounts as the user moves between the room and saved designs, so the
+      // context is surrendered explicitly rather than left for the GC to get
+      // round to. Listeners are already off, so the lost event this fires is
+      // unobserved.
+      if (typeof renderer.forceContextLoss === "function") renderer.forceContextLoss();
       canvasEl.remove();
     },
   };
