@@ -31,4 +31,10 @@ export const CONFIG = {
 
   // Name of the Supabase Edge Function that proxies Gemini for the advisor.
   termaFunction: "terma",
+
+  // Text-only Terma. TRUE hides every picture affordance in the UI (photo
+  // analysis, AI impresija) and matches the server's TERMA_ENABLED_ACTIONS=chat
+  // secret — the server is the enforcement, this flag is the honest UI for it.
+  // Flip both together, never one without the other.
+  termaTextOnly: true,
 };

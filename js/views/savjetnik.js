@@ -30,6 +30,7 @@ import {
   chat, analyzePhoto, stageRoom, resetChat, isConfigured,
   fileToResizedJpeg, TermaUnavailable,
 } from '../terma.js';
+import { CONFIG } from '../config.js';
 import { getProduct } from '../db.js';
 import { swatchDataUrl } from '../texture.js';
 import { formatEur } from '../domain.js';
@@ -151,9 +152,9 @@ async function productCards(ids) {
         <span class="sv-card-meta">${esc(p.brand || '')}${p.tileSizeMm ? ` · ${p.tileSizeMm[0]}×${p.tileSizeMm[1]} mm` : ''}</span>
         <span class="sv-card-price">${esc(priceLabel(p))}</span>
       </span>
-      <button type="button" class="sv-card-stage" data-stage="${esc(p.id)}"
+      ${CONFIG.termaTextOnly ? '' : `<button type="button" class="sv-card-stage" data-stage="${esc(p.id)}"
         title="${esc(tr('sv.stageHint', 'Generiraj AI impresiju prostora s ovim proizvodom (ilustrativno)'))}">
-        ✨ ${esc(tr('sv.stageBtn', 'AI impresija'))}</button>`;
+        ✨ ${esc(tr('sv.stageBtn', 'AI impresija'))}</button>`}`;
     wrap.appendChild(card);
   }
   scrollLog();
@@ -937,9 +938,9 @@ export async function render(container, params) { // params unused — route car
     <div class="sv-chips" id="svChips">
       ${CHIPS.map(([key, fallback], i) => `<button type="button" class="sv-chip" data-chip="${i}">${esc(tr(key, fallback))}</button>`).join('')}
     </div>
-    <div class="sv-toolrow">
+    ${CONFIG.termaTextOnly ? '' : `<div class="sv-toolrow">
       <button type="button" class="sv-btn" id="svPhoto">📷 ${esc(tr('sv.photoBtn', 'Analiza fotografije'))}</button>
-    </div>
+    </div>`}
     <form class="sv-inputrow" id="svForm" autocomplete="off">
       <input id="svInput" placeholder="${esc(tr('sv.placeholder', 'Pitaj Termu o pločicama, grijanju, klimi…'))}" autocomplete="off">
       <button type="submit" class="sv-btn sv-btn-primary">${esc(tr('sv.send', 'Pošalji'))}</button>
@@ -951,8 +952,11 @@ export async function render(container, params) { // params unused — route car
   const input = els.root.querySelector('#svInput');
 
   if (!transcript.length) {
-    const hello = tr('sv.hello',
-      'Bok! Ja sam Terma, Akvatermova savjetnica. Pitaj me o pločicama, sanitarijama, grijanju ili klimi — ili mi pošalji fotografiju prostora pa ću predložiti što bi se uklopilo.');
+    const hello = CONFIG.termaTextOnly
+      ? tr('sv.helloText',
+        'Bok! Ja sam Terma, Akvatermova savjetnica. Pitaj me o pločicama, sanitarijama, grijanju ili klimi — rado ću predložiti što bi se uklopilo.')
+      : tr('sv.hello',
+        'Bok! Ja sam Terma, Akvatermova savjetnica. Pitaj me o pločicama, sanitarijama, grijanju ili klimi — ili mi pošalji fotografiju prostora pa ću predložiti što bi se uklopilo.');
     transcript.push({ kind: 'bot', text: hello });
     bubble('bot', hello);
   } else {
@@ -971,7 +975,8 @@ export async function render(container, params) { // params unused — route car
     const pair = CHIPS[Number(btn.dataset.chip)];
     if (pair) sendMessage(tr(pair[0], pair[1]));
   });
-  els.root.querySelector('#svPhoto').addEventListener('click', pickPhoto);
+  // Absent in text-only mode — the whole toolrow is not rendered.
+  els.root.querySelector('#svPhoto')?.addEventListener('click', pickPhoto);
   els.file.addEventListener('change', () => {
     const file = els.file.files && els.file.files[0];
     els.file.value = '';

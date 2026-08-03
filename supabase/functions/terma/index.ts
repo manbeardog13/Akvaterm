@@ -99,6 +99,16 @@ const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") || "")
   .map((s) => s.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
+// Deployment-level action allowlist. TERMA_ENABLED_ACTIONS="chat" runs Terma
+// text-only: vision and staging answer 403 action_disabled before touching
+// quota or Gemini, so a disabled action can never spend anything. The rate
+// limits above cannot express "off" (num() treats 0 as unset, by design), so
+// this is the one switch that turns a whole action off. Default: all three.
+const ENABLED_ACTIONS = (Deno.env.get("TERMA_ENABLED_ACTIONS") || "chat,vision,staging")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const SYSTEM = `Ti si Terma, savjetnica tvrtke Akvaterm iz Dubrovnika (vodoinstalacije,
 solarni sistemi, klimatizacija, centralno grijanje — od 1991., partneri: Viessmann,
 Daikin, Riello, Mitsubishi, Wilo, Grundfos). Pomažeš kupcima oko pločica (keramika),
@@ -929,6 +939,13 @@ Deno.serve(async (req) => {
   const action = body.action;
   if (action !== "chat" && action !== "vision" && action !== "staging") {
     return json({ error: "bad_request" }, 400, cors);
+  }
+
+  // A deployment may switch whole actions off (e.g. text-only Terma). Checked
+  // before quota so a refused action never consumes a token, and before the
+  // handlers so it can never reach Gemini.
+  if (!ENABLED_ACTIONS.includes(action)) {
+    return json({ error: "action_disabled" }, 403, cors);
   }
 
   // The paid action is not available to an anonymous caller, full stop.

@@ -75,6 +75,8 @@ function httpError(status, code) {
   const friendly =
     code === 'staging_requires_account'
       ? 'AI impresija zahtijeva prijavu — prijava još nije dostupna u ovoj verziji.'
+    : code === 'action_disabled'
+      ? 'Ova mogućnost trenutačno nije uključena — Terma zasad odgovara samo tekstom.'
     : status === 429 ? 'Terma je trenutačno zauzeta. Pokušaj ponovno za nekoliko sekundi.'
     : status === 503 ? 'Terma još nije uključena na poslužitelju (nedostaje ključ ili tablice iz schema.sql).'
     : status === 401 ? 'Terma ne prihvaća ovaj pristup — provjeri supabaseAnonKey u js/config.js.'
