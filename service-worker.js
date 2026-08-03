@@ -54,7 +54,7 @@
 
    A page may also postMessage {type:"akv:version"} to read this worker's
    version back (optionally passing its own as `v` for a logged comparison). */
-const FALLBACK_VERSION = "v3";           // only for a registration carrying no ?v= — keep == APP_V
+const FALLBACK_VERSION = "v4";           // only for a registration carrying no ?v= — keep == APP_V
 // BUG FIX 2026-08-03: was "v2" but APP_V in js/app.js line 92 is "v3". A hand-registered
 // worker or a stale cached index.html running an older app.js would create orphaned
 // caches (akv-v2 alongside akv-v3) instead of landing in the current cache. Synced to
@@ -93,6 +93,7 @@ const SHELL = [
   "./js/room3d.js",
   "./js/terma.js",
   "./js/qrshare.js",
+  "./js/splash.js",   // post-login transition; lazy-imported, so precached rather than blocking
   "./vendor/qr/qrcode.mjs",   // 58 KB — small enough to precache; keeps offline sharing working
 
   /* ============================ Fonts in SHELL ==========================

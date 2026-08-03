@@ -1042,6 +1042,25 @@ export async function render(container) {
   wireCardTop(container);
 }
 
+
+// The post-login transition. Lazy-imported and FAILURE-TOLERANT on purpose: a
+// static import would put js/splash.js on the login view's critical path, so a
+// cold offline load that missed it in cache would fail the entire view instead
+// of skipping an animation. If the module cannot load, or throws, the fallback
+// is the plain hash change - the user always ends up in the app.
+//
+// playSignInTransition() owns the route change itself and guarantees it fires
+// even if every animation step fails, so there is no navigate() call here to
+// double up with it.
+async function leaveForApp() {
+  try {
+    const m = await import("../splash.js");
+    await m.playSignInTransition();
+  } catch {
+    location.hash = "#/";
+  }
+}
+
 // The theme switch and the mode swap. Wired even when there is no backend:
 // the theme is a client preference and the swap only changes what this card
 // renders, so neither depends on accounts being switched on.
@@ -1254,14 +1273,14 @@ function wireForm(container) {
         }
         say(tf("prijava.createdOk", "Račun je otvoren."), "is-ok");
         window.AKV?.toast?.(tf("prijava.createdOk", "Račun je otvoren."));
-        location.hash = "#/";
+        await leaveForApp();
         return;
       }
       await signIn(emailInput.value.trim(), passInput.value);
       rememberEmail(emailInput.value.trim());
       say(tf("prijava.success", "Prijavljeni ste."), "is-ok");
       window.AKV?.toast?.(tf("prijava.success", "Prijavljeni ste."));
-      location.hash = "#/";
+      await leaveForApp();
     } catch (err) {
       const code = ERR_FALLBACK[err?.code] ? err.code : "other";
       say(tf("prijava.err." + code, ERR_FALLBACK[code]), "is-err");
