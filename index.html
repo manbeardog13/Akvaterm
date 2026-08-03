@@ -80,7 +80,14 @@
      glass right up under the notch via env(safe-area-inset-top), so the bevel
      area reads as part of the bar rather than as a strip of page behind it. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- black-translucent, NOT default. THIS IS THE NOTCH FIX, and it is the whole
+     of it: with "default" iOS RESERVES the status-bar strip and the web app
+     starts below it, which is the band of cut-off page under the notch. With
+     "black-translucent" the app extends UNDERNEATH the status bar and the
+     safe-area insets (which every fixed surface here already pays) place the
+     content correctly. ASC ships black-translucent; this shipped default.
+     Verified by reading the meta off ASC's running login, not assumed. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Akvaterm">
 <title>Akvaterm — Katalog i dizajner</title>
 <meta name="description" content="Akvaterm Dubrovnik — katalog opreme, dizajner prostorija i digitalni savjetnik. Demo verzija.">
@@ -139,9 +146,9 @@
 <style>
   html,body{background:#F2F2F2}
   html{color-scheme:light dark}
-  @media (prefers-color-scheme: dark){ html,body{background:#020305} }
+  @media (prefers-color-scheme: dark){ html,body{background:#0A0C11} }
   html[data-theme="light"],html[data-theme="light"] body{background:#F2F2F2}
-  html[data-theme="dark"],html[data-theme="dark"] body{background:#020305}
+  html[data-theme="dark"],html[data-theme="dark"] body{background:#0A0C11}
 </style>
 
 <!-- fonts.css MUST stay above css/styles.css: it declares the @font-face

@@ -624,7 +624,7 @@ small{font-size:12.5px}
     color-scheme:dark;
     /* ASC'S DARK PALETTE, adopted wholesale on operator instruction. Taken
        from css/styles.css:1410-1425 of the ASC repo, value for value:
-         --bg #020305  --surface #17181c  --surface-2 #1d1e22
+         --bg #0A0C11  --surface #17181c  --surface-2 #1d1e22
          --surface-3 #26272b  --ink #f4f5f7  --ink-2 #d6d8dc  --muted #9aa0a8
        It is a near-black page with a distinctly lifted card, which is why
        ASC's login reads as depth rather than as a grey block - the previous
@@ -636,7 +636,7 @@ small{font-size:12.5px}
          --logo-red    #FF5A63 on --panel      4.90:1
        ASC's --faint #6a6e77 is NOT adopted: it measures 2.92:1 on --surface-3
        and this app has no tier that low. */
-    --paper:#020305; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
+    --paper:#0A0C11; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
     --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
     --line:rgba(244,245,247,.10); --line-input:rgba(244,245,247,.16);
     --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
@@ -677,7 +677,7 @@ small{font-size:12.5px}
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --paper:#020305; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
+  --paper:#0A0C11; --surface:#17181C; --panel:#26272B; --panel-2:#1D1E22;
   --ink:#F4F5F7; --ink-2:#D6D8DC; --muted:#9AA0A8;
   --line:rgba(244,245,247,.10); --line-input:rgba(244,245,247,.16);
   --accent-ink:#5FD3E0; --accent-2-ink:#F0B860;
