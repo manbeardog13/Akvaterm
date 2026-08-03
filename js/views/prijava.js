@@ -169,7 +169,7 @@ html[${AUTH_ATTR}] #main{
 /* ---- wordmark above the card. Colours and face come from .wordmark in
    css/styles.css; nothing here recolours or re-faces it. ---- */
 /* THE CARD TOP: mark left, theme switch right — ASC's .auth-shell row. */
-.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:26px}
 /* THE THEME SLIDER. Operator instruction, 2026-08-02: "replace the light/dark
    button with a little slider that has a background lighting of the logo -- for
    when it goes from light to dark there is a bluish under-colour, and switching
@@ -186,7 +186,7 @@ html[${AUTH_ATTR}] #main{
    element every frame, and this sits on a card that is already compositing
    glass. */
 .pr-theme{
-  flex:none;position:relative;width:56px;height:31px;padding:0;
+  flex:none;position:relative;width:52px;height:29px;padding:0;
   border:1px solid var(--line);border-radius:var(--r-pill);
   background:var(--glass-wash);cursor:pointer;
   transition:background var(--dur) var(--smooth),border-color var(--dur) var(--smooth);
@@ -221,22 +221,18 @@ html[${AUTH_ATTR}] #main{
 @keyframes prGlow{0%{opacity:0}30%{opacity:.85}100%{opacity:0}}
 
 /* The thumb carries the two glyphs and slides. transform only. */
+/* The thumb. No glyph inside it: ASC's control is a plain pill and the
+   operator asked for the indicator to go. What the control says, it says by
+   POSITION and by the one-shot glow underneath - which is enough, and is why
+   the sun/moon pair was noise rather than information. */
 .pr-themeic{
-  position:absolute;top:2px;left:2px;width:25px;height:25px;z-index:1;
-  display:grid;place-items:center;border-radius:50%;
-  background:var(--surface);color:var(--ink-2);
-  box-shadow:0 1px 3px rgba(20,16,14,.35);
-  transition:transform 380ms var(--spring),color var(--dur) var(--smooth);
+  position:absolute;top:3px;left:3px;width:23px;height:23px;z-index:1;
+  border-radius:50%;
+  background:#FFFFFF;
+  box-shadow:0 1px 3px rgba(20,16,14,.28),0 0 0 .5px rgba(20,16,14,.06);
+  transition:transform 380ms var(--spring);
 }
-.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(25px)}
-.pr-themeic svg{position:absolute;width:14px;height:14px;transition:opacity 240ms var(--snap),transform 300ms var(--snap)}
-.pr-themeic svg:nth-child(2){opacity:0;transform:rotate(-40deg) scale(.7)}
-.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(1){opacity:0;transform:rotate(40deg) scale(.7)}
-.pr-theme[aria-pressed="true"] .pr-themeic svg:nth-child(2){opacity:1;transform:none}
-/* The track is a plain neutral pill, as ASC's is - the colour on this control
-   is the under-glow, and a tinted track underneath it would muddy the one
-   signal it carries. */
-.pr-theme{background:var(--pr-field-bg);border-color:var(--line)}
+.pr-theme[aria-pressed="true"] .pr-themeic{transform:translateX(23px)}
 
 @media(prefers-reduced-motion:reduce){
   .pr-themeic,.pr-themeic svg{transition-duration:1ms}
@@ -256,7 +252,7 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 /* The footer swap — ASC's .auth-create. */
-.pr-foot{margin:20px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.pr-foot{margin:20px 0 0;text-align:center;font-size:14px;color:var(--muted)}
 .pr-footlink{
   border:0;background:none;padding:2px;cursor:pointer;
   font-family:var(--font-text);font-size:13px;font-weight:700;color:var(--accent-ink);
@@ -265,7 +261,12 @@ html[${AUTH_ATTR}] #main{
 .pr-footlink:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:6px}
 
 .pr-brand{display:flex;flex-direction:column;align-items:center;gap:12px}
-.pr-mark{margin:0;font-size:clamp(21px,5.6vw,25px);line-height:1.15}
+/* ASC's .auth-logo is width:210px;max-width:74% (css/styles.css:772) - a big,
+   confident mark, not a caption. Ours is TEXT rather than an image, so the
+   match is on rendered WIDTH: this size puts AKVATERM at ~200px inside a 304px
+   content column, i.e. ASC's 74%. It stopped shrinking - every previous value
+   here was judged by eye, which is why it lost a step on each pass. */
+.pr-mark{margin:0;font-size:clamp(30px,9.4vw,36px);line-height:1.12}
 /* The splash's teal-to-amber gesture, at a quieter size. */
 .pr-rule{
   width:64px;height:2px;border-radius:2px;
@@ -326,21 +327,22 @@ html[${AUTH_ATTR}] #main{
   --glass-rim-side:rgba(255,255,255,.20);
   --glass-hairline:rgba(255,255,255,.38);
   --pr-field-bg:#F4F5F7;
+  --pr-track:#E3E5EA;
   --pr-brand-1:#3355EE;
   --pr-brand-2:#2B3FD8;
   --pr-brand-3:#1E32AE;
   --pr-brand-ring:rgba(43,63,216,.42);
   --pr-link:#2B3FD8;
-  --pr-r-ctl:14px;
+  --pr-r-ctl:13px;
   --pr-r-field:16px;
 }
 :root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
-  --pr-field-bg:rgba(255,255,255,.06);
+  --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
-    --pr-field-bg:rgba(255,255,255,.06);
+    --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
     --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 }
@@ -361,7 +363,7 @@ html[${AUTH_ATTR}] #main{
 .pr-card .btn-primary{
   min-height:56px;border-radius:var(--pr-r-ctl);border:0;
   background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
-  color:#fff;font-weight:700;letter-spacing:.02em;
+  color:#fff;font-size:15px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.34),
     inset 0 -1px 0 rgba(0,0,0,.22),
@@ -393,7 +395,7 @@ html[${AUTH_ATTR}] #main{
 .pr-forgot:hover{color:var(--pr-link)}
 .pr-theme:focus-visible,.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline-color:var(--pr-link)}
 
-.pr-card{padding:32px 24px 26px;border-radius:var(--glass-radius-lg);position:relative}
+.pr-card{padding:34px 26px 30px;border-radius:var(--glass-radius-lg);position:relative}
 
 /* Optical refraction, ASC's touch: a soft highlight follows the pointer across
    the glass. Painted FIRST so every text sibling stacks above it, opacity-only
@@ -411,7 +413,7 @@ html[${AUTH_ATTR}] #main{
    type is the loud version of the same words. */
 .pr-title{
   margin:0;font-family:var(--font-display);font-weight:600;
-  font-size:clamp(25px,6.6vw,30px);line-height:1.2;letter-spacing:-.025em;
+  font-size:22px;line-height:1.22;letter-spacing:-.01em;
   color:var(--ink);text-wrap:balance;
 }
 /* ASC's rhythm, taken from design/login-arched-v2.html rather than guessed:
@@ -422,7 +424,7 @@ html[${AUTH_ATTR}] #main{
    not good" was pointing at. The rest of the scale below is the same file:
    divider 18px, fields 12px apart, primary 12px after the forgot row,
    footer 20px. */
-.pr-sub{margin:5px 0 22px;font-size:14px;line-height:1.5;color:var(--muted)}
+.pr-sub{margin:5px 0 22px;font-size:13.5px;line-height:1.5;color:var(--muted)}
 
 /* ---- honest notice (CONFIG empty) ---- */
 .pr-notice{
@@ -442,7 +444,7 @@ html[${AUTH_ATTR}] #main{
    uppercase micro-type leaves the screen. That subtraction is most of the
    difference in density between the two cards. */
 .pr-form{margin:0}
-.pr-field{display:block;margin-bottom:12px}
+.pr-field{display:block;margin-bottom:11px}
 .pr-input{
   display:flex;align-items:center;gap:11px;padding:0 20px;
   /* FILLED AND BORDERLESS, which is ASC's field and the clearest difference in
@@ -457,7 +459,7 @@ html[${AUTH_ATTR}] #main{
 /* The global input rule owns font-size:16px (iOS must not zoom on focus); only
    the chrome is stripped here so the icon and the field read as one control. */
 .pr-field input{
-  flex:1;min-width:0;min-height:54px;padding:11px 0;
+  flex:1;min-width:0;min-height:56px;font-size:15.5px;padding:11px 0;
   border:0;background:none;box-shadow:none;border-radius:0;
 }
 .pr-field input:focus{outline:none;border:0;box-shadow:none}
@@ -520,9 +522,9 @@ html[${AUTH_ATTR}] #main{
    is 10.96:1 and holds in either theme. Same reason the border is a literal:
    --line is a light-on-dark rgba in dark mode and disappears against white. */
 .pr-google{
-  width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:11px;
+  width:100%;min-height:54px;display:flex;align-items:center;justify-content:center;gap:12px;
   background:#FFFFFF;color:#313131;border:1px solid rgba(0,0,0,.14);border-radius:var(--pr-r-ctl,14px);
-  font-size:15px;font-weight:600;
+  font-size:14.5px;font-weight:600;
 }
 .pr-google:hover:not(:disabled){background:#FFFFFF;border-color:rgba(0,0,0,.26)}
 .pr-google[disabled]{opacity:.55;cursor:not-allowed}
@@ -633,7 +635,7 @@ function cardTop() {
       <p class="pr-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></p>
       <button type="button" class="pr-theme" id="prTheme" aria-pressed="false"
               aria-label="${esc(tf("theme.label", "Tamna tema"))}">
-        <span class="pr-themeic">${ICON_SUN}${ICON_MOON}</span>
+        <span class="pr-themeic"></span>
       </button>
     </div>`;
 }
