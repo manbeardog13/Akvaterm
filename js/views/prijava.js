@@ -336,12 +336,17 @@ html[${AUTH_ATTR}] #main{
   --pr-r-ctl:13px;
   --pr-r-field:16px;
 }
-:root[data-theme="dark"] .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+/* ASC's card is barely separable from its page - #17181C on a #020305 canvas -
+   so it reads as part of the screen. Ours was --glass-bg-strong, a full step
+   lighter than --paper, which is why it read as a grey block sitting ON the
+   page rather than as the page. Dropped to a near-paper tone with the
+   separation carried by the rim and the shadow instead of by the fill. */
+:root[data-theme="dark"] .pr-card{background-color:rgba(35,38,44,.96);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
   --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
   --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
   --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]) .pr-card{--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
+  :root:not([data-theme="light"]) .pr-card{background-color:rgba(35,38,44,.96);--pr-link:#A9B8FF;--pr-brand-ring:rgba(76,111,255,.34);
     --pr-field-bg:rgba(255,255,255,.06);--pr-track:rgba(255,255,255,.16);
     --glass-rim-top:rgba(255,255,255,.12);--glass-rim-bottom:rgba(255,255,255,.05);
     --glass-rim-side:rgba(255,255,255,.04);--glass-hairline:rgba(255,255,255,.08)}
@@ -363,7 +368,13 @@ html[${AUTH_ATTR}] #main{
 .pr-card .btn-primary{
   min-height:56px;border-radius:var(--pr-r-ctl);border:0;
   background:linear-gradient(150deg,var(--pr-brand-1),var(--pr-brand-2) 58%,var(--pr-brand-3));
-  color:#fff;font-size:15px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  /* SENTENCE CASE. css/styles.css:815 sets .btn-amber to text-transform
+     uppercase, but the shipped ASC login renders "Prijavi se" - so the rule is
+     overridden somewhere downstream and the STYLESHEET is not the reference
+     here, the running app is. Matching the CSS gave "PRIJAVI SE", which is the
+     one thing that made the two buttons obviously different side by side.
+     Tracking drops to .2px with it: .8px is spacing for capitals. */
+  color:#fff;font-size:15.5px;font-weight:700;letter-spacing:.2px;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.34),
     inset 0 -1px 0 rgba(0,0,0,.22),
