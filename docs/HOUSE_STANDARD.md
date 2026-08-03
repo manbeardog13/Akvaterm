@@ -102,21 +102,64 @@ Measure with `getBoundingClientRect()` and `getComputedStyle()` at the *same*
 viewport on both sides, and diff the numbers. Never present a retyped source
 value as a measured one.
 
-### The verified geometry (375×812, measured — not read)
+### THE LOGIN IS FINAL — this is the specification
+
+**Status: closed, 2026-08-03.** The Akvaterm login is the reference
+implementation and `docs/templates/login.html` is its copy-pasteable form.
+Every number below was measured off a rendered page at **375×812**. Nothing
+here was read out of a stylesheet.
+
+#### Layout
 
 | | value |
 | --- | --- |
-| card width | **81%** of viewport |
-| card radius | 30px |
-| content column | 293px |
+| page gutter | 24px each side |
+| card | `width: min(412px, 100%)`, **327px** at 375 viewport |
+| card radius | **30px** |
+| card padding | **28px / 24px / 22px** |
 | logo | **46.4%** of the content column |
-| title | **24px** Sora 600, -.01em |
-| subtitle | 13.5px, 3px above / 20px below |
-| controls | **49px** tall, **14px** radius |
-| fields | 11px apart, filled, with a real rim |
-| divider | 11.5px uppercase, .13em tracking |
-| primary | 15px/700, **sentence case** |
-| footer | 14px, 18px above |
+| title | **24px** Sora 600, `-.01em`, line-height 1.22 |
+| subtitle | **13.5px**, 3px above / 20px below |
+| social button | **50px** tall, **14px** radius, 14.5px/600 |
+| divider | **"ili email"** — 11px, `.88px` tracking, uppercase, margin `16px 0` |
+| fields | **50px** tall, **14px** radius, **11px** apart, filled + rim |
+| forgot link | right-aligned, 12.5px, margin `2px 4px 10px` |
+| primary | **50px**, **14px** radius, 15px/700, **sentence case** |
+| footer | **"Prvi put?"** — 13px, **46px** below the primary |
+| theme switch | 42×23 track, 18px thumb, **no glyph**, in the head row |
+
+#### Material — light
+
+| token | value |
+| --- | --- |
+| page | `#EEF0F1` |
+| card fill (with blur) | `rgba(255,255,255,.44)` |
+| card fill (fallback) | `rgba(255,255,255,.70)` |
+| top rim | `rgba(255,255,255,.75)` |
+| shadow | `0 1px 2px -1px rgba(20,18,15,.10)`, `0 6px 16px -8px rgba(20,18,15,.15)`, `0 24px 48px -24px rgba(20,18,15,.20)` |
+| sheen | `rgba(255,255,255,.16)` |
+
+#### Material — dark
+
+| token | value |
+| --- | --- |
+| page | `#0A0C11` |
+| card fill (with blur) | `rgba(30,32,38,.55)` |
+| card fill (fallback) | `rgba(30,32,38,.88)` |
+| top rim | `rgba(255,255,255,.16)` |
+| shadow | `0 1px 2px -1px rgba(0,0,0,.50)`, `0 8px 20px -10px rgba(0,0,0,.55)`, `0 24px 48px -24px rgba(0,0,0,.62)` |
+| inset rims | `inset 0 1px 0 rgba(255,255,255,.09)`, `inset 0 -1px 0 rgba(0,0,0,.3)` |
+| sheen | `rgba(255,255,255,.07)` |
+| social button | goes **dark** (`#17181C`), mark untouched |
+
+Shared by both: `backdrop-filter: blur(34px) saturate(150%) brightness(108%)`,
+grain at `.035` overlay, `.32s` cross-fade on every surface.
+
+> **THE CARD MUST NOT INHERIT THE APP PALETTE.** Akvaterm's own glass tint is
+> `hsl(187 44% 97%)` — a teal — and while the card used it, the "milky white"
+> surface was a pale **green** pane. It shipped that way and had to be reported.
+> Give the card its own fill/rim/shadow tokens per theme so a palette can never
+> reach it.
 
 ### The card material — the exact recipe, extracted not reconstructed
 

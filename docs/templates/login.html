@@ -61,19 +61,22 @@
   --cta-ring-dark:rgba(76,111,255,.55);
   --link:#2B3FD8; --link-dark:#A9B8FF;
 
-  /* Surfaces. Light first; the dark block below overrides. */
-  --page:#F2F2F2; --field:#F4F5F7; --track:#E3E5EA;
-  --card-glass:rgba(255,255,255,.55); --card-solid:rgba(255,255,255,.88);
-  --rim-top:rgba(255,255,255,.55); --rim-hi:rgba(255,255,255,.55); --rim-lo:rgba(2,3,5,.05);
+  /* Surfaces. Light first; the dark block below overrides.
+     THE CARD HAS ITS OWN FILL/RIM/SHADOW TOKENS ON PURPOSE. Reusing an app
+     palette's glass tint is how the Akvaterm card shipped as a pale GREEN
+     pane - that palette's tint is hsl(187 44% 97%), a teal, and "milky white"
+     silently became milky green. Keep these independent. */
+  --page:#EEF0F1; --field:#F4F5F7; --track:#E3E5EA;
+  --card-glass:rgba(255,255,255,.44); --card-solid:rgba(255,255,255,.70);
+  --rim-top:rgba(255,255,255,.75); --rim-hi:rgba(255,255,255,.55); --rim-lo:rgba(2,3,5,.05);
   --sheen:rgba(255,255,255,.16);
-  --shadow-card:0 1px 2px -1px rgba(2,3,5,.10),0 8px 20px -10px rgba(2,3,5,.14),0 24px 48px -24px rgba(2,3,5,.18);
+  --shadow-card:0 1px 2px -1px rgba(20,18,15,.10),0 6px 16px -8px rgba(20,18,15,.15),0 24px 48px -24px rgba(20,18,15,.20);
   --ink:#313131; --ink-2:#51484B; --muted:#6B6570;
   --rim:rgba(20,16,14,.10); --rim-strong:rgba(20,16,14,.16);
   --goog-bg:#FFFFFF; --goog-ink:#313131;
 
   /* Geometry, measured off the reference at 375x812. */
-  --r-card:30px; --r-ctl:14px; --ctl-h:49px;
-  --card-w:81%;                   /* of viewport, on the device */
+  --r-card:30px; --r-ctl:14px; --ctl-h:50px;
 
   --ease:cubic-bezier(.22,1,.36,1);
   --spring:cubic-bezier(.34,1.4,.5,1);
@@ -113,7 +116,7 @@ body{
   font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   transition:background-color .32s var(--ease),color .32s var(--ease);
 }
-main{margin:auto;width:100%;display:flex;padding:max(20px,env(safe-area-inset-top)) clamp(18px,9.5vw,36px) max(24px,env(safe-area-inset-bottom))}
+main{margin:auto;width:100%;display:flex;padding:max(20px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom))}
 
 /* THE CARD. "Milky" is not a colour, it is a construction: a translucent tint,
    a real blur behind it, a bright top rim and a wide soft shadow thrown far
@@ -123,7 +126,7 @@ main{margin:auto;width:100%;display:flex;padding:max(20px,env(safe-area-inset-to
    where there is a blur to sit behind it - one fill alone leaves the card 45%
    transparent on an engine without backdrop-filter. */
 .card{
-  margin:auto;width:min(412px,100%);padding:30px 26px 24px;
+  margin:auto;width:min(412px,100%);padding:28px 24px 22px;
   position:relative;border-radius:var(--r-card);
   background:var(--card-solid);
   border-top:1px solid var(--rim-top);
@@ -187,10 +190,10 @@ h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600
 .btn{width:100%;min-height:var(--ctl-h);border-radius:var(--r-ctl);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;font:600 14.5px inherit}
 .goog{background:var(--goog-bg);color:var(--goog-ink);border:1px solid var(--rim-strong);transition:background-color .32s var(--ease),color .32s var(--ease),border-color .32s var(--ease)}
 
-.div{display:flex;align-items:center;gap:14px;margin:16px 2px 14px;font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.div{display:flex;align-items:center;gap:14px;margin:16px 0;font-size:11px;font-weight:600;letter-spacing:.88px;text-transform:uppercase;color:var(--muted)}
 .div::before,.div::after{content:"";flex:1;height:1px;background:var(--rim)}
 
-.field{display:flex;align-items:center;gap:11px;padding:0 20px;margin-bottom:11px;background:var(--field);border:1px solid var(--rim-strong);border-radius:var(--r-ctl);transition:border-color .2s var(--ease),box-shadow .2s var(--ease),background-color .32s var(--ease)}
+.field{display:flex;align-items:center;gap:11px;padding:0 18px;margin-bottom:11px;background:var(--field);border:1px solid var(--rim-strong);border-radius:var(--r-ctl);transition:border-color .2s var(--ease),box-shadow .2s var(--ease),background-color .32s var(--ease)}
 .field:focus-within{border-color:var(--cta-2);box-shadow:0 0 0 4px var(--cta-ring)}
 .field input{flex:1;min-width:0;min-height:var(--ctl-h);border:0;background:none;outline:none;color:var(--ink);font:15.5px inherit}
 .field input::placeholder{color:var(--muted)}
@@ -214,8 +217,9 @@ h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600
 @media(hover:hover){.cta:hover{filter:brightness(1.05);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.46),inset 0 -1px 0 rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.18),0 16px 32px -10px var(--cta-ring)}}
 .cta:active{transform:scale(.99)}
 
-.foot{margin:18px 0 0;text-align:center;font-size:14px;color:var(--muted)}
-.foot button{border:0;background:none;padding:2px;cursor:pointer;font:600 14px inherit;color:var(--link)}
+/* 46px, measured. The primary needs real air under it before the swap. */
+.foot{margin:46px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.foot button{border:0;background:none;padding:2px;cursor:pointer;font:600 13px inherit;color:var(--link)}
 
 @media(prefers-reduced-motion:reduce){
   .card{animation:none}
@@ -242,7 +246,7 @@ h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600
       Nastavi s Googleom
     </button>
 
-    <div class="div">ili e-mailom</div>
+    <div class="div">ili email</div>
 
     <label class="field"><input type="email" placeholder="Email" aria-label="Email" autocomplete="email"></label>
     <label class="field"><input type="password" placeholder="Lozinka" aria-label="Lozinka" autocomplete="current-password"></label>
@@ -251,7 +255,7 @@ h1{margin:0;font-family:Sora,system-ui,sans-serif;font-size:24px;font-weight:600
 
     <button type="submit" class="btn cta">Prijavi se →</button>
 
-    <p class="foot">Prvi put ovdje? <button type="button">Napravi račun</button></p>
+    <p class="foot">Prvi put? <button type="button">Napravi račun</button></p>
   </section>
 </main>
 
