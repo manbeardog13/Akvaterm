@@ -273,6 +273,8 @@ const ICONS = {
   close: SVG(`<path d="M6 6l12 12M18 6L6 18"/>`),
   // Zasluge — an award ribbon, the one glyph that reads as "credit given"
   // rather than "information" or "settings".
+  // Terma — a spark, the conventional "this is AI" mark.
+  terma: SVG(`<path d="M12 3.4l1.8 4.6 4.6 1.8-4.6 1.8-1.8 4.6-1.8-4.6L5.6 9.8l4.6-1.8z"/><path d="M18.3 15.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>`),
   zasluge: SVG(`<circle cx="12" cy="9" r="5.4"/><path d="M8.6 13.4L7.2 20.6l4.8-2.5 4.8 2.5-1.4-7.2"/>`),
   signout: SVG(`<path d="M15.4 16.6l4.2-4.6-4.2-4.6"/><path d="M19.2 12H9.4"/><path d="M12.4 4.4H5.6a1.2 1.2 0 0 0-1.2 1.2v12.8a1.2 1.2 0 0 0 1.2 1.2h6.8"/>`),
 };
@@ -301,8 +303,18 @@ function mountFrame() {
   const link = (n, cls) =>
     `<a href="#${n.route}" data-route="${n.route}"${cls ? ` class="${cls}"` : ""}><span class="ic">${ICONS[n.icon]}</span><span class="lbl">${esc(T(n.key, n.fb))}</span></a>`;
   const moreLabel = esc(T("nav.vise", "Više"));
-  const moreBtn = (cls) =>
-    `<button type="button" class="${cls}" aria-haspopup="menu" aria-expanded="false"><span class="ic">${ICONS.vise}</span><span class="lbl">${moreLabel}</span></button>`;
+  // THE "..." IS NOW TERMA. Its menu held Favoriti, Dizajni and Odjava - all
+  // three already in the left drawer, so it was three duplicate rows behind an
+  // extra tap. The slot is better spent on the one thing that has nowhere else
+  // to live. openMore()/closeMore() stay in this file because the popover
+  // machinery is still referenced by the route handler; nothing renders a
+  // trigger for it any more.
+  const moreBtn = () =>
+    `<button type="button" class="btn btn-ghost terma-btn" id="termaBtn"
+             aria-haspopup="dialog" aria-expanded="false" aria-controls="aiPanel">
+       <span class="terma-shine" aria-hidden="true"></span>
+       <span class="ic">${ICONS.terma}</span><span class="lbl">${esc(T("terma.name", "Terma AI"))}</span>
+     </button>`;
   // Drawer row. Same <a> shape as the top-nav link, plus the icon column the
   // ASC sidebar aligns every label against.
   const sideLink = (n) =>
@@ -318,7 +330,7 @@ function mountFrame() {
         <a class="brand wordmark" href="#/" aria-label="Akvaterm"><span class="akva">AKVA</span><span class="term">TERM</span></a>
         <nav class="topbar-nav" aria-label="${esc(T("a11y.primaryNav", "Glavna navigacija"))}">${NAV.map((n) => link(n)).join("")}</nav>
         <span class="spacer"></span>
-        ${moreBtn("btn btn-ghost more-btn")}
+        ${moreBtn()}
       </div>
     </header>
     <main id="main"></main>
@@ -795,7 +807,13 @@ async function route() {
     // Lazy-imported and fire-and-forget: it is not on the first-paint path, and
     // a failure to load it must never take the app down with it.
     import("./aidock.js")
-      .then((m) => m.mount())
+      .then((m) => {
+        m.mount();
+        document.getElementById("termaBtn")?.addEventListener("click", (e) => {
+          e.stopPropagation();   // the dock closes on any outside pointerdown
+          m.toggle();
+        });
+      })
       .catch((err) => console.warn("[app] Terma dock unavailable:", err?.message || err));
   }
   setActiveNav(path);

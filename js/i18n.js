@@ -521,6 +521,7 @@ const DICT = {
   "prijava.toCatalog": "U katalog",
   "a11y.prijavaCard": "Prijava na Akvaterm",
   /* Left drawer + theme switch (js/app.js). */
+  "terma.name": "Terma AI",
   "nav.zasluge": "Zasluge",
   /* Credits (js/views/zasluge.js). The CC-BY section is a licence obligation,
      not a courtesy — the wording says so on screen deliberately. */

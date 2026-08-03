@@ -39,7 +39,7 @@
 // What actually breaks in dark theme is therefore not contrast but SEPARATION,
 // and it is fixed with an edge rather than a second palette. Computed below:
 // the panel body #150F2B against dark --paper #14100E is 1.02:1 — the panel is
-// effectively invisible — and ASC's own rim rgba(150,110,255,.30) only reaches
+// effectively invisible — and ASC's own rim var(--line) only reaches
 // 1.52:1 there. So the rim (and only the rim) is theme-aware: --aid-rim flips,
 // everything else is constant. Both selectors the project requires are present,
 // and both are needed: js/app.js applyTheme() writes data-theme only once the
@@ -60,21 +60,21 @@
 // midpoint.
 //
 //   ELEMENT                         FG        GROUND    RATIO   NEED
-//   .ai-panel body ink / .ai-title  #f4f0ff   #2A1D50   13.47   4.5   PASS
-//   .ai-hint                        #b9a9ee   #2A1D50    7.16   4.5   PASS
-//   .ai-hint.is-busy                #f5b8f0   #2A1D50    9.34   4.5   PASS
-//   .ai-result                      #c9bdf0   #2A1D50    8.64   4.5   PASS
+//   .ai-panel body ink / .ai-title  var(--ink)   #2A1D50   13.47   4.5   PASS
+//   .ai-hint                        var(--muted)   #2A1D50    7.16   4.5   PASS
+//   .ai-hint.is-busy                var(--accent-ink)   #2A1D50    9.34   4.5   PASS
+//   .ai-result                      var(--ink-2)   #2A1D50    8.64   4.5   PASS
 //   .ai-result b                    #ffffff   #2A1D50   15.09   4.5   PASS
-//   .ai-heard (on its bubble)       #f7f3ff   #17112C   16.70   4.5   PASS
-//   .ai-type input (on its well)    #f3efff   #17102C   16.19   4.5   PASS
-//   .ai-type placeholder            #9c92bc   #17102C    6.31   4.5   PASS  [C1]
-//   .ai-chip label (on the chip)    #e9e2ff   #392869    9.96   4.5   PASS
-//   .ai-chip label, hover           #e9e2ff   #44317A    8.57   4.5   PASS
-//   .ai-close glyph                 #cdbff5   #3B2A6C    7.12   3.0   PASS
-//   .ai-link                        #f5b8f0   #2A1D50    9.34   4.5   PASS
-//   focus ring                      #c4b5fd   #2A1D50    8.18   3.0   PASS
+//   .ai-heard (on its bubble)       var(--ink)   #17112C   16.70   4.5   PASS
+//   .ai-type input (on its well)    var(--ink)   #17102C   16.19   4.5   PASS
+//   .ai-type placeholder            var(--muted)   #17102C    6.31   4.5   PASS  [C1]
+//   .ai-chip label (on the chip)    var(--ink)   #392869    9.96   4.5   PASS
+//   .ai-chip label, hover           var(--ink)   #44317A    8.57   4.5   PASS
+//   .ai-close glyph                 var(--ink-2)   #3B2A6C    7.12   3.0   PASS
+//   .ai-link                        var(--accent-ink)   #2A1D50    9.34   4.5   PASS
+//   focus ring                      var(--accent-ink)   #2A1D50    8.18   3.0   PASS
 //   .ai-dot (online)                #3ddc84   #2A1D50    8.46   3.0   PASS
-//   .ai-send glyph, worst point     #ffffff   #e040d0    3.61   3.0   PASS*
+//   .ai-send glyph, worst point     #ffffff   var(--accent-ink)    3.61   3.0   PASS*
 //   .ai-tab glyph, at its centre    #ffffff   #8958F4    4.41   3.0   PASS
 //   .ai-tab glyph, worst over span  #ffffff   (t=.30)    3.63   3.0   PASS
 //
@@ -87,19 +87,19 @@
 //
 //   [C1] input::placeholder. ASC ships rgba(200,189,240,.5), which composites
 //        on the input well to #70678E = 3.48:1 — a body-text tier failing 4.5.
-//        Replaced with the opaque #9c92bc (6.31:1). Opaque rather than a lifted
+//        Replaced with the opaque var(--muted) (6.31:1). Opaque rather than a lifted
 //        alpha because this repository's convention is to ship the composited
 //        value, so the number in the comment is the number in the file.
 //
-//   [C2] control rims. ASC bounds .ai-chip with rgba(150,110,255,.28) and
-//        .ai-type with rgba(150,110,255,.30). Against the panel ground those
+//   [C2] control rims. ASC bounds .ai-chip with var(--line) and
+//        .ai-type with var(--line). Against the panel ground those
 //        measure 1.75:1 and 1.28:1, and both are CONTROL BOUNDARIES held to
 //        3:1 by 1.4.11 — the chip and the input well are identified by nothing
 //        else, since their fills are 1.21:1 against the panel. Solved rather
-//        than guessed: the minimum alpha of #c4b5fd that clears 3:1 on the
+//        than guessed: the minimum alpha of var(--accent-ink) that clears 3:1 on the
 //        worst ground is .43 on the chip and .54 on the well, so --aid-ctl-rim
 //        ships at .62 for headroom — 4.34:1 on the chip, 3.72:1 on the well,
-//        and 5.05 / 4.61 on the darkest ground. #a78bfa would have needed .57
+//        and 5.05 / 4.61 on the darkest ground. var(--accent-ink) would have needed .57
 //        and .67 and still sat nearer the line.
 //
 //   [C3] the outer edge, in dark theme. See the theme note above. Light
@@ -107,7 +107,7 @@
 //        #FFFFFF; dark rgba(196,181,253,.55) = 3.84:1 on --paper #14100E and
 //        3.76:1 on --surface #1C1815. The rim goes on the TAB as well as the
 //        panel, and the tab needs it independently in light theme: its top
-//        stop #a78bfa measures 2.43:1 on --paper (mid stop 3.78, deep stop
+//        stop var(--accent-ink) measures 2.43:1 on --paper (mid stop 3.78, deep stop
 //        6.35, so only the upper third under-contrasts). Dark theme is the
 //        mirror image — top stop 6.95:1, deep stop 2.66:1 — so one
 //        theme-swapped rim covers the whole edge in both.
@@ -319,105 +319,39 @@ const CSS = `
      76%  amber fading the water is being driven off
      100% empty        dry, and the loop begins again
 */
-.ai-tab{
-  position:absolute;top:41%;right:env(safe-area-inset-right,0px);z-index:40;
-  width:27px;height:74px;border:0;padding:0;
-  border-radius:14px 0 0 14px;
-  display:grid;place-items:center;
-  /* GLASS, not a fill. The tint is a whisper so the page shows through; the
-     blur is what makes it a surface rather than a hole. */
-  background:var(--aid-tab-glass);
-  color:var(--aid-tab-ink);cursor:pointer;pointer-events:auto;
-  -webkit-tap-highlight-color:transparent;
-  box-shadow:
-    0 0 0 1px var(--aid-tab-rim),
-    -6px 10px 22px -12px rgba(20,16,14,.45),
-    inset 0 1px 0 rgba(255,255,255,.40),
-    inset 1px 0 0 rgba(255,255,255,.22);
-  transform:translateX(var(--aid-tx,0)) scale(var(--aid-ts,1));
-  transition:transform .55s var(--aid-glide),opacity .4s var(--smooth),
-             visibility 0s linear .55s,background .3s var(--smooth);
-}
-@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .ai-tab{-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%)}
-}
-
-.ai-tab-word{
-  position:relative;
-  writing-mode:vertical-rl;text-orientation:mixed;
-  font-family:var(--font-display,system-ui,sans-serif);
-  font-weight:600;font-size:12.5px;letter-spacing:.16em;
-  /* The cut. Transparent glyphs carrying the moving fill, with the two shadows
-     doing the engraving; -webkit- prefixes are required on iOS. */
-  color:transparent;
-  background-image:linear-gradient(to top,
-    var(--aid-dry) 0%, var(--aid-dry) 8%,
-    var(--aid-water) 28%, var(--aid-water) 44%,
-    var(--aid-heat) 60%, var(--aid-heat) 70%,
-    var(--aid-dry) 88%, var(--aid-dry) 100%);
-  background-size:100% 340%;
-  background-position:0 0;
-  -webkit-background-clip:text;background-clip:text;
-  text-shadow:0 1px 0 var(--aid-emboss-lo),0 -1px 0 var(--aid-emboss-hi);
-  animation:aiTermaFill 7.5s var(--smooth) infinite;
-}
-/* The bar that joins the letters at the bottom. It runs along the word's inner
-   edge (the tab is vertical, so "bottom" is the left side of the rotated text)
-   and carries the same fill, one beat behind, so the water appears to come
-   from it rather than to appear inside each letter independently. */
-.ai-tab-word::after{
-  content:"";position:absolute;left:-3px;top:2px;bottom:2px;width:1.5px;
-  border-radius:2px;
-  background-image:linear-gradient(to top,
-    var(--aid-dry) 0%, var(--aid-dry) 8%,
-    var(--aid-water) 28%, var(--aid-water) 44%,
-    var(--aid-heat) 60%, var(--aid-heat) 70%,
-    var(--aid-dry) 88%, var(--aid-dry) 100%);
-  background-size:100% 340%;
-  animation:aiTermaFill 7.5s var(--smooth) .18s infinite;
-}
-@keyframes aiTermaFill{
-  from{background-position:0 100%}
-  to{background-position:0 -240%}
-}
-
-@media(any-hover:hover){ .ai-tab:hover{--aid-tx:-4px} }
-.ai-tab:active{--aid-ts:.95}
-/* The ring is drawn OUTSIDE the tab, i.e. on the PAGE, so it must be measured
-   against the page — not against the panel. It was a light violet chosen
-   against the dark panel and measured 1.6:1 on --paper. --ink is the one token
-   guaranteed to carry on the page ground in both themes. */
-.ai-tab:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-/* visibility, not opacity alone: an opacity:0 button is still focusable and
-   still in the tab order, so a keyboard user could land on an invisible
-   control that closes the panel with no visible cause. Delayed to the end of
-   the slide by the transition above so the exit is still seen. */
-.ai-dock[data-open="true"] .ai-tab{
-  --aid-tx:130%;opacity:0;visibility:hidden;pointer-events:none;
-  transition:transform .55s var(--aid-glide),opacity .4s var(--smooth),visibility 0s linear .55s;
-}
-.ai-dock[data-open="true"] .ai-tab-word,
-.ai-dock[data-open="true"] .ai-tab-word::after{animation:none}
-/* The loop is ambient decoration on a control that is always on screen. Motion
-   sensitivity is exactly the case it must yield to; the word stays legible
-   because the engraving is shadows, not the fill. */
-@media(prefers-reduced-motion:reduce){
-  .ai-tab-word,.ai-tab-word::after{animation:none;background-position:0 42%}
-}
+/* THE SIDE TAB IS GONE. Operator instruction, 2026-08-03: Terma moves to the
+   top-right slot the "..." menu used to occupy, and the edge tab is removed
+   entirely - one entry point, not two. js/app.js renders the trigger and calls
+   toggle() on it; this module no longer renders any launcher of its own.
+   The water/heat loop went with it. */
+.ai-tab{display:none!important}
 
 /* ----------------------------------------------------------------- panel */
 .ai-panel{
+  /* A DROPDOWN, not a side sheet: anchored under the trigger in the top-right,
+     so it reads as belonging to the button that opened it. And it is the app's
+     own surface now, not ASC's violet - operator: "no longer purple, but
+     matches the white of the rest of the menu". Every purple token below is
+     re-pointed to the shared palette so the panel follows the theme. */
+  --aid-panel-bg:var(--surface);
+  --aid-panel-ink:var(--ink);
+  --aid-panel-rim:var(--line);
+  /* absolute, not fixed: the dock root is already position:fixed inset:0, so
+     this is measured against the viewport anyway - and staying absolute keeps
+     it inside the dock's overflow:clip box, which is what stops the parked
+     panel showing a scrollbar. */
   position:absolute;z-index:80;
-  right:calc(10px + env(safe-area-inset-right,0px));top:50%;
-  width:min(360px,90vw);
+  right:max(12px,env(safe-area-inset-right,0px));
+  top:calc(58px + env(safe-area-inset-top,0px) + 10px);
+  width:min(360px,calc(100vw - 24px));
   /* 150px of vertical clearance keeps the panel off BOTH standing bars: the
      sticky .topbar at the top and the floating .tabbar (--nav-h 62px) at the
      bottom. Centred at 50%, that leaves 75px at each end. Without it the panel
      covers the tab bar and takes the app's navigation away, which a NON-modal
      surface may never do. The 560px cap stops it becoming a full-height column
      on a desktop viewport. */
-  max-height:min(560px,calc(100vh - 150px));
-  max-height:min(560px,calc(100dvh - 150px));
+  max-height:min(560px,calc(100vh - 110px));
+  max-height:min(560px,calc(100dvh - 110px));
   display:flex;flex-direction:column;gap:13px;
   padding:16px 16px 14px;
   /* var(--r-xl) is THE CARD TIER in css/styles.css:260 — 28px against ASC's
@@ -425,14 +359,14 @@ const CSS = `
      one step off it. The tab keeps its 17px, which is geometry (half the width)
      rather than a rung on that ladder. */
   border-radius:var(--r-xl,28px);
-  background:linear-gradient(168deg,#150f2b,#0e0b1c 58%,#0a0912);
+  background:var(--aid-panel-bg);
   border:1px solid var(--aid-rim);
   box-shadow:var(--aid-lift),inset 0 1px 0 rgba(255,255,255,.07);
-  color:#f4f0ff;
+  color:var(--aid-panel-ink);
   overflow-y:auto;overscroll-behavior:contain;
   scrollbar-width:thin;scrollbar-color:rgba(196,181,253,.45) transparent;
   pointer-events:auto;
-  transform:translate(calc(100% + 26px),-50%);
+  transform-origin:100% 0;transform:translateY(-8px) scale(.96);opacity:0;visibility:hidden;
   visibility:hidden;
   /* visibility is what actually takes the parked panel out of the tab order and
      the accessibility tree — a translated element is still focusable. It is
@@ -441,44 +375,47 @@ const CSS = `
   will-change:transform;
 }
 .ai-dock[data-open="true"] .ai-panel{
+  /* A DROPDOWN, not a side sheet: anchored under the trigger in the top-right,
+     so it reads as belonging to the button that opened it. And it is the app's
+     own surface now, not ASC's violet - operator: "no longer purple, but
+     matches the white of the rest of the menu". Every purple token below is
+     re-pointed to the shared palette so the panel follows the theme. */
+  --aid-panel-bg:var(--surface);
+  --aid-panel-ink:var(--ink);
+  --aid-panel-rim:var(--line);
   transform:translate(0,-50%);visibility:visible;
   transition:transform .58s var(--aid-glide),visibility 0s;
 }
 /* The two blooms. Painted as a pseudo-element at opacity .6 (rather than baked
    into the body gradient) so prefers-contrast:more can drop them in one rule
    without touching the surface underneath. */
-.ai-panel::before{
-  content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;pointer-events:none;opacity:.6;
-  background:
-    radial-gradient(60% 44% at 22% 8%,rgba(139,92,246,.32),transparent 62%),
-    radial-gradient(56% 42% at 88% 4%,rgba(224,64,208,.24),transparent 60%);
-}
+.ai-panel::before{content:none}
 /* A positioned pseudo-element paints above non-positioned children, so every
    child is lifted explicitly. Same technique as .glass>* in css/styles.css. */
 .ai-panel>*{position:relative;z-index:1}
-.ai-panel :focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
+.ai-panel :focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
 
 .ai-head{display:flex;align-items:center;gap:9px}
 .ai-title{
   margin:0;flex:1;min-width:0;
   display:flex;align-items:center;gap:8px;
   font-family:var(--font-display);font-weight:600;font-size:14px;line-height:1.3;
-  letter-spacing:-.005em;color:#f4f0ff;
+  letter-spacing:-.005em;color:var(--aid-panel-ink);
 }
 .ai-dot{
   flex:none;width:7px;height:7px;border-radius:50%;
   background:#3ddc84;box-shadow:0 0 9px 1px rgba(61,220,132,.6);
   animation:aiBreathe 2.6s var(--smooth) infinite;
 }
-.ai-dock[data-offline="true"] .ai-dot{background:#b9a9ee;box-shadow:none;animation:none}
+.ai-dock[data-offline="true"] .ai-dot{background:var(--muted);box-shadow:none;animation:none}
 @keyframes aiBreathe{50%{transform:scale(1.3);opacity:.8}}
 .ai-close{
   flex:none;width:32px;height:32px;border:0;border-radius:50%;
   display:grid;place-items:center;cursor:pointer;
-  background:rgba(150,110,255,.16);color:#cdbff5;
+  background:var(--line);color:var(--ink-2);
   transition:background-color .22s var(--smooth),transform .22s var(--smooth);
 }
-.ai-close:hover{background:rgba(150,110,255,.28)}
+.ai-close:hover{background:var(--line)}
 .ai-close:active{transform:scale(.9)}
 
 /* ------------------------------------------------------------- the stage */
@@ -492,11 +429,11 @@ const CSS = `
   background:rgba(22,16,42,.95);border:1px solid var(--aid-ctl-rim);
   box-shadow:0 16px 34px -14px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.06);
   font-family:var(--font-display);font-weight:600;font-size:15.5px;line-height:1.34;
-  color:#f7f3ff;overflow-wrap:anywhere;
+  color:var(--ink);overflow-wrap:anywhere;
   animation:aiBubbleIn .26s var(--aid-glide);
 }
 .ai-result{
-  margin:0;font-size:13.5px;font-weight:500;line-height:1.62;color:#c9bdf0;
+  margin:0;font-size:13.5px;font-weight:500;line-height:1.62;color:var(--ink-2);
   white-space:pre-wrap;overflow-wrap:anywhere;
   animation:aiResultPop .26s var(--aid-glide);
 }
@@ -512,49 +449,49 @@ const CSS = `
 .ai-links{display:flex;flex-wrap:wrap;gap:7px;margin:0}
 .ai-linklabel{
   width:100%;margin:0 0 1px;font-size:11px;font-weight:600;
-  letter-spacing:var(--track-meta,.08em);text-transform:uppercase;color:#b9a9ee;
+  letter-spacing:var(--track-meta,.08em);text-transform:uppercase;color:var(--muted);
 }
 .ai-link{
   display:inline-flex;align-items:center;max-width:100%;
   padding:7px 12px;border-radius:999px;
-  background:rgba(150,110,255,.14);border:1px solid var(--aid-ctl-rim);
-  color:#f5b8f0;font-size:12px;font-weight:600;line-height:1.3;text-decoration:none;
+  background:var(--line);border:1px solid var(--aid-ctl-rim);
+  color:var(--accent-ink);font-size:12px;font-weight:600;line-height:1.3;text-decoration:none;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   transition:background-color .22s var(--smooth),transform .22s var(--smooth);
 }
-.ai-link:hover{background:rgba(150,110,255,.24)}
+.ai-link:hover{background:var(--line)}
 .ai-link:active{transform:scale(.96)}
 
 .ai-hint{
-  margin:0;font-size:12.5px;font-weight:600;line-height:1.45;color:#b9a9ee;
+  margin:0;font-size:12.5px;font-weight:600;line-height:1.45;color:var(--muted);
 }
-.ai-hint.is-busy{color:#f5b8f0}
+.ai-hint.is-busy{color:var(--accent-ink)}
 /* The offline sentence is the load-bearing string in this file: it must read as
    a plain statement about the build, never as a failure the user caused or a
    transient glitch worth retrying. Wording is kept in step with
    views/savjetnik.js's sv.offlineBody, which is the same claim on a full page. */
 .ai-note{
   margin:0;padding:11px 13px;border-radius:var(--r-sm,12px);
-  background:rgba(150,110,255,.14);border:1px solid var(--aid-ctl-rim);
-  font-size:12.5px;line-height:1.5;color:#b9a9ee;
+  background:var(--line);border:1px solid var(--aid-ctl-rim);
+  font-size:12.5px;line-height:1.5;color:var(--muted);
 }
-.ai-note b{display:block;margin-bottom:3px;font-size:13px;color:#f4f0ff}
+.ai-note b{display:block;margin-bottom:3px;font-size:13px;color:var(--ink)}
 
 /* -------------------------------------------------------------- controls */
 .ai-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin:0}
 .ai-chip{
   padding:7px 12px;border-radius:999px;cursor:pointer;
-  background:rgba(150,110,255,.14);border:1px solid var(--aid-ctl-rim);
-  color:#e9e2ff;font-family:inherit;font-size:11.5px;font-weight:600;line-height:1.3;
+  background:var(--line);border:1px solid var(--aid-ctl-rim);
+  color:var(--ink);font-family:inherit;font-size:11.5px;font-weight:600;line-height:1.3;
   transition:background-color .22s var(--smooth),transform .22s var(--smooth);
 }
-.ai-chip:hover{background:rgba(150,110,255,.24)}
+.ai-chip:hover{background:var(--line)}
 .ai-chip:active{transform:scale(.94)}
 
 .ai-type{
   display:flex;align-items:center;gap:8px;
   padding:4px 4px 4px 15px;border-radius:15px;
-  background:rgba(10,8,20,.6);border:1px solid var(--aid-ctl-rim);
+  background:var(--panel);border:1px solid var(--aid-ctl-rim);
   transition:border-color .22s var(--smooth);
 }
 .ai-type:focus-within{border-color:rgba(224,64,208,.75)}
@@ -564,23 +501,23 @@ const CSS = `
      viewport on focus, and the dock is fixed — the page would be left scrolled
      sideways with the panel half off screen. css/styles.css sets the same floor
      on every other input in this app. */
-  font-family:var(--font-text);font-size:16px;line-height:1.4;color:#f3efff;
+  font-family:var(--font-text);font-size:16px;line-height:1.4;color:var(--ink);
   min-height:40px;padding:0;
 }
 .ai-type input:focus{outline:none}
-.ai-type input::placeholder{color:#9c92bc}   /* [C1] — 6.31:1; ASC's alpha was 3.48:1 */
+.ai-type input::placeholder{color:var(--muted)}   /* [C1] — 6.31:1; ASC's alpha was 3.48:1 */
 .ai-send{
   flex:none;position:relative;width:40px;height:40px;border:0;border-radius:12px;
   display:grid;place-items:center;cursor:pointer;color:#fff;
-  background:linear-gradient(135deg,#8b5cf6,#e040d0);
-  box-shadow:0 6px 16px -6px rgba(139,92,246,.7);
+  background:var(--grad-accent,linear-gradient(135deg,#2B3FD8,#3355EE));
+  box-shadow:0 6px 16px -6px rgba(43,63,216,.55);
   transition:transform .22s var(--smooth);
 }
 .ai-send>svg{position:relative;z-index:2}
 /* Hover glow as an opacity cross-fade, because box-shadow may not be animated. */
 .ai-send::after{
   content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  box-shadow:0 10px 22px -8px rgba(224,64,208,.7);
+  box-shadow:0 10px 22px -8px rgba(43,63,216,.7);
   opacity:0;transition:opacity .22s var(--smooth);
 }
 .ai-send:hover::after{opacity:1}
@@ -594,10 +531,10 @@ const CSS = `
 }
 .ai-foot a,.ai-foot button{
   border:0;background:none;padding:0;cursor:pointer;
-  font-family:inherit;font-size:11.5px;font-weight:600;color:#b9a9ee;
+  font-family:inherit;font-size:11.5px;font-weight:600;color:var(--muted);
   text-decoration:underline;text-underline-offset:2px;
 }
-.ai-foot a:hover,.ai-foot button:hover{color:#f5b8f0}
+.ai-foot a:hover,.ai-foot button:hover{color:var(--accent-ink)}
 
 /* Offline: the input path is natively disabled rather than hidden, so the panel
    still explains itself instead of just looking unfinished — the same choice
@@ -626,7 +563,15 @@ const CSS = `
   .ai-dock *,.ai-dock *::before,.ai-dock *::after{
     animation:none!important;transition-duration:1ms!important;
   }
-  .ai-panel{transition:transform 1ms linear,visibility 0s linear 1ms}
+  .ai-panel{
+  /* A DROPDOWN, not a side sheet: anchored under the trigger in the top-right,
+     so it reads as belonging to the button that opened it. And it is the app's
+     own surface now, not ASC's violet - operator: "no longer purple, but
+     matches the white of the rest of the menu". Every purple token below is
+     re-pointed to the shared palette so the panel follows the theme. */
+  --aid-panel-bg:var(--surface);
+  --aid-panel-ink:var(--ink);
+  --aid-panel-rim:var(--line);transition:transform 1ms linear,visibility 0s linear 1ms}
 }
 /* The OS asks for more contrast: the blooms are decoration over text, so they
    go rather than being tinted, and every rim hardens to an opaque value that
@@ -634,7 +579,15 @@ const CSS = `
    panel ground and 14.26:1 on the darkest). */
 @media (prefers-contrast:more){
   .ai-panel::before{display:none}
-  .ai-panel{border:2px solid #ddd6fe}
+  .ai-panel{
+  /* A DROPDOWN, not a side sheet: anchored under the trigger in the top-right,
+     so it reads as belonging to the button that opened it. And it is the app's
+     own surface now, not ASC's violet - operator: "no longer purple, but
+     matches the white of the rest of the menu". Every purple token below is
+     re-pointed to the shared palette so the panel follows the theme. */
+  --aid-panel-bg:var(--surface);
+  --aid-panel-ink:var(--ink);
+  --aid-panel-rim:var(--line);border:2px solid #ddd6fe}
   .ai-tab{box-shadow:0 0 0 2px #ddd6fe}
   .ai-chip,.ai-type,.ai-link,.ai-note,.ai-heard{border-color:#ddd6fe}
   .ai-hint,.ai-note,.ai-linklabel{color:#ddd6fe}

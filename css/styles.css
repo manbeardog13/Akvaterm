@@ -586,6 +586,25 @@ small{font-size:12.5px}
 /* Long Croatian strings must not become a single scrolling word when tracked. */
 .eyebrow,.meta-label{overflow-wrap:anywhere}
 
+/* ============================== Terma trigger =========================== */
+/* The top-right button that used to be "...". It SHIMMERS on a long cycle -
+   operator: "from time to time shimmer it, so it draws your attention" - and
+   the emphasis is on "from time to time": a 9s loop with the sweep occupying
+   about a fifth of it, so the control is still most of the time. A permanent
+   shimmer is an animation; an occasional one is a signal.
+   The sweep is a background-position move on a masked overlay, so nothing
+   layouts and no filter runs. */
+.terma-btn{position:relative;overflow:hidden;isolation:isolate}
+.terma-btn .terma-shine{
+  position:absolute;inset:0;pointer-events:none;z-index:0;border-radius:inherit;
+  background:linear-gradient(105deg,transparent 38%,var(--accent-ring) 48%,transparent 58%);
+  background-size:280% 100%;background-position:180% 0;
+  animation:termaShine 9s var(--smooth) infinite;
+}
+.terma-btn>.ic,.terma-btn>.lbl{position:relative;z-index:1}
+@keyframes termaShine{0%,74%{background-position:180% 0}100%{background-position:-90% 0}}
+@media(prefers-reduced-motion:reduce){ .terma-btn .terma-shine{animation:none;opacity:0} }
+
 /* ============================== Dark theme ============================== */
 /* Operator instruction, 2026-08-02: light/dark with a visible switch, here and
    in every future project.
