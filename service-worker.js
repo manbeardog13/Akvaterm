@@ -54,7 +54,11 @@
 
    A page may also postMessage {type:"akv:version"} to read this worker's
    version back (optionally passing its own as `v` for a logged comparison). */
-const FALLBACK_VERSION = "v2";           // only for a registration carrying no ?v= — keep == APP_V
+const FALLBACK_VERSION = "v3";           // only for a registration carrying no ?v= — keep == APP_V
+// BUG FIX 2026-08-03: was "v2" but APP_V in js/app.js line 92 is "v3". A hand-registered
+// worker or a stale cached index.html running an older app.js would create orphaned
+// caches (akv-v2 alongside akv-v3) instead of landing in the current cache. Synced to
+// APP_V so all paths converge on one cache name.
 const VERSION = new URL(self.location.href).searchParams.get("v") || FALLBACK_VERSION;
 const CACHE = `akv-${VERSION}`;          // never write this name out by hand
 
@@ -80,7 +84,12 @@ const SHELL = [
   "./js/db.js",
   "./js/domain.js",
   "./js/texture.js",
-  "./js/scene2d.js",
+  /* js/scene2d.js REMOVED from SHELL 2026-08-03. The file was deleted when the
+     hand-drawn 2D pipeline was retired, but its SHELL entry stayed - so every
+     install has been requesting a 404 since. install() uses allSettled, so it
+     degraded quietly rather than failing, which is exactly why it survived: a
+     precache list can rot without ever raising anything. Verified against the
+     tree; this was the only stale entry. */
   "./js/room3d.js",
   "./js/terma.js",
   "./js/qrshare.js",
@@ -125,6 +134,16 @@ const SHELL = [
   "./js/views/savjetnik.js",
   "./js/views/favoriti.js",
   "./js/views/dizajni.js",
+  "./js/views/prijava.js",
+  // BUG FIX 2026-08-03: prijava.js is the mandatory entry point for cold starts.
+  // Without it in SHELL, a cache miss on first load (or after cache clear) hits an
+  // offline error card 'Nešto je pošlo po zlu' because the app redirects to #/prijava
+  // when offline and the view fails to fetch. This 2-3 KB module must be precached.
+  "./js/views/zasluge.js",
+  // BUG FIX 2026-08-03: zasluge.js (credits page) is routable via #/zasluge but was
+  // missing from SHELL. Offline navigation to credits fails with 'Failed to fetch
+  // ./js/views/zasluge.js' error. This small module supports the routable endpoint
+  // and must be precached to work offline.
 ];
 
 /* ============================== 3D pre-warm ===============================

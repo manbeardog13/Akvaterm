@@ -145,9 +145,12 @@ const DICT = {
      scene id is the kebab-case "dnevni-boravak"; both spellings resolve so
      neither a scene lookup nor an id-derived lookup falls through to the key. */
   "scene.kupaonica": "Kupaonica",
+  "scene.mala-kupaonica": "Mala kupaonica",
+  "scene.malaKupaonica": "Mala kupaonica",
   "scene.kuhinja": "Kuhinja",
   "scene.dnevniBoravak": "Dnevni boravak",
   "scene.dnevni-boravak": "Dnevni boravak",
+  "scene.wc": "WC",
 
   /* ---- 2D scene surfaces (ids from data/scenes.js surfaces[]) ---- */
   "surface.pod": "Pod",
@@ -314,6 +317,8 @@ const DICT = {
      ====================================================================== */
 
   /* ---- Katalog view (js/views/katalog.js, favoriti.js, proizvod.js) ---- */
+  "kat.eyebrow": "AKVATERM · PLOČICE I OPREMA",
+  "kat.categoryEyebrow": "KATEGORIJA",
   "kat.title": "Katalog",
   "kat.sub": "Pločice i oprema za vaš dom — pregledajte, spremite favorite i primijenite u dizajneru.",
   "kat.back": "Katalog",
@@ -321,6 +326,14 @@ const DICT = {
   "kat.featured": "Izdvojeno",
   "kat.productsShort": "proizvoda",
   "kat.demo": "Demo katalog — proizvodi i cijene su ogledni podaci za prezentaciju, ne stvarna ponuda.",
+  "kat.clearFilters": "Očisti ({n})",
+  "kat.resumeEyebrow": "VAŠ DIZAJN",
+  "kat.resumeTitle": "Nastavite gdje ste stali",
+  "kat.resumeSubtitle": "Kupaonica · spremljeno danas",
+  "kat.resumeCta": "Nastavi dizajn",
+  "kat.resumeAlt": "Pregled dizajna",
+  "kat.resumeSaved": "spremljeno",
+  "kat.resumeToday": "danas",
   "kat.fFormat": "Format",
   "kat.fColor": "Boja",
   "kat.fBrand": "Marka",

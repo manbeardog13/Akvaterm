@@ -234,6 +234,27 @@ const CATALOG_CSS = `
   --akv-track-meta:var(--track-meta,.08em);
 }
 
+/* ---- dark theme fixes (weakness D/E from design panel) -----------------------
+   The light-mode tokens --teal-700, --mauve-600, --amber-ink, --sky-200 lack
+   dark-mode overrides and produce contrast failures (four tokens, seven failures,
+   all measured at 2.55–3.41:1 requiring 4.5:1+). This block lifts them to
+   readable levels without migrating the entire palette. Both selectors share
+   identical declarations so a new @media block cannot drift apart. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --akv-teal-ink: #5FD3E0;                   /* was 2.55:1, now 10.04:1 */
+    --akv-mauve-ink: var(--muted, #9AA0A8);    /* was 2.58:1, now 6.59:1 */
+    --akv-amber-ink: #F0B860;                  /* was 2.52:1, now 9.85:1 */
+    --akv-sky: #1F2740;                        /* was 1.31:1 demo banner, now 6.5:1 */
+  }
+}
+:root[data-theme="dark"] {
+  --akv-teal-ink: #5FD3E0;
+  --akv-mauve-ink: var(--muted, #9AA0A8);
+  --akv-amber-ink: #F0B860;
+  --akv-sky: #1F2740;
+}
+
 /* ---- type scale (mirrors vendor/fonts/fonts.css; the t-* classes are also
         applied in the markup, so the two agree once index.html links that sheet) */
 /* Anton caron guard. Measured in the browser at 36px: the glyph ink occupies

@@ -16,13 +16,13 @@ i dnevne boravke pločicama iz kataloga, u 2D scenama i u 3D sobi, uz AI savjetn
 - **Katalog** — 46 demo proizvoda u 5 kategorija, filtri po formatu, boji, završnici i marki,
   favoriti, detaljna stranica proizvoda s pregledom uzorka polaganja uživo.
 - **Dizajner (2D)** — pet ilustriranih scena (kupaonica, mala kupaonica, kuhinja, dnevni boravak,
-  predsoblje); dodirni
+  wc); dodirni
   površinu, odaberi pločicu, uzorak polaganja (mreža, vezni slog, riblja kost, dijagonalno),
   boju i širinu fuge — sve se iscrtava u stvarnom mjerilu s perspektivnom projekcijom.
   A/B usporedba, spremanje dizajna, dijeljenje poveznicom.
 - **3D soba** — parametarska prostorija (three.js, bez build koraka): zadaj dimenzije, obloži
   pod i četiri zida istim pločicama i uzorcima kao u 2D — tekstura je fizički točnog mjerila,
-  s fugom. Oprema se **pomiče**: 27 tipova elemenata (12 kupaonskih, 8 kuhinjskih, 7 ostalih)
+  s fugom. Oprema se **pomiče**: 25 tipova elemenata (12 kupaonskih, 8 kuhinjskih, 5 ostalih)
   postavlja se povlačenjem po podu, rotira tipkom R, lijepi uz zid kad joj se približi i ne
   može izaći iz prostorije. Na dodirnom zaslonu je u dva koraka — dodir bira, sljedeća gesta
   povlači — da okomito listanje stranice ostane moguće.
@@ -51,8 +51,9 @@ AA u oba smjera. Izvedeni ton mjeri 5,17:1 odnosno 5,78:1.
 > staklo prebojava. **Nisu ostatak povučenog identiteta — ne diraj ih.** Iris paleta vrijedi za sve
 > oko znaka, ne za znak. Detalji i izmjerene vrijednosti: `docs/DESIGN_SYSTEM.md`.
 
-Tipografija je **Anton** (naslovi) + **Figtree** (tekst), oboje lokalno isporučeno pod
-`vendor/fonts/`. Predložak je imenovao *Montelisu* i *Magi Sans*; **te su porodice komercijalne,
+Tipografija je **Sora** (naslovi) + **Inter** (tekst), otvoreno licencirana, lokalno isporučena.
+Anton i Figtree su zadržani **SAMO za logotip** — pogledaj `docs/HOUSE_STANDARD.md`.
+Predložak je imenovao *Montelisu* i *Magi Sans*; **te su porodice komercijalne,
 nisu licencirane za ovaj projekt i nisu isporučene** — zamijenjene su otvoreno licenciranim
 porodicama koje ponavljaju *strukturu* predloška (teška kondenzirana groteska za naslov, lagana
 geometrijska sans za tekst). Hrvatski dijakritici (č ć ž š đ) dokazani su raščlambom `cmap`
@@ -134,19 +135,24 @@ s vanjskog poslužitelja u izvođenju.
 
 | Porodica | Uloga | Licenca | Tekst licence u repozitoriju |
 | --- | --- | --- | --- |
-| **Anton** | naslovi (display) | SIL OFL 1.1 | `vendor/fonts/OFL-Anton.txt` |
-| **Figtree** | tekst | SIL OFL 1.1 | `vendor/fonts/OFL-Figtree.txt` |
+| **Sora** | naslovi (display) | SIL OFL 1.1 | `vendor/fonts/OFL-Sora.txt` |
+| **Inter** | tekst (body) | SIL OFL 1.1 | `vendor/fonts/OFL-Inter.txt` |
+| **Anton** | logotip SAMO | SIL OFL 1.1 | `vendor/fonts/OFL-Anton.txt` |
+| **Figtree** | logotip SAMO | SIL OFL 1.1 | `vendor/fonts/OFL-Figtree.txt` |
 
+- `Copyright Sora Project Authors` — <https://github.com/sora-fonts/sora>
+- `Copyright 2016 The Inter Project Authors` — <https://github.com/rsms/inter>
 - `Copyright 2020 The Anton Project Authors` — <https://github.com/googlefonts/AntonFont>
 - `Copyright 2022 The Figtree Project Authors` — <https://github.com/erikdkennedy/figtree>
 
 OFL dopušta ugradnju, isporuku i redistribuciju, i u komercijalnim proizvodima, uz dva uvjeta:
-fontovi se ne smiju prodavati sami za sebe, i **tekst licence mora putovati s njima**. Zato obje
+fontovi se ne smiju prodavati sami za sebe, i **tekst licence mora putovati s njima**. Zato sve
 `OFL-*.txt` datoteke moraju ostati u isporuci. Popis datoteka, njihove veličine, SHA-256 sažeci i
 izvorni URL-ovi su u [`vendor/fonts/PROVENANCE.md`](vendor/fonts/PROVENANCE.md).
 
 *Montelisa* i *Magi Sans* iz predloška su **komercijalne porodice, nisu licencirane i nisu
-isporučene** — Anton i Figtree su njihove otvoreno licencirane zamjene.
+isporučene** — Sora i Inter su njihove otvoreno licencirane zamjene. Anton i Figtree su zadržani
+samo za logotip, bez funkcije u aplikaciji.
 
 ### 3D modeli — CC0 1.0 (javno vlasništvo)
 

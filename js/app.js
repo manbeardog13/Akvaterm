@@ -812,6 +812,17 @@ async function route() {
         document.getElementById("termaBtn")?.addEventListener("click", (e) => {
           e.stopPropagation();   // the dock closes on any outside pointerdown
           m.toggle();
+          // Sync aria-expanded to match the dock's new state. The button is
+          // created with aria-expanded="false" (line 314) but never updated as
+          // the dock opens or closes, breaking accessibility — screen readers
+          // report the dialog as closed even when open. Use isOpen() to query
+          // the current state and update the button; use rAF to let toggle()
+          // settle before reading the state.
+          if (typeof m.isOpen === "function") {
+            requestAnimationFrame(() => {
+              document.getElementById("termaBtn")?.setAttribute("aria-expanded", String(m.isOpen()));
+            });
+          }
         });
       })
       .catch((err) => console.warn("[app] Terma dock unavailable:", err?.message || err));

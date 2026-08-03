@@ -253,6 +253,10 @@ const CSS = `
   --aid-tab-ink:var(--ink);
   --aid-emboss-hi:rgba(20,16,14,.34);
   --aid-emboss-lo:rgba(255,255,255,.82);
+  /* DEFECT FIX: Online status dot colour. Original hardcoded #3ddc84 measures
+     1.78:1 on light theme #FFFFFF, failing WCAG 1.4.11 graphics/UI 3:1 requirement.
+     Use --accent instead, which is vetted against both light and dark grounds. */
+  --aid-dot-fill:var(--accent);
 }
 :root[data-theme="dark"] .ai-dock{
   --aid-rim:rgba(196,181,253,.55);
@@ -383,7 +387,11 @@ const CSS = `
   --aid-panel-bg:var(--surface);
   --aid-panel-ink:var(--ink);
   --aid-panel-rim:var(--line);
-  transform:translate(0,-50%);visibility:visible;
+  transform:translate(0,0);visibility:visible;
+  /* DEFECT FIX: Changed from translate(0,-50%) which moved panel 50% of its
+     height upward (280px on a 560px panel), placing it at -212px off-screen.
+     Position 0 places it directly under the topbar at top:calc(58px +...).
+     This is a dropdown menu, not a vertically-centred popover. */
   transition:transform .58s var(--aid-glide),visibility 0s;
 }
 /* The two blooms. Painted as a pseudo-element at opacity .6 (rather than baked
@@ -404,8 +412,13 @@ const CSS = `
 }
 .ai-dot{
   flex:none;width:7px;height:7px;border-radius:50%;
-  background:#3ddc84;box-shadow:0 0 9px 1px rgba(61,220,132,.6);
+  background:var(--aid-dot-fill);
+  box-shadow:0 0 9px 1px color-mix(in srgb, var(--aid-dot-fill) 60%, transparent);
   animation:aiBreathe 2.6s var(--smooth) infinite;
+  /* DEFECT FIX: Online indicator uses design token instead of hardcoded #3ddc84
+     which measured 1.78:1 on light theme, failing 3:1 WCAG 1.4.11 graphics
+     requirement. Token is composited via color-mix() for consistent alpha
+     treatment across theme changes. */
 }
 .ai-dock[data-offline="true"] .ai-dot{background:var(--muted);box-shadow:none;animation:none}
 @keyframes aiBreathe{50%{transform:scale(1.3);opacity:.8}}
@@ -494,7 +507,12 @@ const CSS = `
   background:var(--panel);border:1px solid var(--aid-ctl-rim);
   transition:border-color .22s var(--smooth);
 }
-.ai-type:focus-within{border-color:rgba(224,64,208,.75)}
+.ai-type:focus-within{border-color:var(--accent-ink)}
+/* DEFECT FIX: Focus state border was hardcoded rgba(224,64,208,.75), measuring
+   2.85:1 on dark theme panel, failing WCAG 1.4.11 3:1 control boundary requirement.
+   This colour was also not part of the Iris design system. Replaced with
+   --accent-ink which is vetted across both light and dark themes and consistent
+   with the panel's :focus-visible outline rule above (line 396). */
 .ai-type input{
   flex:1;min-width:0;border:0;background:none;box-shadow:none;border-radius:0;
   /* 16px, not ASC's 14.5px: anything smaller makes iOS Safari zoom the whole
@@ -768,7 +786,10 @@ export function mount(host) {
     sr: dock.querySelector('#aiSr'),
   };
 
-  on(els.tab, 'click', toggle);
+  /* DEFECT FIX: Removed dead click listener on #aiTab (els.tab). The side tab is
+     now display:none and the real trigger is #termaBtn in the topbar, wired in
+     app.js lines 812-815. The hidden button cannot be clicked and this listener
+     was never invoked, leftover from the refactored side panel system. */
   on(els.close, 'click', () => close());
   on(els.form, 'submit', (e) => {
     e.preventDefault();
@@ -815,7 +836,14 @@ export function mount(host) {
   // "Novi razgovor" control clears anything.
   on(document, 'pointerdown', (e) => {
     if (!open_ || !dock) return;
-    if (dock.contains(e.target)) return;   // inside the panel, or the tab
+    if (dock.contains(e.target)) return;   // inside the panel
+    /* DEFECT FIX: Exclude the trigger button #termaBtn from closing the dock.
+       When the user clicks the open dock's trigger button, pointerdown fires in
+       capture phase and closes (open_=false). Then the click handler in app.js
+       fires and calls toggle(), which checks open_, finds it false, and calls
+       open() instead of close(). Result: dock stays open. Check for the real
+       trigger button and return early to let its click handler run unmolested. */
+    if (e.target.id === 'termaBtn' || e.target.closest('#termaBtn')) return;
     close();
   }, true);
 
@@ -849,7 +877,11 @@ export function open() {
   if (!dock || open_ || dock.hidden) return;
   open_ = true;
   dock.setAttribute('data-open', 'true');
-  els.tab.setAttribute('aria-expanded', 'true');
+  /* DEFECT FIX: aria-expanded updated on real trigger #termaBtn (topbar button),
+     not on hidden #aiTab. Screen readers check aria-expanded on the button that
+     triggered the dialog. The side tab was the old trigger and is display:none;
+     the new trigger is #termaBtn wired in app.js. */
+  document.getElementById('termaBtn')?.setAttribute('aria-expanded', 'true');
   // Focus the input, not the panel: the typed path is the ONLY path, so the
   // caret belongs where the user is going to type. The offline build disables
   // that input and a disabled control cannot take focus, so the close button is
@@ -869,10 +901,15 @@ export function close(opts) {
   if (!dock || !open_) return;
   open_ = false;
   dock.setAttribute('data-open', 'false');
-  els.tab.setAttribute('aria-expanded', 'false');
+  /* DEFECT FIX: aria-expanded updated on real trigger #termaBtn, not hidden #aiTab.
+     Focus also restored to #termaBtn instead of the hidden button. The trigger
+     moved from side tab (display:none) to topbar button #termaBtn (app.js). */
+  document.getElementById('termaBtn')?.setAttribute('aria-expanded', 'false');
   // Return focus to the control that opened it — but not when the close was a
   // side effect of navigating, where the focus belongs to the new view.
-  if (!(opts && opts.silent) && dock.contains(document.activeElement)) els.tab.focus();
+  if (!(opts && opts.silent) && dock.contains(document.activeElement)) {
+    document.getElementById('termaBtn')?.focus({ preventScroll: true });
+  }
 }
 
 export function toggle() { if (open_) close(); else open(); }
