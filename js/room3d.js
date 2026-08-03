@@ -1115,16 +1115,54 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     if (wasTransparent !== mat.transparent) mat.needsUpdate = true;
   }
 
-  /** Force every surface opaque immediately. Any capture path (thumbnail,
-   *  snapshot, specification render) MUST call this first: a frame taken
-   *  mid-blend would bake a camera state into a stored artefact, which is
-   *  exactly what contract 1 forbids. */
-  function forceOpaqueSurfaces() {
-    for (const sid of ["wallN", "wallE", "wallS", "wallW"]) {
+  /** Run `fn` with every coverage wall forced fully opaque, then restore the
+   *  exact prior glass state — even if `fn` throws or rejects.
+   *
+   *  A one-way "force opaque" was the wrong shape: it made every capture a
+   *  destructive act on the live view, so a thumbnail taken mid-journey would
+   *  silently flatten the room the customer was looking at. This is a
+   *  transaction instead. The restore runs in `finally`, because a capture that
+   *  fails must not be able to strand the room in capture state — that failure
+   *  mode is invisible until someone notices the walls stopped going to glass.
+   *
+   *  Thumbnails and specifications record the DESIGN; glass is a fact about
+   *  where the camera happens to be standing, and must never reach either.
+   */
+  function withOpaqueSurfaces(fn) {
+    const walls = ["wallN", "wallE", "wallS", "wallW"];
+    const saved = walls.map((sid) => {
+      const rec = surfaceRecs[sid];
+      return { sid, wanted: rec.glassWanted ?? 0, glass: rec.glass ?? 0 };
+    });
+    for (const { sid } of saved) {
       const rec = surfaceRecs[sid];
       rec.glassWanted = 0;
       if (rec.glass) applyGlass(rec, 0);
     }
+    const restore = () => {
+      for (const s of saved) {
+        const rec = surfaceRecs[s.sid];
+        rec.glassWanted = s.wanted;
+        if (s.glass) applyGlass(rec, s.glass);
+      }
+      requestRender();
+    };
+    let out;
+    try {
+      out = fn();
+    } catch (err) {
+      restore();
+      throw err;
+    }
+    // A thenable capture keeps the room opaque until it actually completes.
+    if (out && typeof out.then === "function") {
+      return out.then(
+        (v) => { restore(); return v; },
+        (e) => { restore(); throw e; },
+      );
+    }
+    restore();
+    return out;
   }
 
   // ---- Sizing / loop / lifecycle -------------------------------------------
@@ -1134,6 +1172,11 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    // The framing a move was composed for no longer holds, so the pending
+    // result is cancelled rather than allowed to report "settled" for a shot
+    // that is now a different shot. The camera itself is NOT disturbed: it
+    // keeps travelling to the same pose, so the customer sees no jump.
+    director.cancel("resized");
     requestRender();
   }
 
@@ -1366,9 +1409,8 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       // drift. Set on BOTH — the glass blend is engine-side and would otherwise
       // keep its full-length transition while the camera had gone still.
       setReducedMotion(v) { reducedMotion = !!v; director.setReducedMotion(v); },
-      /** Any capture path must call this before rendering a stored frame.
-       *  Glass is camera state; a thumbnail is a record of the DESIGN. */
-      forceOpaqueSurfaces() { forceOpaqueSurfaces(); requestRender(); },
+      /** Reversible capture transaction — see withOpaqueSurfaces(). */
+      withOpaqueSurfaces(fn) { return withOpaqueSurfaces(fn); },
       get debug() { return { ...director.debug, cinematic }; },
     },
 

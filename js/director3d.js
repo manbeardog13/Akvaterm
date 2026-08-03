@@ -61,6 +61,9 @@
 // ============================================================================
 
 import * as THREE from "three";
+// The timing maths lives in a dependency-free module so it can be proved in
+// plain Node without a browser or a GPU. See tests/motion.test.mjs.
+import { springScalar, blendFactor, driftAxis, isSettled } from "./motion.js";
 
 // Spring stiffness expressed as the time to cover most of the distance. Bigger
 // = lazier. These are the motion vocabulary's whole personality, so they live
@@ -107,21 +110,46 @@ export const TARGETS = {
   wallN: "wallN", wallS: "wallS", wallE: "wallE", wallW: "wallW",
 };
 
-/** Critically damped spring, per-axis, unconditionally stable.
- *  `smoothTime` is roughly the time to close most of the gap. */
+/** Vector3 wrapper over the pure per-axis spring in motion.js. */
 function springTo(current, velocity, target, smoothTime, dt) {
-  if (dt <= 0) return;
-  const omega = 2 / Math.max(0.0001, smoothTime);
-  const x = omega * dt;
-  // Padé approximation of exp(-x): cheaper than Math.exp and, more importantly,
-  // never returns a value that lets the implicit step overshoot.
-  const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  if (!(dt > 0)) return;
   for (const axis of ["x", "y", "z"]) {
-    const delta = current[axis] - target[axis];
-    const temp = (velocity[axis] + omega * delta) * dt;
-    velocity[axis] = (velocity[axis] - omega * temp) * exp;
-    current[axis] = target[axis] + (delta + temp) * exp;
+    const [p, v] = springScalar(current[axis], velocity[axis], target[axis], smoothTime, dt);
+    current[axis] = p;
+    velocity[axis] = v;
   }
+}
+
+// ---------------------------------------------------------------------------
+// MOVE RESULTS — the engine contract the commissioning guide programs against.
+//
+// Every verb returns one of these immediately and never throws. `settled` and
+// `cancelled` are LIVE: the same object is mutated as the move resolves, and
+// `done` settles once, so a caller may either poll the fields or await the
+// promise. Unknown targets come back {ok:false, reason:'unknown-target'} rather
+// than failing silently — a typo in a journey definition must be diagnosable
+// without being fatal to the customer's session.
+//
+// Only ONE move is ever live. A new request supersedes the old one rather than
+// queueing behind it: obsolete camera travel is worse than no travel, because
+// the room would visibly finish answering a question the customer has already
+// moved past.
+// ---------------------------------------------------------------------------
+function makeResult(target, ok, reason) {
+  let settle;
+  const result = {
+    ok, target: target ?? null, settled: false, cancelled: false,
+    reason: reason ?? null,
+    done: new Promise((res) => { settle = res; }),
+  };
+  result._finish = (kind, why) => {
+    if (result.settled || result.cancelled) return;
+    if (kind === "settled") result.settled = true;
+    else { result.cancelled = true; result.reason = why ?? result.reason; }
+    settle({ ok: result.ok, target: result.target, settled: result.settled, cancelled: result.cancelled, reason: result.reason });
+  };
+  if (!ok) result._finish("cancelled", reason);
+  return result;
 }
 
 export function createDirector({ camera, controls, dims, surfaceRecs, requestFrame, resolveFixture }) {
@@ -191,14 +219,31 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     };
   }
 
+  // ---- move lifecycle ------------------------------------------------------
+  let activeMove = null;
+  let destroyed = false;
+
+  /** Cancel any pending move. Safe to call repeatedly and after disposal — the
+   *  point is that no stale callback may ever resolve as "settled" once the
+   *  room it described is gone. */
+  function cancel(reason = "superseded") {
+    if (activeMove) { activeMove._finish("cancelled", reason); activeMove = null; }
+  }
+
   // ---- the verbs -----------------------------------------------------------
-  function goto(pos, target, time) {
+  function goto(pos, target, time, name) {
+    // Supersede rather than queue: the newest request replaces the old one and
+    // the spring carries its current position AND velocity into it, so the
+    // change of mind is a redirection, not a restart.
+    cancel("superseded");
     basePos.copy(pos);
     baseTarget.copy(target);
     smoothTime = reducedMotion ? Math.min(time, 0.45) : time;
     manual = false;
     driftScale = 0;           // suppress wander while travelling...
     requestFrame && requestFrame();
+    activeMove = makeResult(name, true, null);
+    return activeMove;
   }
 
   /** THE journey's entry point. Takes a semantic target — 'north-wall',
@@ -206,26 +251,28 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
    *  a new question and a spoken revision ("change the north wall") are the
    *  same call. Unknown targets are a no-op, never a throw. */
   function focusSurface(target, opts = {}) {
+    if (destroyed) return makeResult(target, false, "disposed");
     const f = surfaceFrame(target);
     if (!f) {
       const obj = resolveFixture && resolveFixture(target);
-      if (obj) focusObject(obj, opts);
-      return;
+      if (obj) return focusObject(obj, opts, target);
+      return makeResult(target, false, "unknown-target");
     }
     const dist = opts.distance ?? Math.max(f.w, f.h) * 0.95 + 0.6;
     const pos = f.center.clone().addScaledVector(f.normal, dist);
     if (f.sid === "floor") pos.y = Math.max(pos.y, dims.heightM * 0.9);
     else pos.y = Math.min(dims.heightM * 0.62, f.center.y + f.h * 0.12);
-    goto(pos, f.center.clone(), SMOOTH.travel);
+    return goto(pos, f.center.clone(), SMOOTH.travel, target);
   }
 
   /** Lean in at a SHALLOW, oblique angle so relief, grout and specular roll are
    *  all visible. Straight-on is the one angle that hides every one of them:
    *  no parallax across the grout, no highlight travel, no sense of depth. */
   function inspectMaterial(target, { grazing = 22, distance = 0.62 } = {}) {
+    if (destroyed) return makeResult(target, false, "disposed");
     const f = surfaceFrame(target);
     const sid = f && f.sid;
-    if (!f) return;
+    if (!f) return makeResult(target, false, "unknown-target");
     const rad = THREE.MathUtils.degToRad(grazing);
     // A tangent along the surface, biased to the horizontal for walls so the
     // camera slides along the tile courses rather than climbing them.
@@ -240,7 +287,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
       ? f.center.clone().addScaledVector(dir, distance).setY(dims.heightM * 0.22)
       : f.center.clone().addScaledVector(dir, distance);
     if (sid !== "floor") eye.y = dims.heightM * 0.45;
-    goto(eye, f.center.clone(), SMOOTH.inspect);
+    return goto(eye, f.center.clone(), SMOOTH.inspect, target);
   }
 
   /** Ceremonial arc around one representative tile, kept centred throughout.
@@ -248,27 +295,32 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
    *  framed while the arc travels. */
   let orbit = null;
   function orbitSelection(target, { radius = 0.8, speed = 0.055, uv = [0.5, 0.5] } = {}) {
+    if (destroyed) return makeResult(target, false, "disposed");
     const f = surfaceFrame(target);
     const sid = f && f.sid;
-    if (!f) return;
+    if (!f) return makeResult(target, false, "unknown-target");
     const up = new THREE.Vector3(0, 1, 0);
     const tangent = f.normal.clone().cross(up).normalize();
     const anchor = f.center.clone()
       .addScaledVector(tangent, (uv[0] - 0.5) * f.w * 0.6)
       .addScaledVector(up, sid === "floor" ? 0 : (uv[1] - 0.5) * f.h * 0.4);
+    if (reducedMotion) return makeResult(target, false, "reduced-motion");
+    cancel("superseded");
     orbit = { anchor, normal: f.normal.clone(), tangent, radius, speed, phase: 0, sid };
     smoothTime = SMOOTH.orbit;
     manual = false;
     driftScale = 0;
     requestFrame && requestFrame();
+    return makeResult(target, true, null);
   }
 
   /** Track along a grout line at close range — the movement that sells the
    *  material as real rather than as a numeric property being edited. */
   function followGroutLine(target, { distance = 0.34, speed = 0.06 } = {}) {
+    if (destroyed) return makeResult(target, false, "disposed");
     const f = surfaceFrame(target);
     const sid = f && f.sid;
-    if (!f) return;
+    if (!f) return makeResult(target, false, "unknown-target");
     const up = new THREE.Vector3(0, 1, 0);
     const tangent = f.normal.clone().cross(up).normalize();
     orbit = {
@@ -280,24 +332,28 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     manual = false;
     driftScale = 0;
     requestFrame && requestFrame();
+    return makeResult(target, true, null);
   }
 
-  function focusObject(object3d, { distance = 1.5 } = {}) {
-    if (!object3d) return;
+  function focusObject(object3d, { distance = 1.5 } = {}, name) {
+    if (destroyed) return makeResult(name, false, "disposed");
+    if (!object3d) return makeResult(name, false, "unknown-target");
     object3d.updateWorldMatrix(true, false);
     const c = new THREE.Vector3().setFromMatrixPosition(object3d.matrixWorld);
     const dir = new THREE.Vector3(0.7, 0.45, 0.9).normalize();
-    goto(c.clone().addScaledVector(dir, distance), c, SMOOTH.travel);
+    return goto(c.clone().addScaledVector(dir, distance), c, SMOOTH.travel, name ?? "object");
   }
 
   function returnToOverview() {
+    if (destroyed) return makeResult("overview", false, "disposed");
     orbit = null;
     const o = overviewPose();
-    goto(o.pos, o.target, SMOOTH.recover);
+    return goto(o.pos, o.target, SMOOTH.recover, "overview");
   }
 
   /** Stop directing and let the room breathe where it stands. */
   function settleIntoDrift() {
+    cancel("settled-into-drift");
     orbit = null;
     basePos.copy(camera.position);
     baseTarget.copy(controls.target);
@@ -308,6 +364,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
   /** The user grabbed the camera: the director stands down without a fight,
    *  keeping its base poses in sync so a later verb starts from reality. */
   function yieldToUser() {
+    cancel("user-took-control");
     manual = true;
     orbit = null;
     basePos.copy(camera.position);
@@ -363,6 +420,17 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     springTo(camera.position, posVel, _wantPos, smoothTime, step);
     springTo(controls.target, targetVel, _wantTarget, smoothTime, step);
 
+    // Arrival is measured against the BASE pose, never the drifted one: the
+    // wander is deliberately perpetual, so a move compared against it could
+    // never be declared settled and `done` would hang forever. An orbit is a
+    // standing state rather than a journey, so it never settles either.
+    if (activeMove && !orbit) {
+      if (isSettled(camera.position.distanceTo(basePos), posVel.length())) {
+        activeMove._finish("settled");
+        activeMove = null;
+      }
+    }
+
     // Under reduced motion the room still transitions, it simply stops
     // breathing: once converged there is nothing left to animate, so the
     // caller's loop is allowed to fall idle.
@@ -390,6 +458,15 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
         orbit: !!orbit, manual, driftScale: +driftScale.toFixed(3),
       };
     },
-    dispose() { orbit = null; manual = true; },
+    cancel,
+    dispose() {
+      // Ordered deliberately: mark destroyed FIRST so any verb racing this call
+      // returns {ok:false, reason:'disposed'} instead of arming new motion
+      // against a renderer that is going away.
+      destroyed = true;
+      cancel("disposed");
+      orbit = null;
+      manual = true;
+    },
   };
 }
