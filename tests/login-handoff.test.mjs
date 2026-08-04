@@ -93,17 +93,22 @@ test("the glass card follows the measured House Standard width, scaled down with
   // .pr-wrap supplies the ONE gutter (safe-area-aware, same formula at every
   // breakpoint) — .pr-card must not subtract a second one on top of it.
   assert.match(style, /\.pr-wrap\{[\s\S]*?padding:max\(56px,[\s\S]*?\) 24px[\s\S]*?max\(56px,/);
-  assert.match(style, /\.pr-card\{[\s\S]*?width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
+  // Mobile ceiling is 85%, not 100% (a real bug, found live 2026-08-04): on
+  // a phone the calc() value almost always exceeds available width, so
+  // min() picked 100% every time and --pr-card-scale had no visible effect
+  // below ~460px viewports — a "-15% smaller" instruction that only ever
+  // showed up on desktop.
+  assert.match(style, /\.pr-card\{[\s\S]*?width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),85%\)/);
   assert.match(style, /backdrop-filter:blur\(6px\) saturate\(1\.02\)/);
   assert.match(style, /0 30px 80px -34px rgba\(0,0,0,\.4\)/);
   // Round 3b/3c audit: the outer white glow (0 0 60px rgba(255,255,255,…))
   // measured as part of the top rim's light trail even though it paints
-  // outside the card box, and the near-zero fill couldn't reach the
-  // reference's actual "flat smoky scrim" character — replaced with a real
-  // semi-opaque neutral-grey fill (~.36-.44 alpha) that genuinely compresses
-  // contrast instead of just tinting it.
+  // outside the card box — removed. The fill has been retuned twice more
+  // since (round 4 walked back an over-dark scrim; a direct look at a real
+  // device pushed it lower still) — pin only that it stays neutral-grey and
+  // low-alpha, not the exact numbers, which are expected to keep moving.
   assert.doesNotMatch(style, /rgba\(255,255,255,\.09\)/);
-  assert.match(style, /background:linear-gradient\(180deg,rgba\(16,16,16,\.16\)/);
+  assert.match(style, /background:linear-gradient\(180deg,rgba\(14,14,14,\.07\)/);
   assert.doesNotMatch(style, /82vw|86vw|480px|560px|--pr-card-reference-scale/);
   // The two-layer background (padding-box, then border-box) trick was a real
   // bug (audited 2026-08-04): the border-box gradient wasn't confined to the
@@ -113,11 +118,19 @@ test("the glass card follows the measured House Standard width, scaled down with
   // against the reference's ~10%.
   assert.doesNotMatch(style, /\) padding-box,[\s\S]{0,80}\) border-box/);
   assert.match(style, /border:1px solid rgba\(255,255,255,\.14\);border-radius:45px/);
-  // Controls keep their accessibility floor regardless of the card scale —
-  // these must stay literal pixel values, never run through a scale token.
-  assert.match(style, /\.pr-input\{position:relative;display:flex;align-items:center;min-height:52px/);
-  assert.match(style, /\.pr-card \.btn\{min-height:52px/);
-  assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:44px/);
+  // Operator instruction, 2026-08-04, "scale the buttons": the old
+  // "controls never scale" accessibility floor (52px/44px) was explicitly
+  // overridden — pin the new literal values instead, still off the scale
+  // token (a deliberate fixed choice, not a scaled one).
+  assert.match(style, /\.pr-input\{position:relative;display:flex;align-items:center;min-height:44px/);
+  assert.match(style, /\.pr-card \.btn\{min-height:44px/);
+  assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:38px/);
+});
+
+test("the accent is champagne gold, not green (operator instruction, 2026-08-04)", () => {
+  assert.doesNotMatch(style, /#d7e2ba|215,226,186/);
+  assert.match(style, /--pr-accent:#e6d7a8/);
+  assert.match(style, /rgba\(230,215,168,/);
 });
 
 test("the card still materializes 1.6s in, but the photo is never blurred", () => {

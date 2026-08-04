@@ -11,8 +11,12 @@ html[data-akv-auth]{
   --pr-page:#d9ddd4;--pr-shell:#0b0d0c;--pr-panel:#0a0b0b;
   --pr-text:#f7f7f2;--pr-muted:rgba(247,247,242,.58);
   --pr-line:rgba(255,255,255,.13);--pr-soft:rgba(255,255,255,.065);
-  --pr-input:rgba(255,255,255,.075);--pr-accent:#d7e2ba;
-  --pr-accent-ink:#10130d;--pr-danger:#ff9a88;--pr-ok:#a9e3bd;
+  /* Champagne gold, not green (operator instruction, 2026-08-04 — "this is
+     annoying the green"). Replaces the pale olive-green accent everywhere
+     it appeared on this screen: primary button fill, focus rings, the
+     notice icon, the avatar chip. */
+  --pr-input:rgba(255,255,255,.075);--pr-accent:#e6d7a8;
+  --pr-accent-ink:#17130a;--pr-danger:#ff9a88;--pr-ok:#a9e3bd;
   --pr-dark-photo-opacity:1;--pr-light-photo-opacity:0;
   --pr-card-light-reflection:0;
   --pr-card-reference-width:412px;
@@ -33,15 +37,12 @@ html[data-akv-auth]{
      have; scaling width and vscale by the same factor keeps both
      dimensions shrinking together, matching the ratio's own derivation). */
   --pr-card-scale:.89;
-  /* The fixed-height controls (52px inputs/buttons, 44px links) that
-     HOUSE_STANDARD.md protects cannot shrink, so a flat .9 on every margin
-     only bought ~3% off the total card height. --pr-card-vscale compresses
-     just the compressible vertical rhythm (paddings, margins, gaps) harder
-     than the width itself shrinks, so the -10% height target lands on the
-     one thing actually free to move. Measured live against a 1280x720
-     viewport, unconfigured/guest build, sign-in mode.
-     2026-08-04, "-15% more": recalibrated alongside --pr-card-scale above,
-     value confirmed by live remeasurement (see commit note). */
+  /* Originally the 52px/44px controls HOUSE_STANDARD.md protects couldn't
+     shrink, so vscale did all the compressible-spacing work alone. Operator
+     instruction, 2026-08-04, "scale the buttons": that floor is gone by
+     explicit request now (controls cut to 44px/38px directly on their own
+     rules, below) — this token still compresses everything else the same
+     way it always did. */
   --pr-card-vscale:.3;
   /* The one dial for "how much light passes through the glass." Round 2
      (Pillow-measured against the reference JPEG): the reference glass
@@ -110,13 +111,16 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
    only the sheet's own vertical rhythm compresses to make the height follow. */
 .pr-card{
   position:relative;z-index:3;isolation:isolate;display:flex;flex-direction:column;justify-content:center;
-  /* .pr-wrap's own padding (above) is the ONLY gutter now — do not double it
-     here. That used to be split between a desktop rule (no wrap padding, so
-     the card subtracted its own 48px) and a mobile override (wrap already
-     padded, so the card just took 100%); unifying .pr-wrap's padding across
-     breakpoints means this rule can simply be the one the mobile override
-     used to be. */
-  width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),100%);min-width:0;margin:44px auto;
+  /* .pr-wrap's own padding (above) is the ONLY page gutter — do not double
+     it here. But "100%" as the mobile ceiling was a real bug (found live,
+     2026-08-04): on a phone the calc() value almost always EXCEEDS available
+     width, so min() picked the 100% ceiling every time — meaning
+     --pr-card-scale had NO visible effect below roughly a 460px viewport at
+     all. A "-15% smaller" instruction landed on desktop and was invisible on
+     the phone it was tested on. Capping the ceiling at 85% of available
+     width (not 100%) gives mobile the same real size cut, with genuine
+     margin around the card instead of edge-to-edge full-bleed. */
+  width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),85%);min-width:0;margin:44px auto;
   padding:calc(28px * var(--pr-card-vscale)) calc(24px * var(--pr-card-vscale)) calc(22px * var(--pr-card-vscale));
   color:var(--pr-text);
   /* TRANSLUCENT GLASS (operator instruction, 2026-08-04, repeated). Audited
@@ -157,13 +161,12 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
      8.8 on a clean band, std 29.7 where the chair crosses it — the "std 3.4"
      read came from an unrepresentative slice. At .36-.44 the live glass had
      over-corrected: transmission 0.77 against a corroborated ~0.82-0.85
-     target (two independent measurements agree: 0.820, 0.852), contrast
-     halved (0.53x) where the reference visibly keeps its scene legible, and
-     the bottom third alone measured 29% darker than the reference. Cut back
-     to a range that darkens without flattening: real detail should survive
-     "muted," per the operator's own "translucent glass" instruction — the
-     .36-.44 version had drifted from smoked glass toward frosted plastic. */
-  background:linear-gradient(180deg,rgba(16,16,16,.16),rgba(12,12,12,.19) 50%,rgba(8,8,8,.24) 100%);
+     target, contrast halved. Cut back to .16-.24 — still, on a real device,
+     read as "still not transparent" (operator, 2026-08-04, direct — the most
+     reliable signal in this whole thread beats any further agent pixel
+     analysis). Cut again, harder, trusting that over the contested target
+     numbers: real scene detail should be the dominant thing you see. */
+  background:linear-gradient(180deg,rgba(14,14,14,.07),rgba(10,10,10,.09) 50%,rgba(6,6,6,.12) 100%);
   border:1px solid rgba(255,255,255,.14);border-radius:45px;
   /* The outer white glow measured as part of the rim's light trail even
      though it paints outside the card box — removed. */
@@ -253,7 +256,7 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-mark{margin:0;font-size:clamp(20px,2.4vw,26px);line-height:1;letter-spacing:-.055em}
 .pr-mark .akva{color:#f8f8f4;text-shadow:none}.pr-mark .term{color:#e4454d;text-shadow:none}
 .pr-theme{
-  position:relative;width:46px;height:44px;padding:0;flex:none;border:0;
+  position:relative;width:39px;height:38px;padding:0;flex:none;border:0;
   border-radius:999px;background:transparent;cursor:pointer;
 }
 .pr-theme::before{content:"";position:absolute;inset:9px 0;border:1px solid var(--pr-line);border-radius:999px;background:var(--pr-soft)}
@@ -271,14 +274,18 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-nic{display:flex;flex:none;color:var(--pr-accent)}
 .pr-noticetext{font-size:10px;line-height:1.45}.pr-noticetext b{display:block;margin-bottom:2px;color:var(--pr-text);font-size:10px}.pr-noticetext span{display:block}
 .pr-form fieldset{min-inline-size:0;margin:0;padding:0;border:0}.pr-form fieldset[disabled]{opacity:.5}
-.pr-field{margin-bottom:calc(11px * var(--pr-card-vscale))}.pr-input{position:relative;display:flex;align-items:center;min-height:52px;border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-input);transition:border-color 160ms ease,background 160ms ease}
-.pr-input:focus-within{border-color:rgba(215,226,186,.72);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(215,226,186,.09)}
+.pr-field{margin-bottom:calc(11px * var(--pr-card-vscale))}.pr-input{position:relative;display:flex;align-items:center;min-height:44px;border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-input);transition:border-color 160ms ease,background 160ms ease}
+.pr-input:focus-within{border-color:rgba(230,215,168,.72);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(230,215,168,.09)}
 .pr-ic{display:flex;margin-left:16px;color:var(--pr-muted)}
 .pr-input input{width:100%;min-width:0;padding:0 14px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 13px/1 var(--font-text)}
-.pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{display:grid;place-items:center;min-width:44px;min-height:44px;margin-right:3px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
+.pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{display:grid;place-items:center;min-width:38px;min-height:38px;margin-right:3px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
 .pr-err{display:block;min-height:0;margin:4px 3px 0;color:var(--pr-danger);font-size:10px;line-height:1.35}.pr-err:not(:empty){min-height:16px}.pr-field.is-bad .pr-input{border-color:var(--pr-danger)}
-.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:44px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 10px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
-.pr-card .btn{min-height:52px;border-radius:14px;font-size:11px;font-weight:700;letter-spacing:.01em;box-shadow:none}.pr-card .btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid rgba(255,255,255,.32);background:var(--pr-accent);color:var(--pr-accent-ink);box-shadow:0 14px 34px -18px rgba(215,226,186,.72)}
+.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:38px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 10px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
+/* Button/input heights cut ~15% too (operator instruction, 2026-08-04,
+   "scale the buttons"): 52px->44px, 44px->38px. Below the WCAG 44px
+   guideline on the primary controls now — a deliberate call by the product
+   owner, not an oversight; flagging it here so it reads as intentional. */
+.pr-card .btn{min-height:44px;border-radius:14px;font-size:11px;font-weight:700;letter-spacing:.01em;box-shadow:none}.pr-card .btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid rgba(255,255,255,.32);background:var(--pr-accent);color:var(--pr-accent-ink);box-shadow:0 14px 34px -18px rgba(230,215,168,.72)}
 .pr-card .btn-primary:hover{filter:brightness(1.04);transform:translateY(-1px)}.pr-card .btn:focus-visible{outline:2px solid var(--pr-accent);outline-offset:3px}.pr-card .btn:disabled{cursor:not-allowed;filter:none;transform:none;box-shadow:none}
 .pr-google{position:relative;display:grid!important;grid-template-columns:28px 1fr 28px;align-items:center;width:100%;border:1px solid var(--pr-line)!important;background:var(--pr-soft)!important;color:var(--pr-text)!important}.pr-google>svg{justify-self:center}.pr-glabel{justify-self:center}.pr-google.is-busy .pr-glabel{opacity:.55}
 .pr-div{display:flex;align-items:center;gap:12px;margin:calc(16px * var(--pr-card-vscale)) 0;color:var(--pr-muted);font-size:9px;text-transform:uppercase;letter-spacing:.12em}.pr-div::before,.pr-div::after{content:"";height:1px;flex:1;background:var(--pr-line)}
