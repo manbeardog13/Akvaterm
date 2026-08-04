@@ -70,3 +70,40 @@ test("navigation teardown cancels before any visual handoff begins", () => {
   const handoffIndex = atelier.indexOf("opening?.transitionOut?.()", resultIndex);
   assert.ok(resultIndex >= 0 && cancelIndex > resultIndex && handoffIndex > cancelIndex);
 });
+
+test("the backdrop stays dark through the glass-and-question beats, not just blurred", () => {
+  assert.match(opening, /@keyframes ajBackdropFocus\{from\{opacity:0/);
+  assert.doesNotMatch(opening, /@keyframes ajBackdropFocus\{from\{opacity:1/);
+});
+
+test("the glass window finishes appearing within the first second", () => {
+  const match = opening.match(/animation:ajGlassIn\s+([\d.]+)s\s+cubic-bezier\([^)]+\)\s+([\d.]+)s\s+forwards/);
+  assert.ok(match, "ajGlassIn animation shorthand not found");
+  const [, duration, delay] = match;
+  assert.ok(Number(duration) + Number(delay) <= 1, `glass entrance finishes at ${Number(duration) + Number(delay)}s, past the 1s budget`);
+});
+
+test("the question types in word by word during the second beat, not as one block", () => {
+  assert.match(opening, /function questionWordsMarkup/);
+  assert.match(opening, /class="aj-word"/);
+  assert.match(opening, /--aj-word-delay/);
+  assert.match(opening, /@keyframes ajWordIn/);
+  assert.doesNotMatch(opening, /\.aj-question\{[^}]*animation:ajElementIn/);
+  const delays = [...opening.matchAll(/const delay = start \+ Math\.round\(\(span \* i\) \/ Math\.max\(1, words\.length - 1\)\);\s*\n\s*return `<span class="aj-word" style="--aj-word-delay:\$\{delay\}ms">/g)];
+  assert.ok(delays.length >= 1, "word-delay computation not wired into the span markup");
+});
+
+test("reduced motion still resolves aj-word to fully visible, not stuck mid-blur", () => {
+  const reducedBlock = opening.slice(opening.indexOf("@media(prefers-reduced-motion:reduce){.aj-backdrop"));
+  assert.match(reducedBlock, /\.aj-word[^{]*\{[^}]*animation:none!important/);
+  assert.match(reducedBlock, /\.aj-menu,\.aj-word,\.aj-glass\{opacity:1;filter:none!important\}/);
+});
+
+test("the glass window's corners are roughly half the login card's radius", () => {
+  assert.match(opening, /\.aj-glass\{[^}]*border-radius:22px/);
+});
+
+test("the question and glass window shrank ~20% and moved down toward the room, per operator feedback", () => {
+  assert.match(opening, /\.aj-question\{[^}]*font-size:clamp\(23px,4vw,45px\)/);
+  assert.match(opening, /\.aj-focus\{[^}]*transform:translateY\(calc\(4vh \+ 76px\)\)\}/);
+});

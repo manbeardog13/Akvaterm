@@ -228,7 +228,7 @@ function shell({ lightMix = 0 } = {}) {
          7.30:1, --atl-glass-ink-muted is 4.57:1. Both pass AA at any size. */
       .atl-guide{
         position:absolute;left:12px;right:12px;bottom:64px;z-index:2;
-        max-width:420px;max-height:calc(100% - 104px);overflow:auto;overscroll-behavior:contain;
+        max-width:420px;max-height:min(52dvh,400px);overflow:auto;overscroll-behavior:contain;
         padding:16px 18px;border-radius:var(--atl-r-lg);
         background:var(--atl-glass-bg);
         box-shadow:
@@ -242,8 +242,8 @@ function shell({ lightMix = 0 } = {}) {
         backdrop-filter:blur(var(--atl-glass-blur)) saturate(180%) brightness(1.06);
         color:var(--atl-ink);
       }
-      @media(min-width:720px){ .atl-guide{ left:24px; bottom:24px; } }
-      .atl-guide.is-summary{max-width:540px;padding:20px 22px}
+      @media(min-width:720px){ .atl-guide{ left:24px; right:max(24px,env(safe-area-inset-right,0px)); bottom:24px; } }
+      .atl-guide.is-summary{max-width:min(540px,92vw);padding:20px 22px}
       .atl-guide[data-flow="forward"]{--atl-beat-x:10px}
       .atl-guide[data-flow="back"]{--atl-beat-x:-10px}
 
@@ -258,7 +258,7 @@ function shell({ lightMix = 0 } = {}) {
       .atl-stale{display:block;margin:0 0 10px;padding:8px 10px;border-radius:var(--atl-r-sm);
         background:var(--atl-surface);color:var(--atl-amber-ink);font-size:12.5px;font-weight:600}
 
-      .atl-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;max-height:min(240px,34vh);
+      .atl-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;max-height:min(168px,22dvh);
         overflow:auto;overscroll-behavior:contain;padding:2px 3px 3px 2px;scrollbar-width:thin}
       .atl-empty{font-size:13px;color:var(--atl-glass-ink-muted);margin:0 0 14px}
 
@@ -355,9 +355,13 @@ function shell({ lightMix = 0 } = {}) {
       .atl-summary-warning{color:var(--atl-amber-ink);box-shadow:inset 3px 0 0 var(--atl-amber-500)}
       .atl-summary-note{margin:0;font-size:11.5px;line-height:1.4;color:var(--atl-glass-ink-muted)}
 
-      .atl-nav{display:flex;align-items:center;gap:10px}
-      .atl-guide.is-summary .atl-nav{position:sticky;bottom:-1px;z-index:2;padding-top:13px;
-        background:linear-gradient(to bottom,transparent,var(--atl-glass-bg) 34%)}
+      /* Sticky on every step, not just .is-summary (operator instruction,
+         2026-08-05, from the atl-guide overlay audit): the guide's own
+         max-height now regularly forces internal scrolling, and the nav
+         buttons must stay reachable without the user discovering that
+         scroll first. */
+      .atl-nav{position:sticky;bottom:-1px;z-index:2;display:flex;align-items:center;gap:10px;
+        padding-top:13px;background:linear-gradient(to bottom,transparent,var(--atl-glass-bg) 34%)}
       .atl-btn{
         min-height:44px;padding:8px 18px;border-radius:var(--atl-r-pill);border:1px solid transparent;
         font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;

@@ -8,6 +8,20 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
   { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
 ));
 
+// Word-by-word reveal (operator instruction, 2026-08-05): each word gets its
+// own --aj-word-delay landing inside the entrance's second-2 window (roughly
+// 1000ms-1900ms), so the question types in after the empty glass has already
+// appeared instead of fading in as one block.
+function questionWordsMarkup(text) {
+  const words = String(text).split(" ").filter(Boolean);
+  const start = 1000;
+  const span = 900;
+  return words.map((word, i) => {
+    const delay = start + Math.round((span * i) / Math.max(1, words.length - 1));
+    return `<span class="aj-word" style="--aj-word-delay:${delay}ms">${esc(word)}</span>`;
+  }).join(" ");
+}
+
 const CSS = `
 html[data-akv-journey] body{overflow:hidden;background:#000}
 html[data-akv-journey] .topbar,
@@ -17,7 +31,14 @@ html[data-akv-journey] #termaBtn{display:none!important}
 html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0}
 .aj-opening{position:fixed;z-index:28;inset:0;isolation:isolate;display:grid;place-items:center;overflow:hidden;background:#000;color:#f7f7f2}
 .aj-backdrop{position:absolute;z-index:0;inset:0;overflow:hidden;will-change:transform,filter,opacity}
-.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1);animation:ajBackdropFocus 1.55s cubic-bezier(.2,.82,.16,1) .18s forwards;will-change:filter,transform,opacity}
+/* Entrance sequence (operator instruction, 2026-08-05): the screen goes dark
+   first — .aj-opening's own #000 background already covers this, so the
+   backdrop image just needs to start invisible instead of appearing
+   instantly. It stays hidden through second 1 (glass window appears, empty)
+   and second 2 (question types in word by word), then fades AND blurs in
+   together across seconds 2-3, landing fully loaded and settled exactly
+   where the old sharp-to-blurry motion used to end up. */
+.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1);animation:ajBackdropFocus 2s cubic-bezier(.2,.82,.16,1) 1s both;will-change:filter,transform,opacity}
 .aj-backdrop-dark{animation:ajDarkCycle 24s ease-in-out 3.2s infinite alternate}
 .aj-backdrop-light{opacity:0;animation:ajLightCycle 24s ease-in-out 3.2s infinite alternate}
 .aj-veil{position:absolute;z-index:1;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.18) 44%,rgba(0,0,0,.40));pointer-events:none}
@@ -27,17 +48,18 @@ html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:
 .aj-menu{position:fixed;z-index:3;left:max(18px,env(safe-area-inset-left,0px));top:max(18px,env(safe-area-inset-top,0px));display:grid;place-content:center;gap:5px;width:44px;height:44px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0;animation:ajElementIn .7s cubic-bezier(.22,1,.36,1) .18s forwards}
 .aj-menu span{display:block;width:23px;height:2px;border-radius:999px;background:rgba(240,255,247,.68);box-shadow:0 1px rgba(255,255,255,.34),0 0 8px rgba(159,220,183,.16);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .aj-menu:focus-visible{outline:2px solid rgba(218,242,224,.86);outline-offset:3px;border-radius:12px}
-.aj-focus{position:relative;z-index:3;width:min(670px,calc(100vw - 48px));display:grid;gap:20px;margin:auto;transform:translateY(4vh)}
-.aj-question{max-width:620px;margin:0;color:#f8f8f4;font-family:var(--font-display);font-size:clamp(29px,5vw,56px);font-weight:450;line-height:1.06;letter-spacing:-.035em;text-wrap:balance;text-shadow:0 2px 22px rgba(0,0,0,.42);opacity:0;filter:blur(8px);animation:ajElementIn .95s cubic-bezier(.22,1,.36,1) .22s forwards}
-.aj-glass{position:relative;isolation:isolate;margin:0;padding:11px 12px 10px;border:1px solid transparent;border-radius:22px;color:#f7f7f2;background:linear-gradient(138deg,rgba(255,255,255,.05),rgba(177,227,208,.018) 40%,rgba(8,12,9,.14) 74%) padding-box,linear-gradient(145deg,rgba(255,255,255,.28),rgba(168,222,197,.10) 30%,rgba(236,201,138,.16) 72%,rgba(255,255,255,.08)) border-box;box-shadow:0 36px 90px -36px rgba(0,0,0,.72),inset 0 1px rgba(255,255,255,.14),inset 0 -1px rgba(132,184,151,.07);backdrop-filter:blur(26px) saturate(1.42) contrast(.98);-webkit-backdrop-filter:blur(26px) saturate(1.42) contrast(.98);opacity:0;transform:scale(.88,.66) translateY(26px);animation:ajGlassIn 1.25s cubic-bezier(.16,1,.35,1) .28s forwards}
+.aj-focus{position:relative;z-index:3;width:min(536px,calc(100vw - 48px));display:grid;gap:16px;margin:auto;transform:translateY(calc(4vh + 76px))}
+.aj-question{max-width:620px;margin:0;color:#f8f8f4;font-family:var(--font-display);font-size:clamp(23px,4vw,45px);font-weight:450;line-height:1.06;letter-spacing:-.035em;text-wrap:balance;text-shadow:0 2px 22px rgba(0,0,0,.42)}
+.aj-word{display:inline-block;opacity:0;filter:blur(6px);transform:translateY(6px);animation:ajWordIn .5s cubic-bezier(.22,1,.36,1) var(--aj-word-delay,0ms) both}
+.aj-glass{position:relative;isolation:isolate;margin:0;padding:9px 10px 8px;border:1px solid transparent;border-radius:22px;color:#f7f7f2;background:linear-gradient(138deg,rgba(255,255,255,.05),rgba(177,227,208,.018) 40%,rgba(8,12,9,.14) 74%) padding-box,linear-gradient(145deg,rgba(255,255,255,.28),rgba(168,222,197,.10) 30%,rgba(236,201,138,.16) 72%,rgba(255,255,255,.08)) border-box;box-shadow:0 36px 90px -36px rgba(0,0,0,.72),inset 0 1px rgba(255,255,255,.14),inset 0 -1px rgba(132,184,151,.07);backdrop-filter:blur(26px) saturate(1.42) contrast(.98);-webkit-backdrop-filter:blur(26px) saturate(1.42) contrast(.98);opacity:0;transform:scale(.88,.66) translateY(26px);animation:ajGlassIn .75s cubic-bezier(.16,1,.35,1) .1s forwards}
 .aj-glass::before{content:"";position:absolute;z-index:0;inset:1px;border-radius:21px;pointer-events:none;box-shadow:inset 1px 0 rgba(203,243,220,.10),inset -1px 0 rgba(255,215,159,.05),inset 0 20px 30px -26px rgba(255,255,255,.28),inset 0 -14px 20px -20px rgba(111,185,143,.22)}
-.aj-inputrow{position:relative;z-index:1;display:grid;grid-template-columns:auto minmax(0,1fr) 48px;align-items:end;gap:12px}
-.aj-terma{align-self:center;padding-left:4px;color:rgba(213,240,220,.68);font:700 10px/1 var(--font-text);letter-spacing:.12em;text-transform:uppercase}
-.aj-input{width:100%;min-height:44px;max-height:126px;resize:none;padding:12px 0 8px;border:0;outline:0;background:transparent;color:#fff;font:500 16px/1.45 var(--font-text)}
+.aj-inputrow{position:relative;z-index:1;display:grid;grid-template-columns:auto minmax(0,1fr) 38px;align-items:end;gap:10px}
+.aj-terma{align-self:center;padding-left:4px;color:rgba(213,240,220,.68);font:700 8px/1 var(--font-text);letter-spacing:.12em;text-transform:uppercase}
+.aj-input{width:100%;min-height:35px;max-height:101px;resize:none;padding:10px 0 6px;border:0;outline:0;background:transparent;color:#fff;font:500 13px/1.45 var(--font-text)}
 .aj-input::placeholder{color:rgba(247,247,242,.46);opacity:1}
-.aj-send{display:grid;place-items:center;width:48px;height:48px;padding:0;border:1px solid rgba(255,255,255,.15);border-radius:15px;background:rgba(255,255,255,.055);color:#eef8f0;cursor:pointer}
-.aj-send svg{width:20px;height:20px}.aj-send:disabled{opacity:.42;cursor:default}.aj-send:focus-visible{outline:2px solid rgba(218,242,224,.9);outline-offset:2px}
-.aj-response{position:relative;z-index:1;margin:11px 3px 1px;padding:13px 4px 1px;border-top:1px solid rgba(255,255,255,.11);color:rgba(247,247,242,.76);font:500 14px/1.5 var(--font-text);white-space:pre-wrap}
+.aj-send{display:grid;place-items:center;width:38px;height:38px;padding:0;border:1px solid rgba(255,255,255,.15);border-radius:12px;background:rgba(255,255,255,.055);color:#eef8f0;cursor:pointer}
+.aj-send svg{width:16px;height:16px}.aj-send:disabled{opacity:.42;cursor:default}.aj-send:focus-visible{outline:2px solid rgba(218,242,224,.9);outline-offset:2px}
+.aj-response{position:relative;z-index:1;margin:9px 2px 1px;padding:10px 3px 1px;border-top:1px solid rgba(255,255,255,.11);color:rgba(247,247,242,.76);font:500 11px/1.5 var(--font-text);white-space:pre-wrap}
 .aj-response:empty{display:none}
 .aj-glass[data-state="ready"] .aj-send{background:rgba(211,232,190,.92);color:#10150f;border-color:rgba(255,255,255,.38)}
 .aj-handoff-target{position:fixed;visibility:hidden;pointer-events:none;width:0;height:0}
@@ -46,16 +68,17 @@ html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:
 .aj-opening.is-departing .aj-glass .aj-inputrow,.aj-opening.is-departing .aj-glass .aj-response{opacity:0;transform:translateY(-4px);transition:opacity .14s ease-out,transform .22s cubic-bezier(.25,1,.5,1)}
 .aj-glass.is-handoff{z-index:4;margin:0;max-width:none;pointer-events:none;animation:none;transform-origin:0 0;will-change:transform;transition:transform .55s cubic-bezier(.25,1,.5,1),box-shadow .55s cubic-bezier(.25,1,.5,1)}
 @keyframes ajElementIn{from{opacity:0;transform:translateY(11px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes ajWordIn{from{opacity:0;transform:translateY(6px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 @keyframes ajGlassIn{from{opacity:0;transform:scale(.88,.66) translateY(26px);filter:blur(9px)}to{opacity:1;transform:scale(.93,.85) translateY(0);filter:none}}
-@keyframes ajBackdropFocus{from{opacity:1;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1)}to{opacity:.75;filter:blur(22px) saturate(1.18) brightness(1.01);transform:scale(1.028)}}
+@keyframes ajBackdropFocus{from{opacity:0;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1)}to{opacity:.75;filter:blur(22px) saturate(1.18) brightness(1.01);transform:scale(1.028)}}
 @keyframes ajParticleShimmer{0%{opacity:0;transform:translate3d(0,0,0) scale(.12);filter:blur(4px)}15%{opacity:.95}100%{opacity:0;transform:translate3d(var(--aj-particle-x),var(--aj-particle-y),0) scale(.02);filter:blur(.6px)}}
 @keyframes ajDarkCycle{0%,38%{opacity:1}72%,100%{opacity:.16}}
 @keyframes ajLightCycle{0%,38%{opacity:0}72%,100%{opacity:.84}}
-@media(max-width:680px){.aj-focus{width:min(100% - 40px,520px);gap:16px}.aj-question{font-size:clamp(27px,8vw,42px)}.aj-glass{padding:10px 10px 9px}.aj-inputrow{grid-template-columns:minmax(0,1fr) 48px;gap:8px}.aj-terma{grid-column:1/-1;padding:3px 5px 0}.aj-input{padding-top:4px;min-height:42px}}
-@media(orientation:landscape) and (max-height:520px){.aj-backdrop img{object-position:center 58%}.aj-focus{width:min(620px,calc(100vw - 140px));gap:14px;transform:translateY(3vh)}.aj-question{font-size:clamp(27px,5vh,42px)}.aj-glass{padding:9px 10px 8px}.aj-input{min-height:40px}}
+@media(max-width:680px){.aj-focus{width:min(100% - 40px,416px);gap:13px}.aj-question{font-size:clamp(22px,6.4vw,34px)}.aj-glass{padding:8px 8px 7px}.aj-inputrow{grid-template-columns:minmax(0,1fr) 38px;gap:6px}.aj-terma{grid-column:1/-1;padding:2px 4px 0}.aj-input{padding-top:3px;min-height:34px}}
+@media(orientation:landscape) and (max-height:520px){.aj-backdrop img{object-position:center 58%}.aj-focus{width:min(496px,calc(100vw - 140px));gap:11px;transform:translateY(3vh)}.aj-question{font-size:clamp(22px,4vh,34px)}.aj-glass{padding:7px 8px 6px}.aj-input{min-height:32px}}
 @media(min-width:560px) and (orientation:landscape){.aj-handoff-target{right:max(16px,env(safe-area-inset-right,0px));top:max(16px,env(safe-area-inset-top,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:min(360px,42vw);height:auto}}
 @media(min-width:560px) and (max-width:719px) and (orientation:landscape){.aj-handoff-target{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(330px,48vw)}}
-@media(prefers-reduced-motion:reduce){.aj-backdrop,.aj-menu,.aj-question,.aj-glass,.aj-backdrop-dark,.aj-backdrop-light,.aj-particles{animation:none!important;transform:none!important}.aj-backdrop{opacity:.62}.aj-menu,.aj-question,.aj-glass{opacity:1}.aj-backdrop-dark{opacity:1}.aj-backdrop-light{opacity:0}}
+@media(prefers-reduced-motion:reduce){.aj-backdrop,.aj-menu,.aj-word,.aj-glass,.aj-backdrop-dark,.aj-backdrop-light,.aj-particles{animation:none!important;transform:none!important}.aj-backdrop{opacity:.62}.aj-menu,.aj-word,.aj-glass{opacity:1;filter:none!important}.aj-backdrop-dark{opacity:1}.aj-backdrop-light{opacity:0}}
 @media(prefers-reduced-motion:reduce){.aj-opening.is-departing .aj-question,.aj-opening.is-departing .aj-menu,.aj-opening.is-departing .aj-glass{opacity:0;transition:opacity .17s linear}.aj-opening.is-departing .aj-backdrop{opacity:.62;transform:none;transition:none}}
 @media(forced-colors:active){.aj-opening,.aj-glass,.aj-send{forced-color-adjust:auto;background:Canvas;color:CanvasText;border:1px solid CanvasText}.aj-backdrop,.aj-veil{display:none}.aj-menu span{background:CanvasText}.aj-response{color:CanvasText}}
 `;
@@ -103,7 +126,7 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
       <span class="aj-veil" aria-hidden="true"></span>
       <button class="aj-menu" type="button" aria-label="Otvori izbornik"><span></span><span></span><span></span></button>
       <div class="aj-focus">
-        <h1 class="aj-question" id="ajQuestion">Kako želite da se osjećate u ovom prostoru?</h1>
+        <h1 class="aj-question" id="ajQuestion">${questionWordsMarkup("Kako želite da se osjećate u ovom prostoru?")}</h1>
         <form class="aj-glass" id="ajForm">
           <div class="aj-inputrow">
             <span class="aj-terma">Terma</span>
