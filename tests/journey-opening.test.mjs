@@ -9,11 +9,15 @@ const worker = fs.readFileSync(new URL("../service-worker.js", import.meta.url),
 
 test("the post-login route opens the journey on black before its blurred room arrives", () => {
   assert.match(opening, /\.aj-opening\{[^}]*background:#000/);
-  assert.match(opening, /\.aj-backdrop\{[^}]*opacity:0[^}]*animation:ajBackdropIn/);
-  assert.match(opening, /filter:blur\(20px\) saturate\(1\.10\) brightness\(1\.04\)/);
+  assert.match(opening, /\.aj-backdrop\{[^}]*will-change:transform,filter,opacity\}/);
+  assert.match(opening, /\.aj-backdrop img\{[^}]*animation:ajBackdropFocus/);
+  assert.match(opening, /filter:blur\(0px\) saturate\(1\.06\) brightness\(1\.02\)/);
   assert.match(opening, /object-position:center 58%/);
   assert.match(opening, /ajDarkCycle 24s/);
   assert.match(opening, /ajLightCycle 24s/);
+  assert.match(opening, /aj-particles/);
+  assert.match(opening, /ajParticleShimmer/);
+  assert.match(opening, /object-fit:cover/);
 });
 
 test("the only sharp opening controls are the glass hamburger, question and Terma input", () => {

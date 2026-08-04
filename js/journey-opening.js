@@ -16,21 +16,24 @@ html[data-akv-journey] .ai-dock,
 html[data-akv-journey] #termaBtn{display:none!important}
 html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0}
 .aj-opening{position:fixed;z-index:28;inset:0;isolation:isolate;display:grid;place-items:center;overflow:hidden;background:#000;color:#f7f7f2}
-.aj-backdrop{position:absolute;z-index:0;inset:-34px;overflow:hidden;opacity:0;animation:ajBackdropIn 2.6s cubic-bezier(.22,1,.36,1) .85s forwards}
-.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(20px) saturate(1.10) brightness(1.04);transform:scale(1.065);will-change:opacity}
+.aj-backdrop{position:absolute;z-index:0;inset:0;overflow:hidden;will-change:transform,filter,opacity}
+.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1);animation:ajBackdropFocus 1.55s cubic-bezier(.2,.82,.16,1) .18s forwards;will-change:filter,transform,opacity}
 .aj-backdrop-dark{animation:ajDarkCycle 24s ease-in-out 3.2s infinite alternate}
 .aj-backdrop-light{opacity:0;animation:ajLightCycle 24s ease-in-out 3.2s infinite alternate}
-.aj-veil{position:absolute;z-index:1;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.48),rgba(0,0,0,.16) 44%,rgba(0,0,0,.46));pointer-events:none}
+.aj-veil{position:absolute;z-index:1;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.18) 44%,rgba(0,0,0,.40));pointer-events:none}
+.aj-particles{position:absolute;z-index:2;inset:0;pointer-events:none;overflow:hidden}
+.aj-particle{position:absolute;display:block;opacity:0;transform:translate3d(0,0,0);animation:ajParticleShimmer var(--aj-particle-duration) cubic-bezier(.2,.75,.32,1) var(--aj-particle-delay) forwards;mix-blend-mode:screen;filter:blur(.8px);background:radial-gradient(circle,rgba(255,255,255,.95) 0,rgba(198,248,219,.26) 38%,rgba(164,228,198,0) 74%);border-radius:999px}
+.aj-particle::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,0));border-radius:999px;transform:translateY(-20%);opacity:.7}
 .aj-menu{position:fixed;z-index:3;left:max(18px,env(safe-area-inset-left,0px));top:max(18px,env(safe-area-inset-top,0px));display:grid;place-content:center;gap:5px;width:44px;height:44px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0;animation:ajElementIn .7s cubic-bezier(.22,1,.36,1) .18s forwards}
 .aj-menu span{display:block;width:23px;height:2px;border-radius:999px;background:rgba(240,255,247,.68);box-shadow:0 1px rgba(255,255,255,.34),0 0 8px rgba(159,220,183,.16);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .aj-menu:focus-visible{outline:2px solid rgba(218,242,224,.86);outline-offset:3px;border-radius:12px}
-.aj-focus{position:relative;z-index:2;width:min(720px,calc(100vw - 48px));display:grid;gap:22px;margin:auto;transform:translateY(-1vh)}
-.aj-question{max-width:670px;margin:0;color:#f8f8f4;font-family:var(--font-display);font-size:clamp(29px,5vw,56px);font-weight:450;line-height:1.06;letter-spacing:-.035em;text-wrap:balance;text-shadow:0 3px 24px rgba(0,0,0,.42);opacity:0;animation:ajElementIn .95s cubic-bezier(.22,1,.36,1) .22s forwards}
-.aj-glass{position:relative;isolation:isolate;margin:0;padding:14px 15px 13px;border:1px solid transparent;border-radius:24px;color:#f7f7f2;background:linear-gradient(138deg,rgba(255,255,255,.10),rgba(180,226,195,.035) 40%,rgba(5,10,8,.18) 74%) padding-box,linear-gradient(145deg,rgba(255,255,255,.50),rgba(181,231,202,.15) 30%,rgba(255,221,170,.22) 72%,rgba(255,255,255,.10)) border-box;box-shadow:0 46px 110px -38px rgba(0,0,0,.82),inset 0 1px rgba(255,255,255,.20),inset 0 -1px rgba(132,184,151,.08);backdrop-filter:blur(16px) saturate(1.28) contrast(1.04);-webkit-backdrop-filter:blur(16px) saturate(1.28) contrast(1.04);opacity:0;animation:ajGlassIn 1.05s cubic-bezier(.22,1,.36,1) .48s forwards}
-.aj-glass::before{content:"";position:absolute;z-index:0;inset:1px;border-radius:23px;pointer-events:none;box-shadow:inset 1px 0 rgba(203,243,220,.10),inset -1px 0 rgba(255,215,159,.06),inset 0 14px 24px -26px rgba(255,255,255,.54),inset 0 -16px 26px -28px rgba(111,185,143,.28)}
+.aj-focus{position:relative;z-index:3;width:min(670px,calc(100vw - 48px));display:grid;gap:20px;margin:auto;transform:translateY(4vh)}
+.aj-question{max-width:620px;margin:0;color:#f8f8f4;font-family:var(--font-display);font-size:clamp(29px,5vw,56px);font-weight:450;line-height:1.06;letter-spacing:-.035em;text-wrap:balance;text-shadow:0 2px 22px rgba(0,0,0,.42);opacity:0;filter:blur(8px);animation:ajElementIn .95s cubic-bezier(.22,1,.36,1) .22s forwards}
+.aj-glass{position:relative;isolation:isolate;margin:0;padding:11px 12px 10px;border:1px solid transparent;border-radius:22px;color:#f7f7f2;background:linear-gradient(138deg,rgba(255,255,255,.05),rgba(177,227,208,.018) 40%,rgba(8,12,9,.14) 74%) padding-box,linear-gradient(145deg,rgba(255,255,255,.28),rgba(168,222,197,.10) 30%,rgba(236,201,138,.16) 72%,rgba(255,255,255,.08)) border-box;box-shadow:0 36px 90px -36px rgba(0,0,0,.72),inset 0 1px rgba(255,255,255,.14),inset 0 -1px rgba(132,184,151,.07);backdrop-filter:blur(26px) saturate(1.42) contrast(.98);-webkit-backdrop-filter:blur(26px) saturate(1.42) contrast(.98);opacity:0;transform:scale(.88,.66) translateY(26px);animation:ajGlassIn 1.25s cubic-bezier(.16,1,.35,1) .28s forwards}
+.aj-glass::before{content:"";position:absolute;z-index:0;inset:1px;border-radius:21px;pointer-events:none;box-shadow:inset 1px 0 rgba(203,243,220,.10),inset -1px 0 rgba(255,215,159,.05),inset 0 20px 30px -26px rgba(255,255,255,.28),inset 0 -14px 20px -20px rgba(111,185,143,.22)}
 .aj-inputrow{position:relative;z-index:1;display:grid;grid-template-columns:auto minmax(0,1fr) 48px;align-items:end;gap:12px}
-.aj-terma{align-self:center;padding-left:4px;color:rgba(213,240,220,.72);font:700 10px/1 var(--font-text);letter-spacing:.12em;text-transform:uppercase}
-.aj-input{width:100%;min-height:52px;max-height:126px;resize:none;padding:15px 0 10px;border:0;outline:0;background:transparent;color:#fff;font:500 16px/1.45 var(--font-text)}
+.aj-terma{align-self:center;padding-left:4px;color:rgba(213,240,220,.68);font:700 10px/1 var(--font-text);letter-spacing:.12em;text-transform:uppercase}
+.aj-input{width:100%;min-height:44px;max-height:126px;resize:none;padding:12px 0 8px;border:0;outline:0;background:transparent;color:#fff;font:500 16px/1.45 var(--font-text)}
 .aj-input::placeholder{color:rgba(247,247,242,.46);opacity:1}
 .aj-send{display:grid;place-items:center;width:48px;height:48px;padding:0;border:1px solid rgba(255,255,255,.15);border-radius:15px;background:rgba(255,255,255,.055);color:#eef8f0;cursor:pointer}
 .aj-send svg{width:20px;height:20px}.aj-send:disabled{opacity:.42;cursor:default}.aj-send:focus-visible{outline:2px solid rgba(218,242,224,.9);outline-offset:2px}
@@ -42,16 +45,17 @@ html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:
 .aj-opening.is-departing .aj-backdrop{animation:none;opacity:.72;transform:scale(.985);transition:opacity .55s cubic-bezier(.25,1,.5,1),transform .55s cubic-bezier(.25,1,.5,1)}
 .aj-opening.is-departing .aj-glass .aj-inputrow,.aj-opening.is-departing .aj-glass .aj-response{opacity:0;transform:translateY(-4px);transition:opacity .14s ease-out,transform .22s cubic-bezier(.25,1,.5,1)}
 .aj-glass.is-handoff{z-index:4;margin:0;max-width:none;pointer-events:none;animation:none;transform-origin:0 0;will-change:transform;transition:transform .55s cubic-bezier(.25,1,.5,1),box-shadow .55s cubic-bezier(.25,1,.5,1)}
-@keyframes ajElementIn{from{opacity:0;transform:translateY(11px)}to{opacity:1;transform:none}}
-@keyframes ajGlassIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes ajBackdropIn{to{opacity:.78}}
+@keyframes ajElementIn{from{opacity:0;transform:translateY(11px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes ajGlassIn{from{opacity:0;transform:scale(.88,.66) translateY(26px);filter:blur(9px)}to{opacity:1;transform:scale(.93,.85) translateY(0);filter:none}}
+@keyframes ajBackdropFocus{from{opacity:1;filter:blur(0px) saturate(1.06) brightness(1.02);transform:scale(1)}to{opacity:.75;filter:blur(22px) saturate(1.18) brightness(1.01);transform:scale(1.028)}}
+@keyframes ajParticleShimmer{0%{opacity:0;transform:translate3d(0,0,0) scale(.12);filter:blur(4px)}15%{opacity:.95}100%{opacity:0;transform:translate3d(var(--aj-particle-x),var(--aj-particle-y),0) scale(.02);filter:blur(.6px)}}
 @keyframes ajDarkCycle{0%,38%{opacity:1}72%,100%{opacity:.16}}
 @keyframes ajLightCycle{0%,38%{opacity:0}72%,100%{opacity:.84}}
-@media(max-width:680px){.aj-focus{width:min(100% - 40px,560px);gap:17px}.aj-question{font-size:clamp(27px,8vw,42px)}.aj-glass{padding:12px 12px 11px}.aj-inputrow{grid-template-columns:minmax(0,1fr) 48px;gap:8px}.aj-terma{grid-column:1/-1;padding:3px 5px 0}.aj-input{padding-top:5px}}
-@media(orientation:landscape) and (max-height:520px){.aj-backdrop img{object-position:center 58%}.aj-focus{width:min(720px,calc(100vw - 140px));gap:15px;transform:none}.aj-question{font-size:clamp(27px,5vh,42px)}.aj-glass{padding-block:10px}.aj-input{min-height:44px}}
+@media(max-width:680px){.aj-focus{width:min(100% - 40px,520px);gap:16px}.aj-question{font-size:clamp(27px,8vw,42px)}.aj-glass{padding:10px 10px 9px}.aj-inputrow{grid-template-columns:minmax(0,1fr) 48px;gap:8px}.aj-terma{grid-column:1/-1;padding:3px 5px 0}.aj-input{padding-top:4px;min-height:42px}}
+@media(orientation:landscape) and (max-height:520px){.aj-backdrop img{object-position:center 58%}.aj-focus{width:min(620px,calc(100vw - 140px));gap:14px;transform:translateY(3vh)}.aj-question{font-size:clamp(27px,5vh,42px)}.aj-glass{padding:9px 10px 8px}.aj-input{min-height:40px}}
 @media(min-width:560px) and (orientation:landscape){.aj-handoff-target{right:max(16px,env(safe-area-inset-right,0px));top:max(16px,env(safe-area-inset-top,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:min(360px,42vw);height:auto}}
 @media(min-width:560px) and (max-width:719px) and (orientation:landscape){.aj-handoff-target{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(330px,48vw)}}
-@media(prefers-reduced-motion:reduce){.aj-backdrop,.aj-menu,.aj-question,.aj-glass,.aj-backdrop-dark,.aj-backdrop-light{animation:none!important;transform:none!important}.aj-backdrop{opacity:.62}.aj-menu,.aj-question,.aj-glass{opacity:1}.aj-backdrop-dark{opacity:1}.aj-backdrop-light{opacity:0}}
+@media(prefers-reduced-motion:reduce){.aj-backdrop,.aj-menu,.aj-question,.aj-glass,.aj-backdrop-dark,.aj-backdrop-light,.aj-particles{animation:none!important;transform:none!important}.aj-backdrop{opacity:.62}.aj-menu,.aj-question,.aj-glass{opacity:1}.aj-backdrop-dark{opacity:1}.aj-backdrop-light{opacity:0}}
 @media(prefers-reduced-motion:reduce){.aj-opening.is-departing .aj-question,.aj-opening.is-departing .aj-menu,.aj-opening.is-departing .aj-glass{opacity:0;transition:opacity .17s linear}.aj-opening.is-departing .aj-backdrop{opacity:.62;transform:none;transition:none}}
 @media(forced-colors:active){.aj-opening,.aj-glass,.aj-send{forced-color-adjust:auto;background:Canvas;color:CanvasText;border:1px solid CanvasText}.aj-backdrop,.aj-veil{display:none}.aj-menu span{background:CanvasText}.aj-response{color:CanvasText}}
 `;
@@ -95,6 +99,7 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
         <img class="aj-backdrop-dark" src="./assets/images/login-interior-dark-4k.webp" alt="" width="2160" height="3840" decoding="async">
         <img class="aj-backdrop-light" src="./assets/images/login-interior-light-4k.webp" alt="" width="2160" height="3840" decoding="async">
       </div>
+      <div class="aj-particles" aria-hidden="true"></div>
       <span class="aj-veil" aria-hidden="true"></span>
       <button class="aj-menu" type="button" aria-label="Otvori izbornik"><span></span><span></span><span></span></button>
       <div class="aj-focus">
@@ -110,6 +115,32 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
       </div>
       <span class="aj-handoff-target" aria-hidden="true"></span>
     </section>`;
+
+  const particleHost = container.querySelector(".aj-particles");
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (particleHost && !reducedMotion) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const count = Math.max(12, Math.round((vw * vh) / 42000));
+    for (let i = 0; i < count; i += 1) {
+      const particle = document.createElement("span");
+      const duration = 1000 + Math.random() * 900;
+      const delay = Math.random() * 420;
+      const driftX = (Math.random() - 0.5) * 300;
+      const driftY = (Math.random() - 0.5) * 220;
+      const size = 2 + Math.random() * 4;
+      particle.className = "aj-particle";
+      particle.style.left = `${Math.random() * vw}px`;
+      particle.style.top = `${Math.random() * vh}px`;
+      particle.style.width = `${size.toFixed(2)}px`;
+      particle.style.height = `${size.toFixed(2)}px`;
+      particle.style.setProperty("--aj-particle-x", `${driftX.toFixed(2)}px`);
+      particle.style.setProperty("--aj-particle-y", `${driftY.toFixed(2)}px`);
+      particle.style.setProperty("--aj-particle-duration", `${duration.toFixed(0)}ms`);
+      particle.style.setProperty("--aj-particle-delay", `${delay.toFixed(0)}ms`);
+      particleHost.appendChild(particle);
+    }
+  }
 
   const form = container.querySelector("#ajForm");
   const input = container.querySelector("#ajInput");

@@ -1,9 +1,51 @@
-# HANDOFF — next session
+﻿## Handoff for Claude — 2026-08-04
 
-## Superseding update — 2026-08-04
+Use this as the shortest practical transition for the opening/ login flow.
+
+### What was changed
+
+- `js/journey-opening.js`
+  - Replaced the existing `ajBackdropIn` opening animation behavior with a new
+    `ajBackdropFocus` motion so the background starts sharp and naturally softens
+    while the glass form arrives.
+  - Added a new particle layer (`.aj-particles` / `.aj-particle`) and
+    JS-generated particle host on mount for the login-to-journey entrance effect.
+  - Reduced the login glass card footprint and increased translucency:
+    `aj-focus` width reduced, height/compression adjusted, and stronger
+    backdrop-blur/contrast treatment.
+  - Updated animation timing and mobile breakpoints to fit the revised geometry.
+  - Kept orientation handoff and existing post-login route behavior intact.
+- `tests/journey-opening.test.mjs`
+  - Updated assertions to match the new keyframes and structure
+    (`ajBackdropFocus`, particle DOM hooks, removed old `ajBackdropIn` checks).
+- `docs/HANDOFF.md`
+  - Added this continuity handoff entry for Claude.
+
+### Verification done before handoff
+
+- `node --check js/journey-opening.js`
+- `node --test tests/journey-opening.test.mjs`
+- `node --test tests/atelier-landscape.test.mjs`
+- Results: both test suites passed (0 failures), file check passed.
+
+### Branch state
+
+- Working tree modified for journey opening flow only: `js/journey-opening.js`,
+  `tests/journey-opening.test.mjs`, and this handoff section.
+- Existing untracked workspace files are `.claude-flow/`, `ruvector.db`,
+  `supabase/.temp/` (non-product artifacts).
+
+### Next action
+
+- Push this handoff with the two code/test file changes; no known blockers
+  remain from this pass.
+
+---`n# HANDOFF â€” next session
+
+## Superseding update â€” 2026-08-04
 
 The operator explicitly replaced this file's older login authority with the
-photo set supplied on 2026-08-04. The later “Login: CLOSED / Do not restyle it”
+photo set supplied on 2026-08-04. The later â€śLogin: CLOSED / Do not restyle itâ€ť
 line below is historical and no longer governs the current surface.
 
 - `#/prijava` now uses the operator-approved local cinematic interior at
@@ -39,7 +81,7 @@ more crisp. I would have the application hardened and not failing on memory,
 collapsing."*
 
 So: **`js/room3d.js` is the surviving engine. `js/scene3d.js` and the Dizajner
-view are to be retired.** The A/B before/after wipe is **dropped** — it was the
+view are to be retired.** The A/B before/after wipe is **dropped** â€” it was the
 only feature unique to the Dizajner and it is explicitly not wanted.
 
 ### Why this is correct, with the numbers
@@ -74,7 +116,7 @@ Three things, none of which need `scene3d.js` to survive:
 
 ---
 
-## ⚠ THE BLOCKING BUG — ✅ CLOSED 2026-08-03, commit `1087608`
+## âš  THE BLOCKING BUG â€” âś… CLOSED 2026-08-03, commit `1087608`
 
 **Fixed and verified live.** `js/room3d.js` now has: a rebuildable
 `buildEnvironment()`, a `webglcontextlost` handler that calls
@@ -85,10 +127,10 @@ null-guards the env disposal, drops the stale `disposeObject(scene, true)`
 argument and surrenders the context with `forceContextLoss()`.
 
 Verified by losing and restoring the real context on a mounted `#/soba3d`:
-mean frame luminance 213.7 → 213.7, **0 of 6912** sampled pixels changed
-(broken scene3d had measured 206.2 → 141.4 with 34384 of 38376 changed).
+mean frame luminance 213.7 â†’ 213.7, **0 of 6912** sampled pixels changed
+(broken scene3d had measured 206.2 â†’ 141.4 with 34384 of 38376 changed).
 Teardown after the restore ran clean. One deliberate divergence from
-scene3d: no `markShadowsDirty()` is needed — room3d leaves
+scene3d: no `markShadowsDirty()` is needed â€” room3d leaves
 `shadow.autoUpdate` at its default so the depth pass re-rasterises every
 frame; **if damage-driven shadows are ported during consolidation, re-arm
 them in the restore handler too** (the comment in the code says the same).
@@ -104,48 +146,48 @@ webglcontextrestored | rebuildEnvironment | markShadowsDirty
   js/scene3d.js  11 occurrences
 ```
 
-This is the ORIGINAL bug the operator reported — *"the improved look of the
-bathtub and cabinets goes back to the very plain one"* — and the 3D room is
+This is the ORIGINAL bug the operator reported â€” *"the improved look of the
+bathtub and cabinets goes back to the very plain one"* â€” and the 3D room is
 **more** exposed than the Dizajner was, because it holds a live WebGL context
 while the user browses saved designs.
 
 ### The mechanism (diagnosed and measured today, not theorised)
 
 Two GPU resources are **rendered**, not uploaded, so three.js cannot restore
-them after a context loss — there is no CPU-side source to re-upload from:
+them after a context loss â€” there is no CPU-side source to re-upload from:
 
 1. **The PMREM environment map.** `PMREMGenerator.fromScene()` renders into a
    `WebGLRenderTarget`. Once the allocation is gone the texture samples as
    nothing. The tuned materials in `js/gfx3d.js` `MATERIAL_TUNING` set chrome to
-   metalness 1 and glazed ceramics to roughness 0.1 — **a metal has no diffuse
+   metalness 1 and glazed ceramics to roughness 0.1 â€” **a metal has no diffuse
    term**, so with no environment it returns almost nothing and every polished
    surface collapses to flat matte.
-   *Measured: mean frame luminance 206.2 → 141.4, 34384 of 38376 pixels changed
-   — identical to forcing `environmentIntensity` to 0.*
+   *Measured: mean frame luminance 206.2 â†’ 141.4, 34384 of 38376 pixels changed
+   â€” identical to forcing `environmentIntensity` to 0.*
 
 2. **The sun's one-shot shadow depth map.** `shadow.autoUpdate = false` with a
    single `needsUpdate = true` means the depth pass runs once and is assumed
    valid forever. r185 carries the *global* shadow-map flags across a restore
    but not the *per-light* one, so the guard skips the depth pass from then on,
    permanently.
-   *Measured: 206.2 → 184.3, 19721 pixels changed, never recovers, restored
+   *Measured: 206.2 â†’ 184.3, 19721 pixels changed, never recovers, restored
    exactly by re-setting `needsUpdate`.*
 
-### The fix, as applied to scene3d.js — port it
+### The fix, as applied to scene3d.js â€” port it
 
 - Wrap the PMREM build in a `buildEnvironment()` that disposes the old target
   and generator and rebuilds both, and expose it on the stage handle.
 - Re-arm the depth pass wherever the drawing buffer may have been reallocated:
   a `webglcontextrestored` listener, `resize()`, and before any snapshot.
 - three's own restore listener is registered when the renderer is constructed,
-  so it runs **before** yours — which is what makes rebuilding there safe.
+  so it runs **before** yours â€” which is what makes rebuilding there safe.
 
 See `js/scene3d.js`, the `buildEnvironment()` block and the `onContextRestored`
 handler, for the exact shape.
 
 ---
 
-## MEMORY HARDENING — the operator's second ask
+## MEMORY HARDENING â€” the operator's second ask
 
 *"I would have the application hardened and not failing on memory, collapsing."*
 
@@ -156,16 +198,16 @@ Known pressure points, all verified in the tree today:
   scene is mounted works near that limit, and **a dropped context is the browser
   doing its job**, not an exotic failure. This is why the fix above is not
   optional.
-- **`js/room3d.js:1130` calls `disposeObject(scene, true)`** — the old `force`
+- **`js/room3d.js:1130` calls `disposeObject(scene, true)`** â€” the old `force`
   argument. `js/gfx3d.js` no longer accepts it (the parameter was removed today
   precisely because forcing frees geometry the refcounted prototype cache still
-  hands to other live consumers — a use-after-free that never throws, because
+  hands to other live consumers â€” a use-after-free that never throws, because
   three silently re-uploads from the JS-side arrays). The extra argument is now
-  ignored, so this is currently harmless — **but delete it** so nobody restores
+  ignored, so this is currently harmless â€” **but delete it** so nobody restores
   the behaviour.
 - **Prototype cache refcounting.** `retainPrototypes()` / `releasePrototypes()`
   in `js/gfx3d.js`. `scene3d.js` was fixed today to retain only *after* the
-  renderer constructor succeeds — on a device without WebGL the constructor
+  renderer constructor succeeds â€” on a device without WebGL the constructor
   throws and an earlier retain could never be matched, pinning the cache for the
   session. **Check `room3d.js` for the same ordering.**
 - **Thumbnail rendering** surrenders its context explicitly. Keep that.
@@ -176,7 +218,7 @@ Suggested additions: a `webglcontextlost` handler that calls
 
 ---
 
-## STATE OF THE APP — what is done
+## STATE OF THE APP â€” what is done
 
 All committed and pushed to `github.com/manbeardog13/Akvaterm`, `main`.
 
@@ -189,32 +231,32 @@ All committed and pushed to `github.com/manbeardog13/Akvaterm`, `main`.
 - **Left drawer** replaces the bottom tab bar; account row with sign-out.
 - **Terma** is the top-right button (was "..."), opens a themed dropdown.
 - **Post-login transition** wired and verified (zero stranded overlays).
-- **Adversarial review** ran: 20 findings → 18 confirmed → fixed.
+- **Adversarial review** ran: 20 findings â†’ 18 confirmed â†’ fixed.
 - **Reduce-transparency** removed entirely, per instruction. Accessibility cost
   recorded in the commit.
 
-## STATE OF THE APP — what is open
+## STATE OF THE APP â€” what is open
 
 1. ~~The `room3d.js` context-loss fix.~~ **Done, commit `1087608`.** See above.
 2. **Consolidation** onto the 3D room; retire `scene3d.js` + `dizajner.js`.
    Now the top item.
 3. **The dashboard/catalogue redesign.** A four-direction design panel produced
    a full spec; only its contrast fixes and missing i18n keys were applied. The
-   larger proposals — a new `ploca.js` dashboard, a site-wide palette migration,
-   a type-scale inversion — were deliberately NOT applied because each rewrites
+   larger proposals â€” a new `ploca.js` dashboard, a site-wide palette migration,
+   a type-scale inversion â€” were deliberately NOT applied because each rewrites
    `css/styles.css` or adds a view.
    **The spec is saved in the repo: `docs/specs/dashboard-design-panel.md`**
    (~123 KB, four agents: the brief plus three design directions). It is raw
-   panel output, not an edited spec — read it for the concrete directives and
+   panel output, not an edited spec â€” read it for the concrete directives and
    ignore the deliberation.
 4. **Terma has no Gemini key.** She says plainly that she is not switched on.
    Chat is free tier; the photo-analysis model (`gemini-3.1-flash-image`) has
-   **no free tier** and would need billing — left off deliberately.
+   **no free tier** and would need billing â€” left off deliberately.
 5. **The full sign-in choreography** reports `flew:false` on the auth route
    (the top bar is hidden, so there is no destination mark to fly to). It
    degrades correctly; the full version is unseen.
 6. **Google OAuth** needs the home-screen icon removed and re-added for the
-   `black-translucent` status-bar change to take effect — iOS caches those meta
+   `black-translucent` status-bar change to take effect â€” iOS caches those meta
    values at install time.
 
 ---
@@ -231,7 +273,7 @@ Read these before touching anything visual. Each was learned the expensive way.
    - A local render showed a card at 93.6% of viewport; the device showed 81%.
 2. **COPY THE RULES, DO NOT RETYPE VALUES.** Everything not consciously
    retyped vanishes silently. The logo glow, the button glow, the theme
-   cross-fade and the dark-mode control colours were never decided against —
+   cross-fade and the dark-mode control colours were never decided against â€”
    they simply never crossed over, and each came back as a bug report.
 3. **CONFIRM WHICH FILE DEFINES IT.** ASC's card rules are inline in its
    `app/login.html`, not in `css/styles.css`. Six rounds of "reading ASC's
@@ -256,3 +298,5 @@ for f in js/*.js js/views/*.js service-worker.js; do node --check "$f" || echo "
 for f in js/*.js js/views/*.js; do n=$(grep -o '`' "$f" | wc -l); [ $((n % 2)) -ne 0 ] && echo "ODD BACKTICKS $f"; done
 python scripts/csp_hashes.py
 ```
+
+
