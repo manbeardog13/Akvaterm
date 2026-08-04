@@ -104,19 +104,32 @@ value as a measured one.
 
 ### THE LOGIN IS FINAL — this is the specification
 
-**Status: closed, 2026-08-03.** The Akvaterm login is the reference
-implementation and `docs/templates/login.html` is its copy-pasteable form.
-Every number below was measured off a rendered page at **375×812**. Nothing
-here was read out of a stylesheet.
+**Status: closed, 2026-08-03 — amended 2026-08-04.** The Akvaterm login is the
+reference implementation and `docs/templates/login.html` is its
+copy-pasteable form. Every number below was measured off a rendered page at
+**375×812** (desktop figures at **1280×720**, noted where they diverge).
+Nothing here was read out of a stylesheet.
+
+**2026-08-04 amendment, Akvaterm only:** operator instruction removed the
+boot splash entirely, added a photo blur-in reveal and a particle-resolve
+entrance to the card, and took a further **-10%** off the card's reference
+width and its own vertical rhythm (not off the controls — see below). The
+**card** and **card padding** rows below reflect the new measurements; every
+other row is unchanged. This amendment was scoped to Akvaterm's own login
+(`js/login-photo-style.js`, `js/views/prijava.js`) — `docs/templates/login.html`
+still carries the pre-amendment recipe, deliberately: today's instruction did
+not ask for the cross-project template to change, and propagating an
+Akvaterm-specific compaction into the binding house template is a separate
+decision this doc is not making for you.
 
 #### Layout
 
 | | value |
 | --- | --- |
 | page gutter | 24px each side |
-| card | `width: min(412px, 100%)`, **327px** at 375 viewport |
+| card | `width: min(412px * .9, 100%)` — **370.8px** at 1280 viewport, **327px** at 375 viewport (already gutter-capped there; the -10% has no room to apply) |
 | card radius | **30px** |
-| card padding | **28px / 24px / 22px** |
+| card padding | **19px / 16.3px / 15px** (28/24/22 × the card's own .68 vertical-rhythm compression — controls stay at their 44–52px floor) |
 | logo | **46.4%** of the content column |
 | title | **24px** Sora 600, `-.01em`, line-height 1.22 |
 | subtitle | **13.5px**, 3px above / 20px below |

@@ -7,12 +7,12 @@
      ships as a meta tag; it is enforced identically apart from the header-only
      directives (frame-ancestors / report-to), which are therefore omitted.
 
-     script-src is 'self' plus one sha256 per inline script — the import map
-     and the splash bootstrap at the bottom of this file. Adding a hash makes
-     CSP3 browsers ignore 'unsafe-inline' entirely, so any injected inline
-     script is refused: the second line of defence the hand-rolled esc()
-     helpers cannot provide on their own. Edit either inline script and you
-     MUST recompute its hash or the app will not boot.
+     script-src is 'self' plus one sha256 per inline script — currently just
+     the import map. Adding a hash makes CSP3 browsers ignore 'unsafe-inline'
+     entirely, so any injected inline script is refused: the second line of
+     defence the hand-rolled esc() helpers cannot provide on their own. Edit
+     the inline script and you MUST recompute its hash or the app will not
+     boot.
 
      style-src keeps 'unsafe-inline': the views build scoped <style> blocks and
      style="" attributes by design. That is exactly why colour values coming
@@ -51,7 +51,7 @@
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-DQc2j5FB6BI743ywOKtvGVgsqYFouFi8okKkH56Ey4o=';
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-SWc43khCehok0TSwbeCZpqfxjFElDlK5jDbx/mxinFM=';
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -171,26 +171,18 @@
 </head>
 <body>
 
-<!-- Refractive cold open — visible on first paint. The retired tiles,
-     wordmark billboard and glowing rule are deliberately absent. Three glass
-     contours resolve around a narrow photographic view into the same room the
-     login reveals, so the opening hands into the product rather than stopping
-     for a separate loader. -->
-<div id="splash" aria-hidden="true">
-  <div class="sp-stage">
-    <i class="sp-plane sp-plane-a"></i>
-    <i class="sp-plane sp-plane-b"></i>
-    <i class="sp-plane sp-plane-c"></i>
-    <div class="sp-aperture">
-      <i class="sp-depth"></i>
-      <i class="sp-rim"></i>
-    </div>
-  </div>
-</div>
+<!-- No boot splash. Operator instruction, 2026-08-04: the abstract glass-
+     aperture loader that used to cover the boot (three floating contours
+     around a small preview window) is retired outright, not softened. The
+     first-paint moment now belongs to whatever view actually mounts — on the
+     sign-in threshold that is login-photo-style.js's own crisp-photo-blurs-in
+     reveal with the card resolving out of a particle field, built INSIDE the
+     view rather than as a curtain in front of it. Every other route keeps its
+     ordinary #main.view-enter transition, unchanged. -->
 
 <!-- App mount point — js/app.js looks this element up by id and owns everything
      inside it. The id must stay "app": app.js falls back to rebuilding the
-     shell (and wiping the splash with it) when it cannot find this element. -->
+     shell when it cannot find this element. -->
 <div id="app"></div>
 
 <noscript>
@@ -201,63 +193,10 @@
 </noscript>
 
 <script>
-/* Splash lifecycle + HAND-OFF. The launch surface fades once the first view
-   has painted (app.js calls window.akvHideSplash, or dispatches "akv:ready"),
-   never sooner than MIN_MS, and a 4 s watchdog guarantees it can never trap
-   the user behind the veil. Service-worker registration lives in js/app.js —
-   one registration only.
-
-   The contours and aperture resolve by 1000 ms, so MIN_MS is 1050. WAIT_MS is
-   deliberately later and changes only the aperture's opacity in a restrained
-   breath; it never introduces a moving highlight, spinner, or animated blur.
-
-   html.splashing IS the hand-off. While it is set, #main's entrance animations
-   hold at frame 0 — animation-play-state:paused freezes the delay clock too —
-   so the app's own entrance plays FROM ZERO the moment the veil starts to go,
-   instead of finishing unseen behind it. This script runs BEFORE the deferred
-   module that renders the first view, so there is no window in which an
-   unpaused entrance can start.
-
-   Everything about that class is failure-biased toward SHOWING the app: it is
-   dropped in the same statement that starts the fade, again if the splash
-   element is missing, and again by an unconditional backstop after the
-   watchdog — because the one unacceptable outcome is a stripped veil over an
-   app frozen invisible at frame 0. */
+/* Zoom lockdown only. The boot splash and its html.splashing hand-off are
+   retired (operator instruction, 2026-08-04) — no launch veil, no paused
+   entrance, no watchdog. app.js mounts the first view directly into #app. */
 (function () {
-  var MIN_MS = 1050, WAIT_MS = 2100, WATCHDOG_MS = 4400, t0 = Date.now(), done = false;
-  var root = document.documentElement;
-
-  root.classList.add("splashing");
-
-  /* Patience: if the app has not signalled ready by WAIT_MS, the resolved room
-     takes one restrained opacity breath. Reduced motion keeps it static. */
-  var waitT = setTimeout(function () {
-    var s = document.getElementById("splash");
-    if (s && !done) s.classList.add("wait");
-  }, WAIT_MS);
-
-  function hideSplash() {
-    if (done) return;
-    done = true;
-    clearTimeout(waitT);
-    var splash = document.getElementById("splash");
-    if (!splash) { root.classList.remove("splashing"); return; }
-    var wait = Math.max(0, MIN_MS - (Date.now() - t0));
-    setTimeout(function () {
-      splash.classList.remove("wait");
-      splash.classList.add("out");
-      root.classList.remove("splashing");   /* the app's own entrance starts HERE */
-      setTimeout(function () { splash.classList.add("gone"); }, 480);
-    }, wait);
-  }
-
-  window.akvHideSplash = hideSplash;                 /* app.js calls this directly */
-  window.addEventListener("akv:ready", hideSplash);  /* …or via the event, either works */
-  window.addEventListener("load", hideSplash);       /* safety net if the app never boots */
-  setTimeout(hideSplash, WATCHDOG_MS);
-  /* Final backstop: whatever happened above, nothing stays paused. */
-  setTimeout(function () { root.classList.remove("splashing"); }, WATCHDOG_MS + MIN_MS + 400);
-
   /* Keep the app still. Safari in a browser TAB ignores user-scalable=no by
      design, so the meta tag alone only settles the installed app. These three
      handlers close the gap without touching the two views that must zoom:

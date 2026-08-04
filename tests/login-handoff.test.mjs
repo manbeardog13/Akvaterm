@@ -34,10 +34,23 @@ test("the old boxed cue and flying wordmark language are gone", () => {
   assert.doesNotMatch(splash, /akv-orientation-cue|akv-signin-ghost|akv-signin-seam|cloneNode|\.topbar \.brand/);
   assert.doesNotMatch(index, /class="sp-tiles"|class="sp-rule"|class="sp-mark/);
   assert.doesNotMatch(globalStyle, /Branded splash|\.sp-tiles|\.sp-rule|@keyframes spSweep/);
-  assert.match(index, /class="sp-aperture"/);
-  assert.match(globalStyle, /Refractive cold open[\s\S]*login-interior-dark-4k\.webp/);
-  assert.match(globalStyle, /#splash\{[\s\S]*?position:fixed;inset:0;z-index:9999/);
-  assert.match(globalStyle, /\.sp-plane-a[\s\S]*\.sp-aperture[\s\S]*\.sp-depth/);
+});
+
+test("the boot splash is retired outright, not just hidden", () => {
+  // Operator instruction, 2026-08-04: no launch veil in front of the app.
+  // index.html mounts straight into #app; app.js.js has nothing to hand off
+  // to. The unrelated post-login handoff in splash.js is a different
+  // mechanism (asserted above/below) and must not be touched by this.
+  const app = fs.readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.doesNotMatch(index, /id="splash"|sp-stage|sp-plane|sp-aperture|sp-depth|sp-rim/);
+  assert.doesNotMatch(index, /akvHideSplash|classList\.(add|remove)\("splashing"\)|MIN_MS|WATCHDOG_MS/);
+  assert.doesNotMatch(globalStyle, /#splash\{|\.sp-plane|\.sp-aperture|\.sp-depth|\.sp-rim|@keyframes spPlaneA|@keyframes spApertureFocus/);
+  assert.doesNotMatch(globalStyle, /html\.splashing #main\.view-enter/);
+  assert.doesNotMatch(app, /akvHideSplash|revealApp|getElementById\("splash"\)/);
+  // The zoom-lockdown script that shared the old inline <script> block with
+  // the splash lifecycle must have survived the cut untouched.
+  assert.match(index, /gesturestart.*gesturechange.*gestureend/s);
+  assert.match(index, /function inZoomable\(t\)/);
 });
 
 test("handoff motion is compositor-safe and contains no roaming glare", () => {
@@ -52,15 +65,58 @@ test("the handoff warms only local modules without gating navigation", () => {
   assert.doesNotMatch(splash, /await warmLocalJourneyModules|Promise\.all\(HANDOFF_MODULES/);
 });
 
-test("the glass card follows the measured House Standard width without shrinking its controls", () => {
+test("the glass card follows the measured House Standard width, scaled down without shrinking its controls", () => {
+  // HOUSE_STANDARD.md's 412px reference is unchanged; --pr-card-scale is the
+  // separate -10% dial applied on top of it (operator instruction, 2026-08-04).
   assert.match(style, /--pr-card-reference-width:412px/);
-  assert.match(style, /width:min\(var\(--pr-card-reference-width\),calc\(100% - 48px\)\)/);
+  assert.match(style, /--pr-card-scale:\.9/);
+  assert.match(style, /width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),calc\(100% - 48px\)\)/);
   assert.match(style, /max-width:760px[\s\S]*padding:max\(72px,[\s\S]*\) 24px max\(72px/);
-  assert.match(style, /\.pr-card\{width:min\(var\(--pr-card-reference-width\),100%\)/);
-  assert.match(style, /linear-gradient\(138deg,rgba\(255,255,255,\.105\)/);
-  assert.match(style, /backdrop-filter:blur\(11px\) saturate\(1\.34\) contrast\(1\.045\)/);
+  assert.match(style, /\.pr-card\{width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
+  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.28\) contrast\(1\.02\)/);
   assert.match(style, /0 48px 120px -34px rgba\(0,0,0,\.76\)/);
   assert.doesNotMatch(style, /82vw|86vw|480px|560px|--pr-card-reference-scale/);
+  // Controls keep their accessibility floor regardless of the card scale —
+  // these must stay literal pixel values, never run through a scale token.
+  assert.match(style, /\.pr-input\{position:relative;display:flex;align-items:center;min-height:52px/);
+  assert.match(style, /\.pr-card \.btn\{min-height:52px/);
+  assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:44px/);
+});
+
+test("the card resolves from a particle field instead of just appearing", () => {
+  assert.match(style, /@keyframes prCardMaterialize\{/);
+  assert.match(style, /\.pr-card\{[\s\S]*animation:prCardMaterialize/);
+  assert.match(style, /@keyframes prCardParticleConverge\{/);
+  assert.match(style, /\.pr-card>\.pr-particles\{position:absolute/);
+  // No static opacity/transform on .pr-card itself: prefers-reduced-motion's
+  // animation:none!important must fall back to the CSS-initial values
+  // (opacity:1, transform:none), not a permanently-invisible frame-0 state.
+  const cardRule = style.slice(style.indexOf(".pr-card{"), style.indexOf("@keyframes prCardMaterialize"));
+  assert.doesNotMatch(cardRule, /opacity:0|transform:/);
+  assert.match(style, /\.pr-particles,\.pr-particle\{transition:none!important;transform:none!important;animation:none!important/);
+  assert.match(style, /\.pr-particles\{display:none\}/);
+  // The particle field is populated in JS only, and only when motion is
+  // allowed — no particle nodes are ever created for a reduced-motion user.
+  assert.match(login, /function populateCardParticles\(container\)/);
+  assert.match(login, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
+  assert.match(login, /populateCardParticles\(container\);/);
+  assert.match(login, /class="pr-particles" aria-hidden="true"/);
+});
+
+test("the login photograph blurs into focus on arrival", () => {
+  assert.match(style, /@keyframes prPhotoBlurIn\{from\{filter:blur\(22px\)[\s\S]*?to\{filter:none\}\}/);
+  assert.match(style, /\.pr-scene-media img\{[\s\S]*animation:prPhotoBlurIn/);
+  assert.doesNotMatch(style, /\.pr-scene-media img\{[^}]*filter:none;/);
+  assert.match(style, /prefers-reduced-motion:reduce[\s\S]*\.pr-scene-media img[\s\S]*animation:none!important/);
+});
+
+test("the glass is brighter and clearer, and light mode gets more light than dark", () => {
+  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.28\) contrast\(1\.02\) brightness\(var\(--pr-card-glass-lift\)\)/);
+  assert.doesNotMatch(style, /brightness\(\.96\)/);
+  const darkLift = Number(style.match(/--pr-card-glass-lift:([\d.]+);/)[1]);
+  const lightMatches = [...style.matchAll(/--pr-card-glass-lift:([\d.]+)/g)].map((m) => Number(m[1]));
+  assert.ok(lightMatches.length >= 3, "expected the base value plus two light-theme overrides");
+  for (const value of lightMatches.slice(1)) assert.ok(value > darkLift, "light mode must be brighter than dark");
 });
 
 test("the idle login has no motion control or sensor controller", () => {

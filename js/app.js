@@ -5,9 +5,8 @@
 // the toast area (exposed as window.AKV.toast) and the single service-worker
 // registration. Views render into #main — a FRESH #main per navigation — and
 // clean up via their optional teardown() export plus the "akv:teardown" event
-// fired on every navigation. Once the first view has painted, app.js hands the
-// branded splash back to index.html's bootstrap (window.akvHideSplash) so it
-// fades on its own schedule rather than being removed mid-animation.
+// fired on every navigation. There is no boot splash to hand off to — retired
+// 2026-08-04 — so the first view simply paints straight into #main.
 // Business rules live in domain.js; data access in db.js; chrome text in i18n.
 //
 // THERE IS NO AUTH GATE IN THIS ROUTER, and adding one would be a change of
@@ -847,7 +846,6 @@ async function route() {
   if (!match) {
     main.innerHTML = `<div class="card"><h2>${esc(T("common.notFound", "Stranica nije pronađena."))}</h2>
       <p class="muted"><a href="#/">${esc(T("nav.katalog", "Katalog"))}</a></p></div>`;
-    revealApp();
     return;
   }
 
@@ -859,7 +857,6 @@ async function route() {
     await mod.render(main, match.m.slice(1));
     if (stale()) return;
     activeView = mod;
-    revealApp();                         // first real paint — let the splash fade out
     // Replay the view-enter transition so every navigation glides in.
     main.classList.remove("view-enter"); void main.offsetWidth; main.classList.add("view-enter");
   } catch (err) {
@@ -869,16 +866,7 @@ async function route() {
       <p class="muted">${esc(err?.message || "")}</p>
       <button id="reloadBtn" class="btn">${esc(T("common.reload", "Osvježi"))}</button></div>`;
     main.querySelector("#reloadBtn").addEventListener("click", () => location.reload());
-    revealApp();
   }
-}
-
-// Hand the splash back to index.html's bootstrap so it honours its own
-// minimum-display time and fade instead of being yanked out of the DOM
-// mid-animation. The direct remove() is the stale-shell fallback only.
-function revealApp() {
-  if (typeof window.akvHideSplash === "function") window.akvHideSplash();
-  else document.getElementById("splash")?.remove();
 }
 
 // ---- Boot -------------------------------------------------------------------
