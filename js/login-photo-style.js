@@ -16,25 +16,45 @@ html[data-akv-auth]{
   --pr-dark-photo-opacity:1;--pr-light-photo-opacity:0;
   --pr-card-light-reflection:0;
   --pr-card-reference-width:412px;
-  /* A further -10% on top of the already-compact House Standard reference
-     (operator instruction, 2026-08-04). Width applies the factor directly;
-     vertical rhythm (padding/margins, NOT control hit-targets — see the note
-     above .pr-card) is scaled by the same factor so both dimensions shrink
-     together. */
-  --pr-card-scale:.9;
+  /* Superseded 2026-08-04: the original -10% here was the operator's own
+     later instruction — "match the reference card's SHAPE" — to a card
+     ~0.75 wide:tall, audited live against ~0.6 at .9. This is a real
+     conflict with the earlier "-10% narrower" instruction; shape fidelity
+     to the explicit, repeated, audited reference wins.
+     Round 1 (.9 -> 1.1): two reviewers independently measured 371x621
+     (0.597) against the reference and converged on ~455px wide.
+     Round 2, after Pillow-measuring the reference JPEG directly: its real
+     ratio is 0.745-0.761, not ~0.73 — 1.1 landed at 0.786-0.809, ~5-8% wide.
+     1.05 targeted the corrected number and was confirmed live at 0.750 by
+     six independent measurements across two audit rounds.
+     Operator instruction, 2026-08-04: "reduce the card by about 15%" —
+     applied as a uniform 0.85x on top of the audited 1.05, preserving the
+     0.750 ratio rather than letting it drift (0.85x on width alone would
+     have; scaling width and vscale by the same factor keeps both
+     dimensions shrinking together, matching the ratio's own derivation). */
+  --pr-card-scale:.89;
   /* The fixed-height controls (52px inputs/buttons, 44px links) that
      HOUSE_STANDARD.md protects cannot shrink, so a flat .9 on every margin
      only bought ~3% off the total card height. --pr-card-vscale compresses
      just the compressible vertical rhythm (paddings, margins, gaps) harder
      than the width itself shrinks, so the -10% height target lands on the
      one thing actually free to move. Measured live against a 1280x720
-     viewport, unconfigured/guest build, sign-in mode. */
-  --pr-card-vscale:.68;
-  /* The one dial for "how much light passes through the glass." 1 is
-     neutral — no lift, no dimming, matching a real pane of glass. Dark theme
-     stays at neutral; light theme (below) is set a little above it —
-     operator instruction: light mode gets a little more light than dark. */
-  --pr-card-glass-lift:1;
+     viewport, unconfigured/guest build, sign-in mode.
+     2026-08-04, "-15% more": recalibrated alongside --pr-card-scale above,
+     value confirmed by live remeasurement (see commit note). */
+  --pr-card-vscale:.3;
+  /* The one dial for "how much light passes through the glass." Round 2
+     (Pillow-measured against the reference JPEG): the reference glass
+     DARKENS its backdrop, where 1 here measured as net-neutral-to-lightening.
+     Round 3, against a controlled A/B (identical frame with/without the
+     card): .9 combined with the new dark scrim fill still only reached
+     0.927-0.949 against a like-for-like reference measurement of 0.820 —
+     roughly a third of the needed darkening. .82 targets that number
+     directly. Light theme (below) was found to apply NO darkening at all
+     (a real bug: --pr-card-glass-lift was 1 there, and light-OS visitors
+     saw zero darkening even before any theme JS ran) — .88 fixes that while
+     staying the lighter of the two per the operator's original instruction. */
+  --pr-card-glass-lift:.82;
 }
 html[data-akv-auth] body{min-height:100%;overflow-x:hidden;overflow-y:auto;background:#0b0d0c}
 html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0;display:flex}
@@ -68,7 +88,6 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   object-fit:cover;object-position:50% 50%;transform:scale(1.025);
   transform-origin:50% 50%;
   transition:opacity 1100ms cubic-bezier(.22,1,.36,1);
-  animation:prPhotoBlurIn 1400ms cubic-bezier(.22,1,.36,1) both;
 }
 .pr-scene-dark{opacity:var(--pr-dark-photo-opacity)}
 .pr-scene-light{opacity:var(--pr-light-photo-opacity)}
@@ -77,10 +96,13 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.28) 45%,rgba(0,0,0,.52));
 }
 @keyframes prSceneClockwiseSettle{from{transform:rotate(0deg)}to{transform:rotate(1.35deg)}}
-/* Entrance sequence (operator instruction, 2026-08-04): the background
-   resolves first — blurred to crisp over 1.4s — then, 1.6s after the
-   threshold opens, the card materializes on top of the now-clear room. */
-@keyframes prPhotoBlurIn{from{filter:blur(22px) saturate(1.08) brightness(.92)}to{filter:none}}
+/* Operator instruction, 2026-08-04: the photograph itself is never blurred —
+   it is sharp everywhere, all the time. The ONLY blur anywhere on this
+   screen is the card's own backdrop-filter, which is an optical property of
+   looking THROUGH that one rectangle of glass, not an effect applied to the
+   photo layer. The card still has its own entrance (prCardMaterialize,
+   below), 1.6s after the threshold opens — that timing is unchanged, it was
+   only ever the background's blur-in that is gone. */
 
 /* HOUSE_STANDARD.md defines a 412px canonical card and records 327px at
    375x812 once its 24px page gutters are paid; --pr-card-scale then takes a
@@ -97,25 +119,61 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),100%);min-width:0;margin:44px auto;
   padding:calc(28px * var(--pr-card-vscale)) calc(24px * var(--pr-card-vscale)) calc(22px * var(--pr-card-vscale));
   color:var(--pr-text);
-  /* Neutral glass, not tinted glass (operator reference, 2026-08-04 — the
-     @uix.vikram job-card screenshot): the material itself carries almost no
-     colour of its own. What reads as "premium" there is how MUCH of the real
-     scene survives through it, not a green/amber wash on top of it. Pushed
-     to maximum transparency (operator instruction, 2026-08-04, twice): the
-     fill is almost nothing now — the border ring is what still reads as
-     "a card" at all. */
-  background:
-    linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005) 46%,rgba(0,0,0,.015) 100%) padding-box,
-    linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.05)) border-box;
-  border:1px solid transparent;border-radius:30px;
-  box-shadow:0 40px 100px -32px rgba(0,0,0,.5),0 0 70px -18px rgba(255,255,255,.1),
-    inset 0 1.5px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(0,0,0,.1);
-  /* Liquid-glass, pushed to maximum transparency: blur alone does the
-     "glass" work now — saturate/contrast stay near-neutral so the scene
-     behind isn't recoloured. The bent-edge highlight and pointer-tracked
-     sheen below are CSS-only, no SVG feDisplacementMap (Safari risk). */
-  backdrop-filter:blur(9px) saturate(1.03) brightness(var(--pr-card-glass-lift));
-  -webkit-backdrop-filter:blur(9px) saturate(1.03) brightness(var(--pr-card-glass-lift));overflow:hidden;
+  /* TRANSLUCENT GLASS (operator instruction, 2026-08-04, repeated). Audited
+     2026-08-04: the previous two-layer background (padding-box, then
+     border-box) trick was a REAL BUG, not a tuning value — the border-box
+     gradient layer (up to .5 alpha) is not confined to the 1px ring the way
+     that trick requires; it only stays ring-only when the padding-box layer
+     over it is opaque enough to hide it in the interior. Ours wasn't (by
+     design), so that "border gradient" was painting straight across the
+     whole card face — the actual dominant cause of the milky look,
+     independently confirmed by two reviewers. Fixed by dropping the trick
+     entirely: a single low-alpha fill, a plain translucent border colour
+     (no gradient), and the inset box-shadow below for the top rim — which
+     both reviewers separately confirmed already reads correctly on its own.
+     NOTE FOR FUTURE EDITS: this whole file is one JS template literal — a
+     literal backtick anywhere in here (including inside a comment) silently
+     truncates it. node --check does not catch this; only an actual
+     import()/module load does. That is exactly the bug that broke this
+     file for a while during this same audit. */
+  /* Round 2 audit (2026-08-04, Pillow-measured against the reference JPEG):
+     radius should be ~10% of card width not 6.6% (45px not 30px); the
+     reference's glass DARKENS its backdrop (0.75-0.91x) where this card was
+     net-neutral-to-lightening; and the top rim read 7.56x brighter than its
+     interior where the reference is a soft 2.27x.
+     Round 3a: fixing radius/brightness/rim-alpha wasn't enough — a reviewer
+     measured that the fill's own white top-stop plus the inset top-rim
+     glow were ADDITIVELY CANCELLING the brightness(.9) darkening (measured
+     net transfer 0.93-1.09, i.e. still net-neutral). The reference's rim
+     is a PLAIN 1px border at alpha .138 and NOTHING else stacked on it — no
+     inset glow. .14 was already correct; the inset highlight below it was
+     the redundant, over-bright second layer. Removed.
+     Round 3b, against a pixel-exact background plate (card hidden, same
+     frame diffed): still 1.28x its own true backdrop. That round's reviewer
+     read the reference's face as a near-flat scrim (std 3.4) and pushed the
+     fill to .36-.44 alpha to compress contrast, not just tint it.
+     Round 4, with a more careful sample (excluding text, checking multiple
+     regions): the reference glass actually PRESERVES real structure — std
+     8.8 on a clean band, std 29.7 where the chair crosses it — the "std 3.4"
+     read came from an unrepresentative slice. At .36-.44 the live glass had
+     over-corrected: transmission 0.77 against a corroborated ~0.82-0.85
+     target (two independent measurements agree: 0.820, 0.852), contrast
+     halved (0.53x) where the reference visibly keeps its scene legible, and
+     the bottom third alone measured 29% darker than the reference. Cut back
+     to a range that darkens without flattening: real detail should survive
+     "muted," per the operator's own "translucent glass" instruction — the
+     .36-.44 version had drifted from smoked glass toward frosted plastic. */
+  background:linear-gradient(180deg,rgba(16,16,16,.16),rgba(12,12,12,.19) 50%,rgba(8,8,8,.24) 100%);
+  border:1px solid rgba(255,255,255,.14);border-radius:45px;
+  /* The outer white glow measured as part of the rim's light trail even
+     though it paints outside the card box — removed. */
+  box-shadow:0 30px 80px -34px rgba(0,0,0,.4),inset 0 -1px 0 rgba(0,0,0,.1);
+  /* Blur: the two round-2 reviewers disagreed by nearly 4x on the reference's
+     actual blur radius (one estimated ~12px-equivalent, the other measured a
+     10-90% edge transition and derived ~3px-equivalent). 6px sits between
+     them pending a real screenshot to arbitrate. */
+  backdrop-filter:blur(6px) saturate(1.02) brightness(var(--pr-card-glass-lift));
+  -webkit-backdrop-filter:blur(6px) saturate(1.02) brightness(var(--pr-card-glass-lift));overflow:hidden;
   /* The card is not placed — it materializes, 1.6s after the threshold
      opens (operator instruction, 2026-08-04), once the background behind it
      has already resolved from blur to clarity. */
@@ -142,13 +200,13 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   100%{opacity:0;transform:translate3d(0,0,0) scale(.04);filter:blur(.4px)}
 }
 .pr-card::before{
-  content:"";position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:29px;
-  background-image:linear-gradient(180deg,rgba(255,255,255,.05),transparent 20%,transparent 78%,rgba(255,255,255,.02));
-  /* The wider, softer inset shadows here (28-30px spread) are the "bend" —
-     light gathers and warps toward the card's own edges rather than a flat
-     1px ring, which is what reads as refraction without an SVG filter. */
-  box-shadow:inset 1.5px 0 rgba(255,255,255,.1),inset -1.5px 0 rgba(255,255,255,.06),
-    inset 0 18px 30px -26px rgba(255,255,255,.4),inset 0 -20px 32px -28px rgba(0,0,0,.16);
+  content:"";position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:44px;
+  /* Round 3 audit: this pseudo's side inset rims and top wash were measured
+     as a SECOND bright band stacked just inside the border — the reference
+     has one plain 1px border and nothing behind it. Cut down to a single
+     soft bottom darkening, which reinforces the reference's own darkening
+     instead of fighting it, and nothing bright at all. */
+  box-shadow:inset 0 -22px 34px -28px rgba(0,0,0,.14);
 }
 /* The pointer-tracked sheen — a real element, not a custom-property-driven
    pseudo-element: background-position on a pseudo whose value derives from a
@@ -159,20 +217,40 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
    even with no pointer nearby; JS only overrides it on a real mouse hover
    and eases back to it on pointerleave via the transition below. */
 .pr-card>.pr-sheen{
-  position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:29px;
-  background-image:radial-gradient(closest-side,rgba(255,255,255,.28),transparent 72%);
+  position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:44px;
+  /* Audited 2026-08-04, round 1 (independent agent review): at .28 this
+     alone painted a near-opaque white wash over ~70% of the card's top — the
+     single biggest cause of the "still not transparent" complaint. Cut to
+     .12. Round 2: still measured as a +20 to +25 luminance bloom at its
+     centre against a reference that has no such bloom at all (one clean
+     glass row read dead-flat). Cut further to .05 — present as a faint
+     highlight for the pointer-hover state to still read against, not a body
+     of its own. */
+  background-image:radial-gradient(closest-side,rgba(255,255,255,.05),transparent 72%);
   background-size:85% 70%;background-repeat:no-repeat;background-position:50% 0%;
   transition:background-position 420ms cubic-bezier(.22,1,.36,1);
 }
 .pr-card::after{
-  content:"";position:absolute;z-index:0;inset:2px;pointer-events:none;border-radius:28px;
-  border-top:1px solid rgba(255,255,255,.35);border-right:1px solid rgba(255,255,255,.14);
-  box-shadow:inset 0 13px 24px -24px rgba(255,255,255,.7),inset -14px 0 26px -28px rgba(255,255,255,.28);
+  /* Round 4 audit: this light-theme-only layer was the one place the earlier
+     "one plain border, nothing stacked" principle never got applied — its
+     border-top/box-shadow measured a real, unambiguous lightening defect at
+     the top (up to 3.85x its backdrop) and right edge (2.24x) in light
+     theme specifically, the exact "glass lightens instead of darkens"
+     failure rounds 2-3 fixed everywhere else. --pr-card-glass-lift already
+     carries "light gets a little more light than dark" on its own; this
+     layer was redundant with it and is cut down to nothing brighter than
+     the border itself. */
+  content:"";position:absolute;z-index:0;inset:2px;pointer-events:none;border-radius:43px;
   opacity:var(--pr-card-light-reflection);transition:opacity 1100ms cubic-bezier(.22,1,.36,1);
 }
 .pr-card>*{position:relative;z-index:1}
 .pr-cardtop{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:calc(20px * var(--pr-card-vscale))}
-.pr-mark{margin:0;font-size:clamp(24px,2.4vw,31px);line-height:1;letter-spacing:-.055em}
+/* Every font-size below is ~15% off its pre-2026-08-04 value, same factor as
+   the card itself (operator instruction: "reducing everything... including
+   text" — not just the card's box). Interactive control HEIGHTS (44/52px)
+   are the one thing still excluded — that is an accessibility tap-target
+   floor, not a look-and-feel choice. */
+.pr-mark{margin:0;font-size:clamp(20px,2.4vw,26px);line-height:1;letter-spacing:-.055em}
 .pr-mark .akva{color:#f8f8f4;text-shadow:none}.pr-mark .term{color:#e4454d;text-shadow:none}
 .pr-theme{
   position:relative;width:46px;height:44px;padding:0;flex:none;border:0;
@@ -182,35 +260,40 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-themeic{position:absolute;z-index:1;top:12px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--pr-text);transition:transform 260ms cubic-bezier(.2,.85,.25,1)}
 .pr-theme[aria-pressed=true] .pr-themeic{transform:translateX(20px)}
 .pr-theme:focus-visible{outline:2px solid var(--pr-accent);outline-offset:3px}
-.pr-title{margin:0;color:var(--pr-text);font-family:var(--font-display);font-size:clamp(30px,3.4vw,45px);font-weight:450;line-height:1.03;letter-spacing:-.04em}
-.pr-sub{margin:calc(12px * var(--pr-card-vscale)) 0 calc(26px * var(--pr-card-vscale));color:var(--pr-muted);font-size:14px;line-height:1.5}
+/* clamp bounds scaled down with the card (2026-08-04, "-15% more"): at the
+   old 30-45px range "Dobrodošli natrag" wrapped to two lines on the now-
+   narrower card, adding a full extra line of height back — the opposite of
+   what a size reduction should do. Measured live: 38px is the largest size
+   that still fits the longest title on one line at the new width. */
+.pr-title{margin:0;color:var(--pr-text);font-family:var(--font-display);font-size:clamp(26px,3.4vw,38px);font-weight:450;line-height:1.03;letter-spacing:-.04em}
+.pr-sub{margin:calc(12px * var(--pr-card-vscale)) 0 calc(26px * var(--pr-card-vscale));color:var(--pr-muted);font-size:12px;line-height:1.5}
 .pr-notice{display:flex;gap:10px;margin:0 0 calc(18px * var(--pr-card-vscale));padding:calc(12px * var(--pr-card-vscale)) calc(14px * var(--pr-card-vscale));border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-soft);color:var(--pr-muted)}
 .pr-nic{display:flex;flex:none;color:var(--pr-accent)}
-.pr-noticetext{font-size:11.5px;line-height:1.45}.pr-noticetext b{display:block;margin-bottom:2px;color:var(--pr-text);font-size:12px}.pr-noticetext span{display:block}
+.pr-noticetext{font-size:10px;line-height:1.45}.pr-noticetext b{display:block;margin-bottom:2px;color:var(--pr-text);font-size:10px}.pr-noticetext span{display:block}
 .pr-form fieldset{min-inline-size:0;margin:0;padding:0;border:0}.pr-form fieldset[disabled]{opacity:.5}
 .pr-field{margin-bottom:calc(11px * var(--pr-card-vscale))}.pr-input{position:relative;display:flex;align-items:center;min-height:52px;border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-input);transition:border-color 160ms ease,background 160ms ease}
 .pr-input:focus-within{border-color:rgba(215,226,186,.72);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(215,226,186,.09)}
 .pr-ic{display:flex;margin-left:16px;color:var(--pr-muted)}
-.pr-input input{width:100%;min-width:0;padding:0 14px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 15px/1 var(--font-text)}
+.pr-input input{width:100%;min-width:0;padding:0 14px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 13px/1 var(--font-text)}
 .pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{display:grid;place-items:center;min-width:44px;min-height:44px;margin-right:3px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
-.pr-err{display:block;min-height:0;margin:4px 3px 0;color:var(--pr-danger);font-size:11.5px;line-height:1.35}.pr-err:not(:empty){min-height:16px}.pr-field.is-bad .pr-input{border-color:var(--pr-danger)}
-.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:44px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 12px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
-.pr-card .btn{min-height:52px;border-radius:14px;font-size:13px;font-weight:700;letter-spacing:.01em;box-shadow:none}.pr-card .btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid rgba(255,255,255,.32);background:var(--pr-accent);color:var(--pr-accent-ink);box-shadow:0 14px 34px -18px rgba(215,226,186,.72)}
+.pr-err{display:block;min-height:0;margin:4px 3px 0;color:var(--pr-danger);font-size:10px;line-height:1.35}.pr-err:not(:empty){min-height:16px}.pr-field.is-bad .pr-input{border-color:var(--pr-danger)}
+.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:44px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 10px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
+.pr-card .btn{min-height:52px;border-radius:14px;font-size:11px;font-weight:700;letter-spacing:.01em;box-shadow:none}.pr-card .btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid rgba(255,255,255,.32);background:var(--pr-accent);color:var(--pr-accent-ink);box-shadow:0 14px 34px -18px rgba(215,226,186,.72)}
 .pr-card .btn-primary:hover{filter:brightness(1.04);transform:translateY(-1px)}.pr-card .btn:focus-visible{outline:2px solid var(--pr-accent);outline-offset:3px}.pr-card .btn:disabled{cursor:not-allowed;filter:none;transform:none;box-shadow:none}
 .pr-google{position:relative;display:grid!important;grid-template-columns:28px 1fr 28px;align-items:center;width:100%;border:1px solid var(--pr-line)!important;background:var(--pr-soft)!important;color:var(--pr-text)!important}.pr-google>svg{justify-self:center}.pr-glabel{justify-self:center}.pr-google.is-busy .pr-glabel{opacity:.55}
-.pr-div{display:flex;align-items:center;gap:12px;margin:calc(16px * var(--pr-card-vscale)) 0;color:var(--pr-muted);font-size:11px;text-transform:uppercase;letter-spacing:.12em}.pr-div::before,.pr-div::after{content:"";height:1px;flex:1;background:var(--pr-line)}
-.pr-msg{min-height:0;margin:calc(6px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:12px;line-height:1.4;text-align:center}.pr-msg:not(:empty){min-height:17px}.pr-msg.is-err{color:var(--pr-danger)}.pr-msg.is-ok{color:var(--pr-ok)}
-.pr-guest{margin-top:calc(16px * var(--pr-card-vscale))}.pr-guesthint{margin:calc(9px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:11.5px;line-height:1.45;text-align:center}
-.pr-foot{margin:calc(32px * var(--pr-card-vscale)) 0 0;text-align:center;color:var(--pr-muted);font-size:12px}.pr-note{margin:calc(16px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:12px;line-height:1.45;text-align:center}
-.pr-who{display:flex;align-items:center;gap:13px;margin:calc(24px * var(--pr-card-vscale)) 0;padding:calc(14px * var(--pr-card-vscale));border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-soft)}.pr-avatar{display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:50%;background:var(--pr-accent);color:var(--pr-accent-ink);font-weight:800}.pr-whotext{min-width:0}.pr-whotext b,.pr-whotext span{display:block}.pr-whotext b{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--pr-muted)}.pr-whotext span{margin-top:3px;color:var(--pr-text);font-size:13px;overflow-wrap:anywhere}.pr-stack{display:flex;flex-direction:column;gap:calc(10px * var(--pr-card-vscale))}
+.pr-div{display:flex;align-items:center;gap:12px;margin:calc(16px * var(--pr-card-vscale)) 0;color:var(--pr-muted);font-size:9px;text-transform:uppercase;letter-spacing:.12em}.pr-div::before,.pr-div::after{content:"";height:1px;flex:1;background:var(--pr-line)}
+.pr-msg{min-height:0;margin:calc(6px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.4;text-align:center}.pr-msg:not(:empty){min-height:17px}.pr-msg.is-err{color:var(--pr-danger)}.pr-msg.is-ok{color:var(--pr-ok)}
+.pr-guest{margin-top:calc(16px * var(--pr-card-vscale))}.pr-guesthint{margin:calc(9px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.45;text-align:center}
+.pr-foot{margin:calc(32px * var(--pr-card-vscale)) 0 0;text-align:center;color:var(--pr-muted);font-size:10px}.pr-note{margin:calc(16px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.45;text-align:center}
+.pr-who{display:flex;align-items:center;gap:13px;margin:calc(24px * var(--pr-card-vscale)) 0;padding:calc(14px * var(--pr-card-vscale));border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-soft)}.pr-avatar{display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:50%;background:var(--pr-accent);color:var(--pr-accent-ink);font-weight:800}.pr-whotext{min-width:0}.pr-whotext b,.pr-whotext span{display:block}.pr-whotext b{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--pr-muted)}.pr-whotext span{margin-top:3px;color:var(--pr-text);font-size:11px;overflow-wrap:anywhere}.pr-stack{display:flex;flex-direction:column;gap:calc(10px * var(--pr-card-vscale))}
 /* Theme changes the photographic state, never the glass sheet. Both files are
    full 4K renders of the same room; no CSS exposure trick is used. */
 html[data-akv-auth][data-theme=light]{
   --pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;
-  --pr-card-light-reflection:1;--pr-card-glass-lift:1.08;
+  --pr-card-light-reflection:1;--pr-card-glass-lift:.88;
 }
 @media(prefers-color-scheme:light){
-  html[data-akv-auth]:not([data-theme=dark]){--pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;--pr-card-light-reflection:1;--pr-card-glass-lift:1.08}
+  html[data-akv-auth]:not([data-theme=dark]){--pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;--pr-card-light-reflection:1;--pr-card-glass-lift:.88}
 }
 
 /* Below 760px the only thing that changes is typography and the photo's own
@@ -220,7 +303,7 @@ html[data-akv-auth][data-theme=light]{
 @media(max-width:760px){
   .pr-scene-media img{transform:scale(1.055)}
   .pr-card{min-height:auto;margin:auto}
-  .pr-title{font-size:clamp(29px,9vw,38px)}.pr-sub{margin-bottom:calc(20px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(26px * var(--pr-card-vscale))}
+  .pr-title{font-size:clamp(25px,9vw,32px)}.pr-sub{margin-bottom:calc(20px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(26px * var(--pr-card-vscale))}
 }
 @media(max-width:380px){.pr-notice{padding:calc(10px * var(--pr-card-vscale)) calc(11px * var(--pr-card-vscale))}.pr-cardtop{margin-bottom:calc(24px * var(--pr-card-vscale))}}
 @media(max-height:760px) and (max-width:760px){.pr-card{margin-top:68px}.pr-cardtop{margin-bottom:calc(22px * var(--pr-card-vscale))}.pr-sub{margin-bottom:calc(16px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(22px * var(--pr-card-vscale))}}

@@ -8,6 +8,21 @@ const style = fs.readFileSync(new URL("../js/login-photo-style.js", import.meta.
 const globalStyle = fs.readFileSync(new URL("../css/styles.css", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
+// Regression guard, 2026-08-04: this whole file is a single JS template
+// literal (LOGIN_PHOTO_CSS). A literal backtick anywhere inside it — even
+// inside a CSS comment, even in a matched pair — silently truncates the
+// string and turns the rest of the file into garbage top-level JS. This
+// exact bug shipped once during this session's audit: node --check passed
+// (an even number of stray backticks parses as more, smaller template
+// literals, which is syntactically "valid" JS) while the module failed to
+// import in both Node and the browser with "Unexpected identifier
+// 'background'". Only an actual import() catches it, which is why this test
+// counts backticks directly rather than relying on --check.
+test("the CSS-in-JS template literal has exactly its own two backticks — no stray ones in comments", () => {
+  const backtickCount = (style.match(/`/g) || []).length;
+  assert.equal(backtickCount, 2, "a comment or string inside LOGIN_PHOTO_CSS contains a literal backtick, which truncates the template literal — use plain quotes instead");
+});
+
 test("the phone cue belongs to the existing 700 ms post-login handoff", () => {
   assert.match(splash, /const T_TOTAL = 700/);
   assert.match(splash, /animation:akvHandoffTurn " \+ T_TOTAL/);
@@ -69,14 +84,35 @@ test("the glass card follows the measured House Standard width, scaled down with
   // HOUSE_STANDARD.md's 412px reference is unchanged; --pr-card-scale is the
   // separate -10% dial applied on top of it (operator instruction, 2026-08-04).
   assert.match(style, /--pr-card-reference-width:412px/);
-  assert.match(style, /--pr-card-scale:\.9/);
+  // --pr-card-scale is .89, not the original -10% (.9): first superseded by
+  // a later, more specific, audited operator instruction (the card's SHAPE
+  // had to match the reference, landing at 1.05), then by "reduce the card
+  // by about 15%" applied on top of that audited number. See the comment
+  // above --pr-card-scale's definition for the full history.
+  assert.match(style, /--pr-card-scale:\.89/);
   // .pr-wrap supplies the ONE gutter (safe-area-aware, same formula at every
   // breakpoint) — .pr-card must not subtract a second one on top of it.
   assert.match(style, /\.pr-wrap\{[\s\S]*?padding:max\(56px,[\s\S]*?\) 24px[\s\S]*?max\(56px,/);
   assert.match(style, /\.pr-card\{[\s\S]*?width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
-  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.03\)/);
-  assert.match(style, /0 40px 100px -32px rgba\(0,0,0,\.5\)/);
+  assert.match(style, /backdrop-filter:blur\(6px\) saturate\(1\.02\)/);
+  assert.match(style, /0 30px 80px -34px rgba\(0,0,0,\.4\)/);
+  // Round 3b/3c audit: the outer white glow (0 0 60px rgba(255,255,255,…))
+  // measured as part of the top rim's light trail even though it paints
+  // outside the card box, and the near-zero fill couldn't reach the
+  // reference's actual "flat smoky scrim" character — replaced with a real
+  // semi-opaque neutral-grey fill (~.36-.44 alpha) that genuinely compresses
+  // contrast instead of just tinting it.
+  assert.doesNotMatch(style, /rgba\(255,255,255,\.09\)/);
+  assert.match(style, /background:linear-gradient\(180deg,rgba\(16,16,16,\.16\)/);
   assert.doesNotMatch(style, /82vw|86vw|480px|560px|--pr-card-reference-scale/);
+  // The two-layer background (padding-box, then border-box) trick was a real
+  // bug (audited 2026-08-04): the border-box gradient wasn't confined to the
+  // 1px ring and painted a milky wash across the whole face. Pin its
+  // absence and the plain-border replacement. Radius is 45px, not the
+  // original 30px — round-2 audit found 30px measured at 6.6% of card width
+  // against the reference's ~10%.
+  assert.doesNotMatch(style, /\) padding-box,[\s\S]{0,80}\) border-box/);
+  assert.match(style, /border:1px solid rgba\(255,255,255,\.14\);border-radius:45px/);
   // Controls keep their accessibility floor regardless of the card scale —
   // these must stay literal pixel values, never run through a scale token.
   assert.match(style, /\.pr-input\{position:relative;display:flex;align-items:center;min-height:52px/);
@@ -84,11 +120,14 @@ test("the glass card follows the measured House Standard width, scaled down with
   assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:44px/);
 });
 
-test("the background resolves first, then the card materializes 1.6s later", () => {
-  // Operator instruction, 2026-08-04: background blur-in first; 1.6s after
-  // that, the card materializes "out of thin air" on top of it.
-  assert.match(style, /@keyframes prPhotoBlurIn\{from\{filter:blur\(22px\)[\s\S]*?to\{filter:none\}\}/);
-  assert.match(style, /\.pr-scene-media img\{[\s\S]*animation:prPhotoBlurIn 1400ms/);
+test("the card still materializes 1.6s in, but the photo is never blurred", () => {
+  // Operator instruction, 2026-08-04, superseding the earlier "background
+  // blurs in first" version: the photograph is sharp always — the ONLY blur
+  // anywhere is the card's own backdrop-filter, an optical property of
+  // looking through that one rectangle, not an effect on the photo layer.
+  // The card's own 1.6s-delayed materialize entrance is unchanged.
+  assert.doesNotMatch(style, /prPhotoBlurIn/);
+  assert.doesNotMatch(style, /\.pr-scene-media img\{[^}]*animation:/);
   assert.match(style, /@keyframes prCardMaterialize\{/);
   assert.match(style, /\.pr-card\{[\s\S]*animation:prCardMaterialize 900ms cubic-bezier\(\.22,1,\.36,1\) 1600ms both/);
   assert.match(style, /@keyframes prCardParticleConverge\{/);
@@ -112,7 +151,7 @@ test("the background resolves first, then the card materializes 1.6s later", () 
 });
 
 test("the glass is neutral, not brand-tinted, and light mode gets more light than dark", () => {
-  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.03\) brightness\(var\(--pr-card-glass-lift\)\)/);
+  assert.match(style, /backdrop-filter:blur\(6px\) saturate\(1\.02\) brightness\(var\(--pr-card-glass-lift\)\)/);
   assert.doesNotMatch(style, /brightness\(\.96\)/);
   // Operator reference, 2026-08-04 (the @uix.vikram job-card screenshot): the
   // material itself must not carry Akvaterm's teal/amber brand colour — only
