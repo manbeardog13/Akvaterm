@@ -74,8 +74,8 @@ test("the glass card follows the measured House Standard width, scaled down with
   // breakpoint) — .pr-card must not subtract a second one on top of it.
   assert.match(style, /\.pr-wrap\{[\s\S]*?padding:max\(56px,[\s\S]*?\) 24px[\s\S]*?max\(56px,/);
   assert.match(style, /\.pr-card\{[\s\S]*?width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
-  assert.match(style, /backdrop-filter:blur\(13px\) saturate\(1\.04\)/);
-  assert.match(style, /0 40px 100px -32px rgba\(0,0,0,\.55\)/);
+  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.03\)/);
+  assert.match(style, /0 40px 100px -32px rgba\(0,0,0,\.5\)/);
   assert.doesNotMatch(style, /82vw|86vw|480px|560px|--pr-card-reference-scale/);
   // Controls keep their accessibility floor regardless of the card scale —
   // these must stay literal pixel values, never run through a scale token.
@@ -84,26 +84,35 @@ test("the glass card follows the measured House Standard width, scaled down with
   assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:44px/);
 });
 
-test("the login has no entrance choreography — card and photo are both simply there", () => {
-  // Operator instruction, 2026-08-04: delete the splash outright AND
-  // everything that replaced it — the photo blur-in reveal and the card's
-  // particle-materialize entrance were their own kind of "splash" (a veil
-  // before the real thing), so both are gone too. The only motion left on
-  // this screen is interaction-driven: the pointer sheen, control hovers,
-  // the slow ambient photo rotation, and the theme crossfade.
-  assert.doesNotMatch(style, /prCardMaterialize|prCardParticleConverge|prPhotoBlurIn/);
-  assert.doesNotMatch(style, /\.pr-particles|\.pr-particle\b/);
-  assert.doesNotMatch(style, /\banimation:prCardMaterialize|\banimation:prPhotoBlurIn/);
-  assert.doesNotMatch(login, /particlesMarkup|populateCardParticles|pr-particles|pr-particle\b/);
-  // The card itself carries no entrance animation at all now.
-  const cardRule = style.slice(style.indexOf(".pr-card{"), style.indexOf(".pr-card::before{"));
-  assert.doesNotMatch(cardRule, /animation:|opacity:0/);
-  const photoRule = style.slice(style.indexOf(".pr-scene-media img{"), style.indexOf(".pr-scene-dark{"));
-  assert.doesNotMatch(photoRule, /animation:|filter:/);
+test("the background resolves first, then the card materializes 1.6s later", () => {
+  // Operator instruction, 2026-08-04: background blur-in first; 1.6s after
+  // that, the card materializes "out of thin air" on top of it.
+  assert.match(style, /@keyframes prPhotoBlurIn\{from\{filter:blur\(22px\)[\s\S]*?to\{filter:none\}\}/);
+  assert.match(style, /\.pr-scene-media img\{[\s\S]*animation:prPhotoBlurIn 1400ms/);
+  assert.match(style, /@keyframes prCardMaterialize\{/);
+  assert.match(style, /\.pr-card\{[\s\S]*animation:prCardMaterialize 900ms cubic-bezier\(\.22,1,\.36,1\) 1600ms both/);
+  assert.match(style, /@keyframes prCardParticleConverge\{/);
+  assert.match(style, /\.pr-card>\.pr-particles\{position:absolute/);
+  // No static opacity/transform on .pr-card itself: prefers-reduced-motion's
+  // animation:none!important must fall back to the CSS-initial values
+  // (opacity:1, transform:none), not a permanently-invisible frame-0 state.
+  const cardRule = style.slice(style.indexOf(".pr-card{"), style.indexOf("@keyframes prCardMaterialize"));
+  assert.doesNotMatch(cardRule, /opacity:0|transform:/);
+  assert.match(style, /\.pr-particles,\.pr-particle\{transition:none!important;transform:none!important;animation:none!important/);
+  assert.match(style, /\.pr-particles\{display:none\}/);
+  assert.match(style, /prefers-reduced-motion:reduce[\s\S]*\.pr-scene-media img[\s\S]*animation:none!important/);
+  // The particle field is timed to the same 1.6s mark via setTimeout in JS
+  // (not a CSS animation-delay — the nodes do not exist before it fires),
+  // and skipped entirely when motion is not allowed.
+  assert.match(login, /function populateCardParticles\(container\)/);
+  assert.match(login, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches\) return;/);
+  assert.match(login, /setTimeout\(\(\) => \{[\s\S]*?\}, 1600\);/);
+  assert.match(login, /populateCardParticles\(container\);/);
+  assert.match(login, /class="pr-particles" aria-hidden="true"/);
 });
 
 test("the glass is neutral, not brand-tinted, and light mode gets more light than dark", () => {
-  assert.match(style, /backdrop-filter:blur\(13px\) saturate\(1\.04\) brightness\(var\(--pr-card-glass-lift\)\)/);
+  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.03\) brightness\(var\(--pr-card-glass-lift\)\)/);
   assert.doesNotMatch(style, /brightness\(\.96\)/);
   // Operator reference, 2026-08-04 (the @uix.vikram job-card screenshot): the
   // material itself must not carry Akvaterm's teal/amber brand colour — only

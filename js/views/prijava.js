@@ -105,6 +105,45 @@ function sheenMarkup() {
   return `<span class="pr-sheen" aria-hidden="true"></span>`;
 }
 
+// Empty on purpose — populateCardParticles() fills it after the 1.6s
+// entrance delay, and skips entirely under prefers-reduced-motion so no
+// particle nodes are ever created for a user who has asked for less motion.
+function particlesMarkup() {
+  return `<div class="pr-particles" aria-hidden="true"></div>`;
+}
+
+// The card materializes "out of thin air" 1.6s after the threshold opens
+// (operator instruction, 2026-08-04, matching .pr-card's own
+// prCardMaterialize delay in login-photo-style.js): a scatter of small glass
+// motes converge from just beyond its edges into the sheet at the same
+// moment. The setTimeout is what actually times the entrance — the nodes do
+// not exist before it fires, so there is nothing sitting invisible in the
+// DOM for 1.6s. Polar placement keeps the origin points spread evenly
+// around the card instead of clustering in the corners a rectangular random
+// spread would produce.
+function populateCardParticles(container) {
+  const host = container.querySelector(".pr-particles");
+  if (!host || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  setTimeout(() => {
+    if (!host.isConnected) return;
+    const count = 18 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < count; i += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 90 + Math.random() * 170;
+      const size = 2 + Math.random() * 3.5;
+      const particle = document.createElement("span");
+      particle.className = "pr-particle";
+      particle.style.width = `${size.toFixed(2)}px`;
+      particle.style.height = `${size.toFixed(2)}px`;
+      particle.style.setProperty("--pr-particle-x", `${(Math.cos(angle) * radius).toFixed(2)}px`);
+      particle.style.setProperty("--pr-particle-y", `${(Math.sin(angle) * radius).toFixed(2)}px`);
+      particle.style.setProperty("--pr-particle-duration", `${(650 + Math.random() * 320).toFixed(0)}ms`);
+      particle.style.setProperty("--pr-particle-delay", `${(Math.random() * 220).toFixed(0)}ms`);
+      host.appendChild(particle);
+    }
+  }, 1600);
+}
+
 // The wrapper is a <div>, NOT a <label>: the password row contains a button
 // (the reveal toggle), and a <label> may not contain a labelable descendant
 // other than its own control. The label is a sibling with an explicit for=.
@@ -225,6 +264,7 @@ function signInMarkup(configured) {
   return thresholdMarkup(`
       <section class="pr-card" aria-labelledby="prTitle">
         ${sheenMarkup()}
+        ${particlesMarkup()}
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(signup
           ? tf("prijava.createTitle", "Otvorite račun")
@@ -244,6 +284,7 @@ function signedInMarkup(email) {
   return thresholdMarkup(`
       <section class="pr-card" aria-labelledby="prTitle">
         ${sheenMarkup()}
+        ${particlesMarkup()}
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(tf("prijava.signedInTitle", "Prijavljeni ste"))}</h1>
         <div class="pr-who">
@@ -307,6 +348,7 @@ export async function render(container) {
   const email = session?.user?.email || "";
   container.innerHTML = session ? signedInMarkup(email) : signInMarkup(configured);
   document.documentElement.setAttribute(AUTH_ATTR, "on");
+  populateCardParticles(container);
   wireCardSheen(container);
 
   wireEntryHandoff(container);

@@ -139,8 +139,8 @@ test("Atelier persists finish decisions and exposes touch-sized controls", () =>
   assert(/data-grout-color/.test(atelier) && /data-grout-width/.test(atelier), "grout controls are not wired");
 });
 
-test("the new pure module is available offline", () => {
-  assert(worker.includes('"./js/live-grout.js"'), "service worker omits live-grout.js");
+test("the service worker precaches nothing (retired, operator instruction 2026-08-04)", () => {
+  assert(!worker.includes('"./js/live-grout.js"'), "the kill switch must not carry a shell/precache list");
 });
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);

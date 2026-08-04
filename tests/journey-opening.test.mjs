@@ -43,7 +43,6 @@ test("Atelier suppresses legacy chrome and warms heavy local work behind the ope
   assert.match(atelier, /data-akv-journey/);
   assert.match(atelier, /class="atl-menu"[\s\S]*<span><\/span><span><\/span><span><\/span>/);
   assert.match(aidock, /HIDDEN_ROUTES = \['\/savjetnik', '\/prijava', '\/atelier'\]/);
-  assert.match(worker, /"\.\/js\/journey-opening\.js"/);
 });
 
 test("the opening glass becomes the landscape decision lens without a second blur sheet", () => {

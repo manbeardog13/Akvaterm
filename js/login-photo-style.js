@@ -68,6 +68,7 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   object-fit:cover;object-position:50% 50%;transform:scale(1.025);
   transform-origin:50% 50%;
   transition:opacity 1100ms cubic-bezier(.22,1,.36,1);
+  animation:prPhotoBlurIn 1400ms cubic-bezier(.22,1,.36,1) both;
 }
 .pr-scene-dark{opacity:var(--pr-dark-photo-opacity)}
 .pr-scene-light{opacity:var(--pr-light-photo-opacity)}
@@ -76,6 +77,10 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
   background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.28) 45%,rgba(0,0,0,.52));
 }
 @keyframes prSceneClockwiseSettle{from{transform:rotate(0deg)}to{transform:rotate(1.35deg)}}
+/* Entrance sequence (operator instruction, 2026-08-04): the background
+   resolves first — blurred to crisp over 1.4s — then, 1.6s after the
+   threshold opens, the card materializes on top of the now-clear room. */
+@keyframes prPhotoBlurIn{from{filter:blur(22px) saturate(1.08) brightness(.92)}to{filter:none}}
 
 /* HOUSE_STANDARD.md defines a 412px canonical card and records 327px at
    375x812 once its 24px page gutters are paid; --pr-card-scale then takes a
@@ -96,23 +101,45 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
      @uix.vikram job-card screenshot): the material itself carries almost no
      colour of its own. What reads as "premium" there is how MUCH of the real
      scene survives through it, not a green/amber wash on top of it. Pushed
-     to maximum transparency (operator instruction, 2026-08-04): the fill is
-     nearly gone — the border ring is what still reads as "a card" at all. */
+     to maximum transparency (operator instruction, 2026-08-04, twice): the
+     fill is almost nothing now — the border ring is what still reads as
+     "a card" at all. */
   background:
-    linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01) 46%,rgba(0,0,0,.03) 100%) padding-box,
-    linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.06)) border-box;
+    linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005) 46%,rgba(0,0,0,.015) 100%) padding-box,
+    linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.05)) border-box;
   border:1px solid transparent;border-radius:30px;
-  box-shadow:0 40px 100px -32px rgba(0,0,0,.55),0 0 70px -18px rgba(255,255,255,.1),
-    inset 0 1.5px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(0,0,0,.14);
-  /* Liquid-glass, pushed to maximum transparency (operator instruction,
-     2026-08-04): blur alone does the "glass" work now — saturate/contrast
-     stay near-neutral so the scene behind isn't recoloured, and there is no
-     entrance choreography left to compete with it. The card is simply
-     there, fully resolved, the instant the view mounts. The bent-edge
-     highlight and pointer-tracked sheen below are CSS-only, no SVG
-     feDisplacementMap (Safari risk). */
-  backdrop-filter:blur(13px) saturate(1.04) brightness(var(--pr-card-glass-lift));
-  -webkit-backdrop-filter:blur(13px) saturate(1.04) brightness(var(--pr-card-glass-lift));overflow:hidden;
+  box-shadow:0 40px 100px -32px rgba(0,0,0,.5),0 0 70px -18px rgba(255,255,255,.1),
+    inset 0 1.5px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(0,0,0,.1);
+  /* Liquid-glass, pushed to maximum transparency: blur alone does the
+     "glass" work now — saturate/contrast stay near-neutral so the scene
+     behind isn't recoloured. The bent-edge highlight and pointer-tracked
+     sheen below are CSS-only, no SVG feDisplacementMap (Safari risk). */
+  backdrop-filter:blur(9px) saturate(1.03) brightness(var(--pr-card-glass-lift));
+  -webkit-backdrop-filter:blur(9px) saturate(1.03) brightness(var(--pr-card-glass-lift));overflow:hidden;
+  /* The card is not placed — it materializes, 1.6s after the threshold
+     opens (operator instruction, 2026-08-04), once the background behind it
+     has already resolved from blur to clarity. */
+  animation:prCardMaterialize 900ms cubic-bezier(.22,1,.36,1) 1600ms both;
+}
+/* prCardMaterialize handles the sheet itself; the .pr-particles field
+   (populated in js/views/prijava.js, skipped entirely under reduced motion)
+   is what makes it read as particles coalescing into glass out of thin air,
+   rather than a plain fade/scale. Both start at the same 1.6s mark. */
+@keyframes prCardMaterialize{
+  from{opacity:0;transform:scale(.94) translateY(8px);filter:blur(14px)}
+  to{opacity:1;transform:none;filter:none}
+}
+.pr-card>.pr-particles{position:absolute;z-index:2;inset:-64px;pointer-events:none;overflow:visible}
+.pr-particle{
+  position:absolute;top:50%;left:50%;display:block;opacity:0;
+  transform:translate3d(0,0,0);mix-blend-mode:screen;filter:blur(.8px);border-radius:999px;
+  background:radial-gradient(circle,rgba(255,255,255,.95) 0,rgba(255,255,255,.34) 40%,rgba(255,255,255,0) 76%);
+  animation:prCardParticleConverge var(--pr-particle-duration) cubic-bezier(.22,1,.36,1) var(--pr-particle-delay) both;
+}
+@keyframes prCardParticleConverge{
+  0%{opacity:0;transform:translate3d(var(--pr-particle-x),var(--pr-particle-y),0) scale(.18);filter:blur(3px)}
+  50%{opacity:.9}
+  100%{opacity:0;transform:translate3d(0,0,0) scale(.04);filter:blur(.4px)}
 }
 .pr-card::before{
   content:"";position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:29px;
@@ -200,7 +227,8 @@ html[data-akv-auth][data-theme=light]{
 
 @media(prefers-reduced-motion:reduce){
   .pr-wrap,.pr-card,.pr-sheen,.pr-scene-media,.pr-scene-media img,.pr-themeic,.pr-card .btn,
-  .pr-card::after{transition:none!important;transform:none!important;animation:none!important}
+  .pr-card::after,.pr-particles,.pr-particle{transition:none!important;transform:none!important;animation:none!important}
+  .pr-particles{display:none}
 }
 @media(prefers-reduced-transparency:reduce){html:not([data-transparency=full]) .pr-card{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--pr-panel)}}
 html[data-transparency=reduced] .pr-card{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--pr-panel)}

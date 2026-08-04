@@ -2,8 +2,10 @@
 // app.js — routing + the app frame. Owns the hash router (ROUTES regex table,
 // lazy view imports, navSeq staleness guard), the chrome (header with the
 // AKVA|TERM wordmark, desktop top-nav + mobile tab bar, the "Više" popover),
-// the toast area (exposed as window.AKV.toast) and the single service-worker
-// registration. Views render into #main — a FRESH #main per navigation — and
+// the toast area (exposed as window.AKV.toast) and the service-worker
+// registration call — retired 2026-08-04, see service-worker.js, kept only
+// to reach already-installed clients with the kill switch. Views render
+// into #main — a FRESH #main per navigation — and
 // clean up via their optional teardown() export plus the "akv:teardown" event
 // fired on every navigation. There is no boot splash to hand off to — retired
 // 2026-08-04 — so the first view simply paints straight into #main.
@@ -88,7 +90,7 @@ import { authConfigured, getSession, onAuthChange, signOut } from "./db.js";
 // registration WITHOUT the query would fall back to; keep it equal to this
 // string anyway, so a hand-registered worker lands in the same cache.
 // The worker's SHELL list must still cover every shipped file.
-export const APP_V = "v14";
+export const APP_V = "v15";
 
 document.documentElement.lang = LANG;
 
@@ -903,14 +905,21 @@ if (!location.hash || location.hash === "#" || location.hash === "#/") {
 }
 
 window.addEventListener("hashchange", route);
-// Registered WITH ?v=${APP_V}: that query is the worker's only source of
-// VERSION, so `akv-${APP_V}` is the cache name by construction rather than by
-// two literals agreeing. It also makes the script URL change on every bump,
-// which is what guarantees the browser fetches the new worker rather than
-// byte-comparing the old one. Scope is unaffected — it comes from the path.
+// The service worker is RETIRED (operator instruction, 2026-08-04) — see
+// service-worker.js's header for why. This call still exists ONLY so an
+// already-installed client fetches that file, finds it changed, and lets it
+// unregister and clear its own caches; it is not standing up any new
+// caching. Safe to delete once existing installs have had time to pass
+// through the kill switch once.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register(`./service-worker.js?v=${APP_V}`).catch(() => {});
+  });
+  // Fallback for the kill switch's client.navigate() path: some engines
+  // don't expose navigate() on a WindowClient, so it posts this message
+  // instead and this reloads unconditionally.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "akv:sw-retired") location.reload();
   });
 }
 route();
