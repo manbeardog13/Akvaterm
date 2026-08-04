@@ -70,11 +70,12 @@ test("the glass card follows the measured House Standard width, scaled down with
   // separate -10% dial applied on top of it (operator instruction, 2026-08-04).
   assert.match(style, /--pr-card-reference-width:412px/);
   assert.match(style, /--pr-card-scale:\.9/);
-  assert.match(style, /width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),calc\(100% - 48px\)\)/);
-  assert.match(style, /max-width:760px[\s\S]*padding:max\(72px,[\s\S]*\) 24px max\(72px/);
-  assert.match(style, /\.pr-card\{width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
-  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.28\) contrast\(1\.02\)/);
-  assert.match(style, /0 48px 120px -34px rgba\(0,0,0,\.76\)/);
+  // .pr-wrap supplies the ONE gutter (safe-area-aware, same formula at every
+  // breakpoint) — .pr-card must not subtract a second one on top of it.
+  assert.match(style, /\.pr-wrap\{[\s\S]*?padding:max\(56px,[\s\S]*?\) 24px[\s\S]*?max\(56px,/);
+  assert.match(style, /\.pr-card\{[\s\S]*?width:min\(calc\(var\(--pr-card-reference-width\) \* var\(--pr-card-scale\)\),100%\)/);
+  assert.match(style, /backdrop-filter:blur\(13px\) saturate\(1\.04\)/);
+  assert.match(style, /0 40px 100px -32px rgba\(0,0,0,\.55\)/);
   assert.doesNotMatch(style, /82vw|86vw|480px|560px|--pr-card-reference-scale/);
   // Controls keep their accessibility floor regardless of the card scale —
   // these must stay literal pixel values, never run through a scale token.
@@ -83,46 +84,84 @@ test("the glass card follows the measured House Standard width, scaled down with
   assert.match(style, /\.pr-forgot,\.pr-footlink\{min-height:44px/);
 });
 
-test("the card resolves from a particle field instead of just appearing", () => {
-  assert.match(style, /@keyframes prCardMaterialize\{/);
-  assert.match(style, /\.pr-card\{[\s\S]*animation:prCardMaterialize/);
-  assert.match(style, /@keyframes prCardParticleConverge\{/);
-  assert.match(style, /\.pr-card>\.pr-particles\{position:absolute/);
-  // No static opacity/transform on .pr-card itself: prefers-reduced-motion's
-  // animation:none!important must fall back to the CSS-initial values
-  // (opacity:1, transform:none), not a permanently-invisible frame-0 state.
-  const cardRule = style.slice(style.indexOf(".pr-card{"), style.indexOf("@keyframes prCardMaterialize"));
-  assert.doesNotMatch(cardRule, /opacity:0|transform:/);
-  assert.match(style, /\.pr-particles,\.pr-particle\{transition:none!important;transform:none!important;animation:none!important/);
-  assert.match(style, /\.pr-particles\{display:none\}/);
-  // The particle field is populated in JS only, and only when motion is
-  // allowed — no particle nodes are ever created for a reduced-motion user.
-  assert.match(login, /function populateCardParticles\(container\)/);
-  assert.match(login, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
-  assert.match(login, /populateCardParticles\(container\);/);
-  assert.match(login, /class="pr-particles" aria-hidden="true"/);
+test("the login has no entrance choreography — card and photo are both simply there", () => {
+  // Operator instruction, 2026-08-04: delete the splash outright AND
+  // everything that replaced it — the photo blur-in reveal and the card's
+  // particle-materialize entrance were their own kind of "splash" (a veil
+  // before the real thing), so both are gone too. The only motion left on
+  // this screen is interaction-driven: the pointer sheen, control hovers,
+  // the slow ambient photo rotation, and the theme crossfade.
+  assert.doesNotMatch(style, /prCardMaterialize|prCardParticleConverge|prPhotoBlurIn/);
+  assert.doesNotMatch(style, /\.pr-particles|\.pr-particle\b/);
+  assert.doesNotMatch(style, /\banimation:prCardMaterialize|\banimation:prPhotoBlurIn/);
+  assert.doesNotMatch(login, /particlesMarkup|populateCardParticles|pr-particles|pr-particle\b/);
+  // The card itself carries no entrance animation at all now.
+  const cardRule = style.slice(style.indexOf(".pr-card{"), style.indexOf(".pr-card::before{"));
+  assert.doesNotMatch(cardRule, /animation:|opacity:0/);
+  const photoRule = style.slice(style.indexOf(".pr-scene-media img{"), style.indexOf(".pr-scene-dark{"));
+  assert.doesNotMatch(photoRule, /animation:|filter:/);
 });
 
-test("the login photograph blurs into focus on arrival", () => {
-  assert.match(style, /@keyframes prPhotoBlurIn\{from\{filter:blur\(22px\)[\s\S]*?to\{filter:none\}\}/);
-  assert.match(style, /\.pr-scene-media img\{[\s\S]*animation:prPhotoBlurIn/);
-  assert.doesNotMatch(style, /\.pr-scene-media img\{[^}]*filter:none;/);
-  assert.match(style, /prefers-reduced-motion:reduce[\s\S]*\.pr-scene-media img[\s\S]*animation:none!important/);
-});
-
-test("the glass is brighter and clearer, and light mode gets more light than dark", () => {
-  assert.match(style, /backdrop-filter:blur\(9px\) saturate\(1\.28\) contrast\(1\.02\) brightness\(var\(--pr-card-glass-lift\)\)/);
+test("the glass is neutral, not brand-tinted, and light mode gets more light than dark", () => {
+  assert.match(style, /backdrop-filter:blur\(13px\) saturate\(1\.04\) brightness\(var\(--pr-card-glass-lift\)\)/);
   assert.doesNotMatch(style, /brightness\(\.96\)/);
+  // Operator reference, 2026-08-04 (the @uix.vikram job-card screenshot): the
+  // material itself must not carry Akvaterm's teal/amber brand colour — only
+  // the photograph behind it should supply colour. rgba() triples used by
+  // the card's own fill/border/rim/sheen must be grey (R=G=B), never a tint.
+  const cardBlock = style.slice(style.indexOf(".pr-card{"), style.indexOf(".pr-card>*{"));
+  const rgbaTriples = [...cardBlock.matchAll(/rgba\((\d+),(\d+),(\d+),/g)];
+  assert.ok(rgbaTriples.length > 5, "expected several rgba() colours in the card material rules");
+  for (const [, r, g, b] of rgbaTriples) {
+    assert.equal(r, g, `card material colour rgba(${r},${g},${b},…) is not neutral`);
+    assert.equal(g, b, `card material colour rgba(${r},${g},${b},…) is not neutral`);
+  }
   const darkLift = Number(style.match(/--pr-card-glass-lift:([\d.]+);/)[1]);
   const lightMatches = [...style.matchAll(/--pr-card-glass-lift:([\d.]+)/g)].map((m) => Number(m[1]));
   assert.ok(lightMatches.length >= 3, "expected the base value plus two light-theme overrides");
   for (const value of lightMatches.slice(1)) assert.ok(value > darkLift, "light mode must be brighter than dark");
 });
 
-test("the idle login has no motion control or sensor controller", () => {
+test("the idle login has no ambient device-tilt parallax", () => {
   assert.doesNotMatch(login, /id="prMotion"|class="pr-motion"|ICON_MOTION/);
-  assert.doesNotMatch(login, /DeviceOrientationEvent|pointermove|wirePhotoDepth|login-depth/);
+  assert.doesNotMatch(login, /DeviceOrientationEvent|wirePhotoDepth|login-depth/);
   assert.doesNotMatch(style, /\.pr-motion/);
+});
+
+test("the glass sheen is a deliberate mouse-hover feature, not ambient motion", () => {
+  // Distinct from the device-tilt parallax forbidden above: this only ever
+  // reads pointer position on a fine, hover-capable pointer, and only moves
+  // one small overlay element — it never reads orientation and never moves
+  // the card itself. A real element, not a custom-property-driven
+  // pseudo-element: that was tried and did not reliably repaint.
+  assert.match(login, /function wireCardSheen\(container\)/);
+  assert.match(login, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches\) return;/);
+  assert.match(login, /matchMedia\("\(hover: hover\) and \(pointer: fine\)"\)\.matches\) return;/);
+  assert.match(login, /card\.addEventListener\("pointermove"/);
+  assert.match(login, /card\.addEventListener\("pointerleave"/);
+  assert.match(login, /sheen\.style\.backgroundPosition = /);
+  assert.match(login, /function sheenMarkup\(\)/);
+  assert.match(login, /class="pr-sheen" aria-hidden="true"/);
+  assert.match(login, /wireCardSheen\(container\);/);
+  assert.doesNotMatch(login, /DeviceOrientationEvent/);
+  assert.match(style, /\.pr-card>\.pr-sheen\{[\s\S]*?background-position:50% 0%/);
+  assert.match(style, /\.pr-card>\.pr-sheen\{[\s\S]*?transition:background-position 420ms/);
+  assert.doesNotMatch(style, /--pr-gx|--pr-gy/);
+  assert.match(style, /prefers-reduced-motion:reduce[\s\S]*\.pr-sheen[\s\S]*animation:none!important/);
+});
+
+test("the login is one layout at every breakpoint — no bordered desktop-only frame", () => {
+  assert.doesNotMatch(style, /\.pr-wrap\{[^}]*border:1px solid/);
+  assert.match(style, /\.pr-wrap\{[\s\S]*?width:100%;min-height:100dvh/);
+  assert.doesNotMatch(style, /width:min\(1320px,100%\)/);
+  // The old desktop-only frame and its mobile-only override are both gone —
+  // .pr-wrap/.pr-scene get exactly one base rule now, not a base + breakpoint
+  // pair (the forced-colors override further down is a different, legitimate
+  // rule — it hides the photo outright under that accessibility mode).
+  assert.equal((style.match(/\.pr-wrap\{/g) || []).length, 1);
+  const mobileBlock = style.slice(style.indexOf("@media(max-width:760px){"), style.indexOf("@media(max-width:380px)"));
+  assert.doesNotMatch(mobileBlock, /\.pr-wrap\{|\.pr-scene\{/);
+  assert.match(mobileBlock, /\.pr-scene-media img\{transform:scale\(1\.055\)\}/);
 });
 
 test("light mode crossfades a matched render without recoloring the glass card", () => {

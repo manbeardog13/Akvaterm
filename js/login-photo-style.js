@@ -30,33 +30,34 @@ html[data-akv-auth]{
      one thing actually free to move. Measured live against a 1280x720
      viewport, unconfigured/guest build, sign-in mode. */
   --pr-card-vscale:.68;
-  /* The one dial for "how much light passes through the glass." Dark theme
-     keeps a modest lift so the sheet still reads as glass over a dark room;
-     light theme (below) is set higher — operator instruction: light mode
-     gets a little more light than dark. */
-  --pr-card-glass-lift:1.04;
+  /* The one dial for "how much light passes through the glass." 1 is
+     neutral — no lift, no dimming, matching a real pane of glass. Dark theme
+     stays at neutral; light theme (below) is set a little above it —
+     operator instruction: light mode gets a little more light than dark. */
+  --pr-card-glass-lift:1;
 }
 html[data-akv-auth] body{min-height:100%;overflow-x:hidden;overflow-y:auto;background:#0b0d0c}
-html[data-akv-auth] #main{
-  width:100%;max-width:none;min-height:100dvh;margin:0;padding:
-    max(16px,env(safe-area-inset-top,0px))
-    max(16px,env(safe-area-inset-right,0px))
-    max(16px,env(safe-area-inset-bottom,0px))
-    max(16px,env(safe-area-inset-left,0px));
-  display:flex;perspective:1600px;
-}
+html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0;display:flex}
+/* ONE full-bleed layout at every breakpoint — desktop, tablet and phone all
+   get the same login (operator instruction, 2026-08-04): the photograph
+   fills the viewport edge to edge and the card floats over it, with no
+   bordered "panel inside a panel" frame that only used to appear at wide
+   viewports. The safe-area-aware padding formula below already adapts
+   itself (env() resolves to 0 off-device), so it needs no breakpoint. */
 .pr-wrap{
   position:relative;isolation:isolate;display:grid;place-items:center;
-  width:min(1320px,100%);min-height:calc(100dvh - 32px);margin:auto;
-  border:1px solid rgba(255,255,255,.2);border-radius:34px;overflow:hidden;
-  background:var(--pr-shell);box-shadow:0 2px 3px rgba(12,15,12,.08),0 28px 72px rgba(12,15,12,.28);
+  width:100%;min-height:100dvh;margin:0;
+  padding:max(56px,calc(env(safe-area-inset-top,0px) + 40px)) 24px
+          max(56px,calc(env(safe-area-inset-bottom,0px) + 40px));
 }
 
 /* Project-local cinematic interior. The approved photograph is content, not a
    decorative network fetch: it is precached by service-worker.js and remains
-   usable on GitHub Pages and offline. */
+   usable on GitHub Pages and offline. Fixed, not absolute, at every
+   breakpoint: the background stays pinned behind the card even if a very
+   short viewport makes the page scroll. */
 .pr-scene{
-  position:absolute;z-index:0;inset:0;overflow:hidden;background:#0b0d0c;
+  position:fixed;z-index:0;inset:0;overflow:hidden;background:#0b0d0c;
 }
 .pr-scene-media{
   position:absolute;inset:0;display:block;overflow:hidden;
@@ -67,19 +68,14 @@ html[data-akv-auth] #main{
   object-fit:cover;object-position:50% 50%;transform:scale(1.025);
   transform-origin:50% 50%;
   transition:opacity 1100ms cubic-bezier(.22,1,.36,1);
-  animation:prPhotoBlurIn 1700ms cubic-bezier(.22,1,.36,1) both;
 }
 .pr-scene-dark{opacity:var(--pr-dark-photo-opacity)}
 .pr-scene-light{opacity:var(--pr-light-photo-opacity)}
 .pr-scene::after{
   content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,.22) 48%,rgba(0,0,0,.48));
+  background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.28) 45%,rgba(0,0,0,.52));
 }
 @keyframes prSceneClockwiseSettle{from{transform:rotate(0deg)}to{transform:rotate(1.35deg)}}
-/* The 4K photograph is already fully decoded content, not a progressive
-   fetch — this is a pure art-direction reveal, resolving from a soft
-   depth-of-field into the crisp room the moment the threshold opens. */
-@keyframes prPhotoBlurIn{from{filter:blur(22px) saturate(1.08) brightness(.92)}to{filter:none}}
 
 /* HOUSE_STANDARD.md defines a 412px canonical card and records 327px at
    375x812 once its 24px page gutters are paid; --pr-card-scale then takes a
@@ -87,56 +83,64 @@ html[data-akv-auth] #main{
    only the sheet's own vertical rhythm compresses to make the height follow. */
 .pr-card{
   position:relative;z-index:3;isolation:isolate;display:flex;flex-direction:column;justify-content:center;
-  width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),calc(100% - 48px));min-width:0;margin:44px auto;
+  /* .pr-wrap's own padding (above) is the ONLY gutter now — do not double it
+     here. That used to be split between a desktop rule (no wrap padding, so
+     the card subtracted its own 48px) and a mobile override (wrap already
+     padded, so the card just took 100%); unifying .pr-wrap's padding across
+     breakpoints means this rule can simply be the one the mobile override
+     used to be. */
+  width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),100%);min-width:0;margin:44px auto;
   padding:calc(28px * var(--pr-card-vscale)) calc(24px * var(--pr-card-vscale)) calc(22px * var(--pr-card-vscale));
   color:var(--pr-text);
+  /* Neutral glass, not tinted glass (operator reference, 2026-08-04 — the
+     @uix.vikram job-card screenshot): the material itself carries almost no
+     colour of its own. What reads as "premium" there is how MUCH of the real
+     scene survives through it, not a green/amber wash on top of it. Pushed
+     to maximum transparency (operator instruction, 2026-08-04): the fill is
+     nearly gone — the border ring is what still reads as "a card" at all. */
   background:
-    linear-gradient(138deg,rgba(255,255,255,.16),rgba(191,229,197,.04) 34%,rgba(5,10,8,.09) 72%) padding-box,
-    linear-gradient(145deg,rgba(255,255,255,.7),rgba(184,231,203,.2) 27%,rgba(255,222,172,.28) 72%,rgba(255,255,255,.15)) border-box;
+    linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01) 46%,rgba(0,0,0,.03) 100%) padding-box,
+    linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.06)) border-box;
   border:1px solid transparent;border-radius:30px;
-  box-shadow:0 48px 120px -34px rgba(0,0,0,.76),0 18px 42px -30px rgba(163,225,190,.46),
-    inset 0 1px 0 rgba(255,255,255,.34),inset 0 -1px 0 rgba(132,176,150,.10);
-  /* Liquid-glass clarity: a lighter blur than the old recipe, no static
-     darkening (brightness now runs through --pr-card-glass-lift so light mode
-     can sit brighter than dark), plus the two pseudo-elements below for the
-     bent-edge highlight — CSS-only, no SVG feDisplacementMap (Safari risk). */
-  backdrop-filter:blur(9px) saturate(1.28) contrast(1.02) brightness(var(--pr-card-glass-lift));
-  -webkit-backdrop-filter:blur(9px) saturate(1.28) contrast(1.02) brightness(var(--pr-card-glass-lift));overflow:hidden;
-  animation:prCardMaterialize 900ms cubic-bezier(.22,1,.36,1) 60ms both;
-}
-/* The card is not placed — it resolves. prCardMaterialize handles the sheet
-   itself; the .pr-particles field (populated in js/views/prijava.js, skipped
-   entirely under reduced motion) is what makes it read as particles
-   coalescing into glass rather than a plain fade/scale. */
-@keyframes prCardMaterialize{
-  from{opacity:0;transform:scale(.94) translateY(8px);filter:blur(14px)}
-  to{opacity:1;transform:none;filter:none}
-}
-.pr-card>.pr-particles{position:absolute;z-index:2;inset:-64px;pointer-events:none;overflow:visible}
-.pr-particle{
-  position:absolute;top:50%;left:50%;display:block;opacity:0;
-  transform:translate3d(0,0,0);mix-blend-mode:screen;filter:blur(.8px);border-radius:999px;
-  background:radial-gradient(circle,rgba(255,255,255,.95) 0,rgba(215,226,186,.34) 40%,rgba(215,226,186,0) 76%);
-  animation:prCardParticleConverge var(--pr-particle-duration) cubic-bezier(.22,1,.36,1) var(--pr-particle-delay) both;
-}
-@keyframes prCardParticleConverge{
-  0%{opacity:0;transform:translate3d(var(--pr-particle-x),var(--pr-particle-y),0) scale(.18);filter:blur(3px)}
-  50%{opacity:.9}
-  100%{opacity:0;transform:translate3d(0,0,0) scale(.04);filter:blur(.4px)}
+  box-shadow:0 40px 100px -32px rgba(0,0,0,.55),0 0 70px -18px rgba(255,255,255,.1),
+    inset 0 1.5px 0 rgba(255,255,255,.85),inset 0 -1px 0 rgba(0,0,0,.14);
+  /* Liquid-glass, pushed to maximum transparency (operator instruction,
+     2026-08-04): blur alone does the "glass" work now — saturate/contrast
+     stay near-neutral so the scene behind isn't recoloured, and there is no
+     entrance choreography left to compete with it. The card is simply
+     there, fully resolved, the instant the view mounts. The bent-edge
+     highlight and pointer-tracked sheen below are CSS-only, no SVG
+     feDisplacementMap (Safari risk). */
+  backdrop-filter:blur(13px) saturate(1.04) brightness(var(--pr-card-glass-lift));
+  -webkit-backdrop-filter:blur(13px) saturate(1.04) brightness(var(--pr-card-glass-lift));overflow:hidden;
 }
 .pr-card::before{
   content:"";position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:29px;
-  background:linear-gradient(180deg,rgba(255,255,255,.13),transparent 18%,transparent 80%,rgba(155,207,174,.05));
+  background-image:linear-gradient(180deg,rgba(255,255,255,.05),transparent 20%,transparent 78%,rgba(255,255,255,.02));
   /* The wider, softer inset shadows here (28-30px spread) are the "bend" —
      light gathers and warps toward the card's own edges rather than a flat
      1px ring, which is what reads as refraction without an SVG filter. */
-  box-shadow:inset 1.5px 0 rgba(203,243,220,.16),inset -1.5px 0 rgba(255,218,163,.1),
-    inset 0 18px 30px -26px rgba(255,255,255,.68),inset 0 -20px 32px -28px rgba(105,177,139,.32);
+  box-shadow:inset 1.5px 0 rgba(255,255,255,.1),inset -1.5px 0 rgba(255,255,255,.06),
+    inset 0 18px 30px -26px rgba(255,255,255,.4),inset 0 -20px 32px -28px rgba(0,0,0,.16);
+}
+/* The pointer-tracked sheen — a real element, not a custom-property-driven
+   pseudo-element: background-position on a pseudo whose value derives from a
+   var() set on the host does not reliably repaint on every engine, so this
+   is the one layer prijava.js's wireCardSheen() sets directly with
+   element.style, which is unconditionally reliable. The default 50%/0% is
+   the resting "light falls from above" position the reference image shows
+   even with no pointer nearby; JS only overrides it on a real mouse hover
+   and eases back to it on pointerleave via the transition below. */
+.pr-card>.pr-sheen{
+  position:absolute;z-index:0;inset:1px;pointer-events:none;border-radius:29px;
+  background-image:radial-gradient(closest-side,rgba(255,255,255,.28),transparent 72%);
+  background-size:85% 70%;background-repeat:no-repeat;background-position:50% 0%;
+  transition:background-position 420ms cubic-bezier(.22,1,.36,1);
 }
 .pr-card::after{
   content:"";position:absolute;z-index:0;inset:2px;pointer-events:none;border-radius:28px;
-  border-top:1px solid rgba(255,224,181,.30);border-right:1px solid rgba(255,211,153,.14);
-  box-shadow:inset 0 13px 24px -24px rgba(255,221,174,.66),inset -14px 0 26px -28px rgba(255,202,128,.42);
+  border-top:1px solid rgba(255,255,255,.35);border-right:1px solid rgba(255,255,255,.14);
+  box-shadow:inset 0 13px 24px -24px rgba(255,255,255,.7),inset -14px 0 26px -28px rgba(255,255,255,.28);
   opacity:var(--pr-card-light-reflection);transition:opacity 1100ms cubic-bezier(.22,1,.36,1);
 }
 .pr-card>*{position:relative;z-index:1}
@@ -176,32 +180,31 @@ html[data-akv-auth] #main{
    full 4K renders of the same room; no CSS exposure trick is used. */
 html[data-akv-auth][data-theme=light]{
   --pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;
-  --pr-card-light-reflection:1;--pr-card-glass-lift:1.12;
+  --pr-card-light-reflection:1;--pr-card-glass-lift:1.08;
 }
 @media(prefers-color-scheme:light){
-  html[data-akv-auth]:not([data-theme=dark]){--pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;--pr-card-light-reflection:1;--pr-card-glass-lift:1.12}
+  html[data-akv-auth]:not([data-theme=dark]){--pr-dark-photo-opacity:0;--pr-light-photo-opacity:1;--pr-card-light-reflection:1;--pr-card-glass-lift:1.08}
 }
 
+/* Below 760px the only thing that changes is typography and the photo's own
+   crop compensation (a portrait 4K source needs a different object-fit crop
+   on a portrait viewport than a landscape one) — layout, gutters, the glass
+   card recipe and the background treatment are the SAME rule everywhere. */
 @media(max-width:760px){
-  html[data-akv-auth] #main{padding:0;min-height:100dvh}
-  .pr-wrap{display:grid;width:100%;min-height:100dvh;padding:max(72px,calc(env(safe-area-inset-top,0px) + 56px)) 24px max(72px,calc(env(safe-area-inset-bottom,0px) + 56px));border:0;border-radius:0;overflow:visible;background:#0b0d0c;box-shadow:none}
-  .pr-scene{position:fixed;z-index:0;inset:0;border-radius:0;min-height:100dvh}
-  .pr-scene-media{position:absolute;inset:0}.pr-scene-media img{object-position:50% 50%;transform:scale(1.055)}
-  .pr-scene::after{background:linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,.3) 48%,rgba(0,0,0,.58))}
-  .pr-card{width:min(calc(var(--pr-card-reference-width) * var(--pr-card-scale)),100%);min-height:auto;margin:auto}
+  .pr-scene-media img{transform:scale(1.055)}
+  .pr-card{min-height:auto;margin:auto}
   .pr-title{font-size:clamp(29px,9vw,38px)}.pr-sub{margin-bottom:calc(20px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(26px * var(--pr-card-vscale))}
 }
 @media(max-width:380px){.pr-notice{padding:calc(10px * var(--pr-card-vscale)) calc(11px * var(--pr-card-vscale))}.pr-cardtop{margin-bottom:calc(24px * var(--pr-card-vscale))}}
 @media(max-height:760px) and (max-width:760px){.pr-card{margin-top:68px}.pr-cardtop{margin-bottom:calc(22px * var(--pr-card-vscale))}.pr-sub{margin-bottom:calc(16px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(22px * var(--pr-card-vscale))}}
 
 @media(prefers-reduced-motion:reduce){
-  .pr-wrap,.pr-card,.pr-scene-media,.pr-scene-media img,.pr-themeic,.pr-card .btn,.pr-card::after,
-  .pr-particles,.pr-particle{transition:none!important;transform:none!important;animation:none!important}
-  .pr-particles{display:none}
+  .pr-wrap,.pr-card,.pr-sheen,.pr-scene-media,.pr-scene-media img,.pr-themeic,.pr-card .btn,
+  .pr-card::after{transition:none!important;transform:none!important;animation:none!important}
 }
 @media(prefers-reduced-transparency:reduce){html:not([data-transparency=full]) .pr-card{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--pr-panel)}}
 html[data-transparency=reduced] .pr-card{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--pr-panel)}
-@media(prefers-contrast:more){.pr-card,.pr-input,.pr-notice,.pr-google{border-width:2px!important}.pr-card::before,.pr-card::after,.pr-scene::after{display:none}.pr-muted{opacity:1}}
+@media(prefers-contrast:more){.pr-card,.pr-input,.pr-notice,.pr-google{border-width:2px!important}.pr-card::before,.pr-card::after,.pr-sheen,.pr-scene::after{display:none}.pr-muted{opacity:1}}
 @media(forced-colors:active){
   .pr-wrap,.pr-card,.pr-input,.pr-notice,.pr-google,.pr-who{forced-color-adjust:auto;border:1px solid CanvasText;background:Canvas;color:CanvasText}
   .pr-scene{display:none}.pr-card{width:min(var(--pr-card-reference-width),calc(100% - 32px))}.pr-mark .akva,.pr-mark .term,.pr-title,.pr-sub,.pr-noticetext,.pr-noticetext b{color:CanvasText}.pr-card .btn-primary{background:Highlight;color:HighlightText}

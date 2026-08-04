@@ -97,36 +97,12 @@ function thresholdMarkup(card) {
   return `<div class="pr-wrap">${sceneMarkup()}${card}</div>`;
 }
 
-// Empty on purpose — populateCardParticles() fills it after the card is in the
-// DOM, and skips entirely under prefers-reduced-motion so no particle nodes
-// are ever created for a user who has asked for less motion.
-function particlesMarkup() {
-  return `<div class="pr-particles" aria-hidden="true"></div>`;
-}
-
-// The card "resolves" rather than appearing: a scatter of small glass motes
-// converge from just beyond its edges into the sheet, timed alongside the
-// pr-card's own prCardMaterialize animation (login-photo-style.js). Polar
-// placement keeps the origin points spread evenly around the card instead of
-// clustering in the corners a rectangular random spread would produce.
-function populateCardParticles(container) {
-  const host = container.querySelector(".pr-particles");
-  if (!host || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const count = 18 + Math.floor(Math.random() * 8);
-  for (let i = 0; i < count; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 90 + Math.random() * 170;
-    const size = 2 + Math.random() * 3.5;
-    const particle = document.createElement("span");
-    particle.className = "pr-particle";
-    particle.style.width = `${size.toFixed(2)}px`;
-    particle.style.height = `${size.toFixed(2)}px`;
-    particle.style.setProperty("--pr-particle-x", `${(Math.cos(angle) * radius).toFixed(2)}px`);
-    particle.style.setProperty("--pr-particle-y", `${(Math.sin(angle) * radius).toFixed(2)}px`);
-    particle.style.setProperty("--pr-particle-duration", `${(650 + Math.random() * 320).toFixed(0)}ms`);
-    particle.style.setProperty("--pr-particle-delay", `${(Math.random() * 220).toFixed(0)}ms`);
-    host.appendChild(particle);
-  }
+// The pointer-tracked sheen. A real element (not a pseudo-element background
+// driven by a custom property — see login-photo-style.js's .pr-sheen rule
+// for why) so wireCardSheen() below can move it with plain element.style and
+// have it reliably repaint every time.
+function sheenMarkup() {
+  return `<span class="pr-sheen" aria-hidden="true"></span>`;
 }
 
 // The wrapper is a <div>, NOT a <label>: the password row contains a button
@@ -248,7 +224,7 @@ function signInMarkup(configured) {
 
   return thresholdMarkup(`
       <section class="pr-card" aria-labelledby="prTitle">
-        ${particlesMarkup()}
+        ${sheenMarkup()}
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(signup
           ? tf("prijava.createTitle", "Otvorite račun")
@@ -267,7 +243,7 @@ function signedInMarkup(email) {
   const initial = (email || "?").trim().charAt(0).toUpperCase() || "?";
   return thresholdMarkup(`
       <section class="pr-card" aria-labelledby="prTitle">
-        ${particlesMarkup()}
+        ${sheenMarkup()}
         ${cardTop()}
         <h1 class="pr-title" id="prTitle">${esc(tf("prijava.signedInTitle", "Prijavljeni ste"))}</h1>
         <div class="pr-who">
@@ -331,12 +307,45 @@ export async function render(container) {
   const email = session?.user?.email || "";
   container.innerHTML = session ? signedInMarkup(email) : signInMarkup(configured);
   document.documentElement.setAttribute(AUTH_ATTR, "on");
-  populateCardParticles(container);
+  wireCardSheen(container);
 
   wireEntryHandoff(container);
   if (session) wireSignedIn(container);
   else if (configured) { wireForm(container); wireGoogle(container); }
   wireCardTop(container);
+}
+
+// The pointer-tracked glass sheen (operator reference, 2026-08-04 — the
+// @uix.vikram job-card screenshot): a soft highlight that follows the
+// cursor across the card, like light moving across a real pane of glass.
+// Moves .pr-sheen (login-photo-style.js) directly via element.style — a
+// custom-property-driven pseudo-element background-position was tried first
+// and measurably did not repaint reliably, which is why this is a real
+// element instead.
+//
+// Deliberately mouse-only: `hover:hover` and `pointer:fine` both have to be
+// true, so touch and coarse pointers never wire the listener and simply see
+// the CSS default (a fixed top-centre glow) — there is no hover concept to
+// react to there. Skipped entirely under reduced motion, same as every
+// other card effect on this screen. This is a distinct, deliberate feature
+// from the old ambient tilt-sensor parallax this screen never had and still
+// doesn't: nothing here reads device orientation or moves the card itself,
+// only the one small overlay's background position, on hover.
+function wireCardSheen(container) {
+  const card = container.querySelector(".pr-card");
+  const sheen = container.querySelector(".pr-sheen");
+  if (!card || !sheen) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  card.addEventListener("pointermove", (event) => {
+    const rect = card.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    sheen.style.backgroundPosition = `${Math.max(0, Math.min(100, x)).toFixed(1)}% ${Math.max(0, Math.min(100, y)).toFixed(1)}%`;
+  });
+  card.addEventListener("pointerleave", () => {
+    sheen.style.backgroundPosition = "";
+  });
 }
 
 

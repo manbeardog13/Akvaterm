@@ -6,11 +6,16 @@ const source = fs.readFileSync(new URL("../js/views/prijava.js", import.meta.url
 const style = fs.readFileSync(new URL("../js/login-photo-style.js", import.meta.url), "utf8");
 const worker = fs.readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
 
-test("the idle login has no pointer or device-orientation motion path", () => {
+test("the idle login has no device-orientation motion path, and no scene parallax", () => {
   assert.doesNotMatch(source, /login-depth|DeviceOrientationEvent|deviceorientation|orientationchange/);
   assert.doesNotMatch(source, /pointerDepth|orientationDepth|wirePhotoDepth|requestPermission/);
-  assert.doesNotMatch(source, /pointermove|--pr-scene-[xy]|--pr-card-[xy]|--pr-glare-[xy]/);
+  // The scene/background never moves on pointer input — only the card's own
+  // glass sheen may (see login-handoff.test.mjs's "deliberate mouse-hover
+  // feature" test), and it does so through --pr-gx/--pr-gy, never any of the
+  // old login-depth.js parallax property names.
+  assert.doesNotMatch(source, /--pr-scene-[xy]|--pr-card-[xy]|--pr-glare-[xy]/);
   assert.doesNotMatch(style, /--pr-scene-[xy]|--pr-card-[xy]|--pr-glare-[xy]/);
+  assert.doesNotMatch(style, /\.pr-scene[^{]*\{[^}]*var\(--pr-g[xy]/);
   assert.doesNotMatch(worker, /"\.\/js\/login-depth\.js"/);
 });
 
