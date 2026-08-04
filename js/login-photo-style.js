@@ -42,8 +42,14 @@ html[data-akv-auth]{
      instruction, 2026-08-04, "scale the buttons": that floor is gone by
      explicit request now (controls cut to 44px/38px directly on their own
      rules, below) — this token still compresses everything else the same
-     way it always did. */
-  --pr-card-vscale:.3;
+     way it always did.
+     .3 (chasing an exact -15% height target) read as cramped on a real
+     device — "look how tight everything is... perfect spacing... marvelous"
+     (operator, 2026-08-04). .8 restores real breathing room between every
+     element; the card is a little taller than the -15% target as a direct
+     result, and that trade was made on purpose — spacing quality over a
+     specific height number. */
+  --pr-card-vscale:.8;
   /* The one dial for "how much light passes through the glass." Round 2
      (Pillow-measured against the reference JPEG): the reference glass
      DARKENS its backdrop, where 1 here measured as net-neutral-to-lightening.
@@ -268,7 +274,11 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
    narrower card, adding a full extra line of height back — the opposite of
    what a size reduction should do. Measured live: 38px is the largest size
    that still fits the longest title on one line at the new width. */
-.pr-title{margin:0;color:var(--pr-text);font-family:var(--font-display);font-size:clamp(26px,3.4vw,38px);font-weight:450;line-height:1.03;letter-spacing:-.04em}
+/* "Just a itsy bitsy" bump (operator instruction, 2026-08-04). First tried
+   +2px both ends (28-40px) and it wrapped at the card's actual width —
+   measured live, 37.72px was the real one-line ceiling at 366.67px. 37px
+   is the largest safe value under that. */
+.pr-title{margin:0;color:var(--pr-text);font-family:var(--font-display);font-size:clamp(28px,3.4vw,37px);font-weight:450;line-height:1.03;letter-spacing:-.04em}
 .pr-sub{margin:calc(12px * var(--pr-card-vscale)) 0 calc(26px * var(--pr-card-vscale));color:var(--pr-muted);font-size:12px;line-height:1.5}
 .pr-notice{display:flex;gap:10px;margin:0 0 calc(18px * var(--pr-card-vscale));padding:calc(12px * var(--pr-card-vscale)) calc(14px * var(--pr-card-vscale));border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-soft);color:var(--pr-muted)}
 .pr-nic{display:flex;flex:none;color:var(--pr-accent)}
@@ -280,7 +290,7 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-input input{width:100%;min-width:0;padding:0 14px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 13px/1 var(--font-text)}
 .pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{display:grid;place-items:center;min-width:38px;min-height:38px;margin-right:3px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
 .pr-err{display:block;min-height:0;margin:4px 3px 0;color:var(--pr-danger);font-size:10px;line-height:1.35}.pr-err:not(:empty){min-height:16px}.pr-field.is-bad .pr-input{border-color:var(--pr-danger)}
-.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:38px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 10px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
+.pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:38px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 11px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
 /* Button/input heights cut ~15% too (operator instruction, 2026-08-04,
    "scale the buttons"): 52px->44px, 44px->38px. Below the WCAG 44px
    guideline on the primary controls now — a deliberate call by the product
@@ -291,7 +301,7 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-div{display:flex;align-items:center;gap:12px;margin:calc(16px * var(--pr-card-vscale)) 0;color:var(--pr-muted);font-size:9px;text-transform:uppercase;letter-spacing:.12em}.pr-div::before,.pr-div::after{content:"";height:1px;flex:1;background:var(--pr-line)}
 .pr-msg{min-height:0;margin:calc(6px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.4;text-align:center}.pr-msg:not(:empty){min-height:17px}.pr-msg.is-err{color:var(--pr-danger)}.pr-msg.is-ok{color:var(--pr-ok)}
 .pr-guest{margin-top:calc(16px * var(--pr-card-vscale))}.pr-guesthint{margin:calc(9px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.45;text-align:center}
-.pr-foot{margin:calc(32px * var(--pr-card-vscale)) 0 0;text-align:center;color:var(--pr-muted);font-size:10px}.pr-note{margin:calc(16px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.45;text-align:center}
+.pr-foot{margin:calc(32px * var(--pr-card-vscale)) 0 0;text-align:center;color:var(--pr-muted);font-size:11px}.pr-note{margin:calc(16px * var(--pr-card-vscale)) 0 0;color:var(--pr-muted);font-size:10px;line-height:1.45;text-align:center}
 .pr-who{display:flex;align-items:center;gap:13px;margin:calc(24px * var(--pr-card-vscale)) 0;padding:calc(14px * var(--pr-card-vscale));border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-soft)}.pr-avatar{display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:50%;background:var(--pr-accent);color:var(--pr-accent-ink);font-weight:800}.pr-whotext{min-width:0}.pr-whotext b,.pr-whotext span{display:block}.pr-whotext b{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--pr-muted)}.pr-whotext span{margin-top:3px;color:var(--pr-text);font-size:11px;overflow-wrap:anywhere}.pr-stack{display:flex;flex-direction:column;gap:calc(10px * var(--pr-card-vscale))}
 /* Theme changes the photographic state, never the glass sheet. Both files are
    full 4K renders of the same room; no CSS exposure trick is used. */
@@ -310,7 +320,11 @@ html[data-akv-auth][data-theme=light]{
 @media(max-width:760px){
   .pr-scene-media img{transform:scale(1.055)}
   .pr-card{min-height:auto;margin:auto}
-  .pr-title{font-size:clamp(25px,9vw,32px)}.pr-sub{margin-bottom:calc(20px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(26px * var(--pr-card-vscale))}
+  /* Measured live at the 85%-capped mobile width (293px on a 393px phone):
+     34px wrapped "Dobrodošli natrag" to two lines. 29px is the largest size
+     that still fits it on one, confirmed the same way the desktop clamp
+     was earlier. */
+  .pr-title{font-size:clamp(24px,9vw,29px)}.pr-sub{margin-bottom:calc(20px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(26px * var(--pr-card-vscale))}
 }
 @media(max-width:380px){.pr-notice{padding:calc(10px * var(--pr-card-vscale)) calc(11px * var(--pr-card-vscale))}.pr-cardtop{margin-bottom:calc(24px * var(--pr-card-vscale))}}
 @media(max-height:760px) and (max-width:760px){.pr-card{margin-top:68px}.pr-cardtop{margin-bottom:calc(22px * var(--pr-card-vscale))}.pr-sub{margin-bottom:calc(16px * var(--pr-card-vscale))}.pr-foot{margin-top:calc(22px * var(--pr-card-vscale))}}
