@@ -10,7 +10,8 @@ const worker = fs.readFileSync(new URL("../service-worker.js", import.meta.url),
 test("the post-login route opens the journey on black before its blurred room arrives", () => {
   assert.match(opening, /\.aj-opening\{[^}]*background:#000/);
   assert.match(opening, /\.aj-backdrop\{[^}]*opacity:0[^}]*animation:ajBackdropIn/);
-  assert.match(opening, /filter:blur\(26px\)/);
+  assert.match(opening, /filter:blur\(20px\) saturate\(1\.10\) brightness\(1\.04\)/);
+  assert.match(opening, /object-position:center 58%/);
   assert.match(opening, /ajDarkCycle 24s/);
   assert.match(opening, /ajLightCycle 24s/);
 });
@@ -39,4 +40,30 @@ test("Atelier suppresses legacy chrome and warms heavy local work behind the ope
   assert.match(atelier, /class="atl-menu"[\s\S]*<span><\/span><span><\/span><span><\/span>/);
   assert.match(aidock, /HIDDEN_ROUTES = \['\/savjetnik', '\/prijava', '\/atelier'\]/);
   assert.match(worker, /"\.\/js\/journey-opening\.js"/);
+});
+
+test("the opening glass becomes the landscape decision lens without a second blur sheet", () => {
+  assert.match(opening, /class="aj-handoff-target"/);
+  assert.match(opening, /const transitionOut = \(\) =>/);
+  assert.match(opening, /glass\.getBoundingClientRect\(\)/);
+  assert.match(opening, /scale\(\$\{from\.width \/ to\.width\},\$\{from\.height \/ to\.height\}\)/);
+  assert.match(opening, /return \{ done, transitionOut, dispose \}/);
+  const handoffCss = opening.slice(opening.indexOf(".aj-opening.is-departing"), opening.indexOf("@keyframes ajElementIn"));
+  assert.doesNotMatch(handoffCss, /transition:[^;]*(?:filter|backdrop-filter)/);
+});
+
+test("the blurred room persists until the real room resolves", () => {
+  assert.match(atelier, /class="atl-prelude" id="atl-prelude"/);
+  assert.match(atelier, /--atl-prelude-light:\$\{preludeLight\.toFixed\(3\)\}/);
+  assert.match(atelier, /prelude\.classList\.add\("is-resolved"\)/);
+  assert.match(atelier, /window\.setTimeout\(\(\) => prelude\.remove\(\)/);
+  assert.match(atelier, /\.atl-prelude\.is-resolved\{opacity:0;transition:opacity/);
+  assert.doesNotMatch(atelier, /\.atl-prelude\.is-resolved\{[^}]*filter/);
+});
+
+test("navigation teardown cancels before any visual handoff begins", () => {
+  const resultIndex = atelier.indexOf("const openingResult = await opening.done");
+  const cancelIndex = atelier.indexOf("openingResult?.cancelled", resultIndex);
+  const handoffIndex = atelier.indexOf("opening?.transitionOut?.()", resultIndex);
+  assert.ok(resultIndex >= 0 && cancelIndex > resultIndex && handoffIndex > cancelIndex);
 });

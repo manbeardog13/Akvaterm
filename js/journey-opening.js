@@ -17,10 +17,10 @@ html[data-akv-journey] #termaBtn{display:none!important}
 html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0}
 .aj-opening{position:fixed;z-index:28;inset:0;isolation:isolate;display:grid;place-items:center;overflow:hidden;background:#000;color:#f7f7f2}
 .aj-backdrop{position:absolute;z-index:0;inset:-34px;overflow:hidden;opacity:0;animation:ajBackdropIn 2.6s cubic-bezier(.22,1,.36,1) .85s forwards}
-.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(26px) saturate(1.06);transform:scale(1.08);will-change:opacity}
+.aj-backdrop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(20px) saturate(1.10) brightness(1.04);transform:scale(1.065);will-change:opacity}
 .aj-backdrop-dark{animation:ajDarkCycle 24s ease-in-out 3.2s infinite alternate}
 .aj-backdrop-light{opacity:0;animation:ajLightCycle 24s ease-in-out 3.2s infinite alternate}
-.aj-veil{position:absolute;z-index:1;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.54),rgba(0,0,0,.22) 44%,rgba(0,0,0,.52));pointer-events:none}
+.aj-veil{position:absolute;z-index:1;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.48),rgba(0,0,0,.16) 44%,rgba(0,0,0,.46));pointer-events:none}
 .aj-menu{position:fixed;z-index:3;left:max(18px,env(safe-area-inset-left,0px));top:max(18px,env(safe-area-inset-top,0px));display:grid;place-content:center;gap:5px;width:44px;height:44px;padding:0;border:0;background:transparent;cursor:pointer;opacity:0;animation:ajElementIn .7s cubic-bezier(.22,1,.36,1) .18s forwards}
 .aj-menu span{display:block;width:23px;height:2px;border-radius:999px;background:rgba(240,255,247,.68);box-shadow:0 1px rgba(255,255,255,.34),0 0 8px rgba(159,220,183,.16);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .aj-menu:focus-visible{outline:2px solid rgba(218,242,224,.86);outline-offset:3px;border-radius:12px}
@@ -37,14 +37,22 @@ html[data-akv-journey] #main{width:100%;max-width:none;min-height:100dvh;margin:
 .aj-response{position:relative;z-index:1;margin:11px 3px 1px;padding:13px 4px 1px;border-top:1px solid rgba(255,255,255,.11);color:rgba(247,247,242,.76);font:500 14px/1.5 var(--font-text);white-space:pre-wrap}
 .aj-response:empty{display:none}
 .aj-glass[data-state="ready"] .aj-send{background:rgba(211,232,190,.92);color:#10150f;border-color:rgba(255,255,255,.38)}
+.aj-handoff-target{position:fixed;visibility:hidden;pointer-events:none;width:0;height:0}
+.aj-opening.is-departing .aj-question,.aj-opening.is-departing .aj-menu{animation:none;opacity:0;transform:translateY(-8px);transition:opacity .2s ease-out,transform .32s cubic-bezier(.25,1,.5,1)}
+.aj-opening.is-departing .aj-backdrop{animation:none;opacity:.72;transform:scale(.985);transition:opacity .55s cubic-bezier(.25,1,.5,1),transform .55s cubic-bezier(.25,1,.5,1)}
+.aj-opening.is-departing .aj-glass .aj-inputrow,.aj-opening.is-departing .aj-glass .aj-response{opacity:0;transform:translateY(-4px);transition:opacity .14s ease-out,transform .22s cubic-bezier(.25,1,.5,1)}
+.aj-glass.is-handoff{z-index:4;margin:0;max-width:none;pointer-events:none;animation:none;transform-origin:0 0;will-change:transform;transition:transform .55s cubic-bezier(.25,1,.5,1),box-shadow .55s cubic-bezier(.25,1,.5,1)}
 @keyframes ajElementIn{from{opacity:0;transform:translateY(11px)}to{opacity:1;transform:none}}
 @keyframes ajGlassIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes ajBackdropIn{to{opacity:.68}}
+@keyframes ajBackdropIn{to{opacity:.78}}
 @keyframes ajDarkCycle{0%,38%{opacity:1}72%,100%{opacity:.16}}
 @keyframes ajLightCycle{0%,38%{opacity:0}72%,100%{opacity:.84}}
 @media(max-width:680px){.aj-focus{width:min(100% - 40px,560px);gap:17px}.aj-question{font-size:clamp(27px,8vw,42px)}.aj-glass{padding:12px 12px 11px}.aj-inputrow{grid-template-columns:minmax(0,1fr) 48px;gap:8px}.aj-terma{grid-column:1/-1;padding:3px 5px 0}.aj-input{padding-top:5px}}
-@media(orientation:landscape) and (max-height:520px){.aj-focus{width:min(720px,calc(100vw - 140px));gap:15px;transform:none}.aj-question{font-size:clamp(27px,5vh,42px)}.aj-glass{padding-block:10px}.aj-input{min-height:44px}}
+@media(orientation:landscape) and (max-height:520px){.aj-backdrop img{object-position:center 58%}.aj-focus{width:min(720px,calc(100vw - 140px));gap:15px;transform:none}.aj-question{font-size:clamp(27px,5vh,42px)}.aj-glass{padding-block:10px}.aj-input{min-height:44px}}
+@media(min-width:560px) and (orientation:landscape){.aj-handoff-target{right:max(16px,env(safe-area-inset-right,0px));top:max(16px,env(safe-area-inset-top,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:min(360px,42vw);height:auto}}
+@media(min-width:560px) and (max-width:719px) and (orientation:landscape){.aj-handoff-target{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(330px,48vw)}}
 @media(prefers-reduced-motion:reduce){.aj-backdrop,.aj-menu,.aj-question,.aj-glass,.aj-backdrop-dark,.aj-backdrop-light{animation:none!important;transform:none!important}.aj-backdrop{opacity:.62}.aj-menu,.aj-question,.aj-glass{opacity:1}.aj-backdrop-dark{opacity:1}.aj-backdrop-light{opacity:0}}
+@media(prefers-reduced-motion:reduce){.aj-opening.is-departing .aj-question,.aj-opening.is-departing .aj-menu,.aj-opening.is-departing .aj-glass{opacity:0;transition:opacity .17s linear}.aj-opening.is-departing .aj-backdrop{opacity:.62;transform:none;transition:none}}
 @media(forced-colors:active){.aj-opening,.aj-glass,.aj-send{forced-color-adjust:auto;background:Canvas;color:CanvasText;border:1px solid CanvasText}.aj-backdrop,.aj-veil{display:none}.aj-menu span{background:CanvasText}.aj-response{color:CanvasText}}
 `;
 
@@ -100,6 +108,7 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
           <p class="aj-response" id="ajResponse" role="status" aria-live="polite"></p>
         </form>
       </div>
+      <span class="aj-handoff-target" aria-hidden="true"></span>
     </section>`;
 
   const form = container.querySelector("#ajForm");
@@ -109,6 +118,7 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
   const aborter = new AbortController();
   let settled = false;
   let submitted = false;
+  let handoff = null;
   let finish;
   const done = new Promise((resolve) => { finish = resolve; });
 
@@ -143,10 +153,50 @@ export function mountJourneyOpening(container, { onBrief } = {}) {
     button.focus({ preventScroll: true });
   });
 
+  const transitionOut = () => {
+    if (handoff) return handoff;
+    const root = container.querySelector(".aj-opening");
+    const glass = container.querySelector(".aj-glass");
+    const target = container.querySelector(".aj-handoff-target");
+    const lightMix = Math.max(0, Math.min(1,
+      Number.parseFloat(getComputedStyle(container.querySelector(".aj-backdrop-light")).opacity) || 0));
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    handoff = new Promise((resolve) => {
+      if (!root || !glass || reduced) {
+        root?.classList.add("is-departing");
+        window.setTimeout(() => resolve({ lightMix }), 180);
+        return;
+      }
+      const from = glass.getBoundingClientRect();
+      const to = target?.getBoundingClientRect();
+      root.classList.add("is-departing");
+      if (!to?.width || !to?.height) {
+        window.setTimeout(() => resolve({ lightMix }), 240);
+        return;
+      }
+
+      root.appendChild(glass);
+      glass.classList.add("is-handoff");
+      Object.assign(glass.style, {
+        position: "fixed",
+        left: `${to.left}px`,
+        top: `${to.top}px`,
+        width: `${to.width}px`,
+        height: `${to.height}px`,
+        transform: `translate(${from.left - to.left}px,${from.top - to.top}px) scale(${from.width / to.width},${from.height / to.height})`,
+      });
+      glass.getBoundingClientRect();
+      requestAnimationFrame(() => requestAnimationFrame(() => { glass.style.transform = "none"; }));
+      window.setTimeout(() => resolve({ lightMix }), 570);
+    });
+    return handoff;
+  };
+
   const dispose = () => {
     aborter.abort();
     if (!settled) { settled = true; finish({ cancelled: true }); }
   };
   window.addEventListener("akv:teardown", dispose, { once: true });
-  return { done, dispose };
+  return { done, transitionOut, dispose };
 }

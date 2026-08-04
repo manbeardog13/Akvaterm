@@ -137,7 +137,8 @@ function directCamera(chapter) {
 // ratios and its five degradation paths. A second, slightly different glass
 // recipe is exactly the defect that view's own history warns against — see
 // its comment beginning "This previously painted rgba(235,238,242,.68)".
-function shell() {
+function shell({ lightMix = 0 } = {}) {
+  const preludeLight = Math.max(0, Math.min(1, Number(lightMix) || 0));
   return `
     <style>
       .atl{
@@ -190,6 +191,18 @@ function shell() {
       .atl-root{position:relative;height:clamp(420px,84vh,760px);min-height:0}
       @media(min-width:720px){.atl-root{height:clamp(480px,80vh,820px)}}
       .atl-stage{position:absolute;inset:0;border-radius:var(--atl-r-lg);overflow:hidden;background:var(--atl-paper)}
+      .atl-prelude{position:absolute;inset:0;z-index:1;overflow:hidden;border-radius:var(--atl-r-lg);pointer-events:none;background:#020403;opacity:1}
+      .atl-prelude img{position:absolute;inset:-24px;width:calc(100% + 48px);height:calc(100% + 48px);object-fit:cover;object-position:center 58%;filter:blur(16px) saturate(1.10) brightness(1.03);transform:scale(1.035)}
+      .atl-prelude-dark{opacity:calc(1 - var(--atl-prelude-light,0))}
+      .atl-prelude-light{opacity:var(--atl-prelude-light,0)}
+      .atl-prelude::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(1,3,2,.08),rgba(1,3,2,.28) 64%,rgba(1,3,2,.62))}
+      .atl-prelude.is-resolved{opacity:0;transition:opacity .72s cubic-bezier(.25,1,.5,1)}
+      .atl-static-room{position:absolute;inset:0;overflow:hidden;background:#020403}
+      .atl-static-room img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 58%}
+      .atl-static-room-dark{opacity:calc(1 - var(--atl-static-light,0))}
+      .atl-static-room-light{opacity:var(--atl-static-light,0)}
+      .atl-static-room::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(1,3,2,.06),transparent 48%,rgba(1,3,2,.42) 78%,rgba(1,3,2,.68))}
+      .atl[data-room="static"] .atl-panorama{display:none}
       .atl-stage::after{
         content:"";position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;
         background:radial-gradient(circle at 72% 30%,rgba(19,158,177,.11),transparent 48%);
@@ -204,7 +217,7 @@ function shell() {
         background:radial-gradient(circle at 72% 34%,rgba(234,166,81,.13),transparent 42%),
           radial-gradient(circle at 48% 46%,rgba(19,158,177,.10),transparent 60%)}
       .atl-loading{
-        position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;
         font-size:14px;font-weight:600;color:var(--atl-mauve-ink);background:var(--atl-paper);
         border-radius:var(--atl-r-lg);
       }
@@ -284,8 +297,6 @@ function shell() {
         cursor:pointer;display:flex;align-items:center;gap:8px;
         box-shadow:0 0 0 0 rgba(13,112,125,0);
       }
-      .atl-option:hover{border-color:var(--atl-amber-500);transform:translateY(-2px);
-        box-shadow:0 6px 14px -8px rgba(13,112,125,.35)}
       .atl-option:active{transform:translateY(0) scale(.975)}
       .atl-option.is-selected{border-color:var(--atl-teal-700);background:var(--atl-teal-700);color:#FFFFFF}
       .atl-option:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
@@ -356,15 +367,12 @@ function shell() {
       /* Back RECEDES — the quietest control on the panel, on purpose: a
          fade toward the edge of attention, no lift, no press-scale. Motion
          hierarchy communicates direction the way the copy already does. */
-      .atl-btn:not(.atl-btn-primary):hover:not(:disabled){border-color:var(--atl-line);opacity:.72}
       /* Next / Zatraži ponudu PROPELS — a small forward nudge on hover (the
          journey's own direction of travel) and a warm bloom that deepens with
          teal rather than a generic shadow, echoing the glass rim-glow
          language already in css/styles.css. */
       .atl-btn.atl-btn-primary{margin-left:auto;background:var(--atl-teal-700);color:#FFFFFF;
         box-shadow:0 2px 6px -2px rgba(13,112,125,.4)}
-      .atl-btn.atl-btn-primary:hover:not(:disabled){transform:translateX(3px);
-        box-shadow:0 6px 16px -4px rgba(13,112,125,.55)}
       .atl-btn.atl-btn-primary:active:not(:disabled){transform:translateX(1px) scale(.97)}
       .atl-btn:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
 
@@ -385,7 +393,6 @@ function shell() {
       }
       .atl-chip.is-done{border-color:var(--atl-teal-700)}
       .atl-chip.is-active{background:var(--atl-teal-700);color:#FFFFFF;border-color:var(--atl-teal-700)}
-      .atl-chip:hover{transform:translateX(2px)}
       .atl-chip:active{transform:translateX(2px) scale(.94)}
       .atl-chip:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
 
@@ -404,11 +411,19 @@ function shell() {
         box-shadow:0 1px 2px rgba(93,79,79,.18),0 0 0 0 rgba(234,166,81,0);
       }
       @media(min-width:720px){ .atl-panorama{ right:24px; bottom:24px; } }
-      .atl-panorama:hover{border-color:var(--atl-amber-500);
-        box-shadow:0 1px 2px rgba(93,79,79,.18),0 0 18px 1px rgba(234,166,81,.30)}
       .atl-panorama[aria-pressed="true"]{border-color:var(--atl-teal-700);color:var(--atl-teal-700);
         box-shadow:0 1px 2px rgba(93,79,79,.18),0 0 20px 2px rgba(19,158,177,.28)}
       .atl-panorama:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
+      @media(hover:hover) and (pointer:fine){
+        .atl-option:hover{border-color:var(--atl-amber-500);transform:translateY(-2px);
+          box-shadow:0 6px 14px -8px rgba(13,112,125,.35)}
+        .atl-btn:not(.atl-btn-primary):hover:not(:disabled){border-color:var(--atl-line);opacity:.72}
+        .atl-btn.atl-btn-primary:hover:not(:disabled){transform:translateX(3px);
+          box-shadow:0 6px 16px -4px rgba(13,112,125,.55)}
+        .atl-chip:hover{transform:translateX(2px)}
+        .atl-panorama:hover{border-color:var(--atl-amber-500);
+          box-shadow:0 1px 2px rgba(93,79,79,.18),0 0 18px 1px rgba(234,166,81,.30)}
+      }
       @media (prefers-contrast:more){ .atl-panorama{border-color:var(--atl-ink)} }
       @media (forced-colors:active){
         .atl-panorama{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
@@ -455,12 +470,13 @@ function shell() {
         }
         .atl-root{position:fixed;inset:0;height:auto;min-height:100dvh}
         .atl-stage{inset:0;border-radius:0;background:#020403}
+        .atl-prelude{border-radius:0}
         .atl-stage::before{
           content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
           background:linear-gradient(90deg,rgba(1,3,2,.08) 0%,transparent 48%,rgba(1,3,2,.38) 72%,rgba(1,3,2,.72) 100%);
         }
         .atl-loading{
-          border-radius:0;background:#020403;color:rgba(235,243,237,.58);
+          border-radius:0;background:transparent;color:transparent;
           font-size:11px;font-weight:650;letter-spacing:.13em;text-transform:uppercase;
         }
         .atl-menu{left:max(16px,env(safe-area-inset-left,0px));top:max(12px,env(safe-area-inset-top,0px))}
@@ -502,7 +518,7 @@ function shell() {
             var(--atl-shadow-2),inset 0 1px rgba(255,255,255,.16),
             inset 1px 0 rgba(180,230,201,.08),inset -1px 0 rgba(226,166,107,.055),
             inset 0 -18px 32px -28px rgba(98,165,126,.18);
-          scrollbar-width:thin;scrollbar-color:rgba(221,237,226,.22) transparent;
+          scrollbar-width:thin;scrollbar-color:rgba(221,237,226,.22) transparent;z-index:3;
         }
         .atl-guide.is-summary{width:min(430px,48vw);max-width:none;padding:18px 20px 15px}
         .atl-progress{height:2px;margin-bottom:12px;background:rgba(225,240,230,.11)}
@@ -616,6 +632,7 @@ function shell() {
            a clean state swap rather than as "the animation was removed". */
         .atl-option:hover,.atl-option:active,.atl-btn:hover,.atl-btn:active,
         .atl-chip:hover,.atl-chip:active{transform:none}
+        .atl-prelude.is-resolved{opacity:0;transition:opacity .17s linear}
       }
       /* Never animate blur() — forces a full re-composite every frame. */
     </style>
@@ -623,6 +640,10 @@ function shell() {
       <button class="atl-menu" type="button" aria-label="${esc(tt("a11y.openMenu", "Otvori izbornik"))}"><span></span><span></span><span></span></button>
       <div class="atl-root">
         <div class="atl-stage" id="atl-stage" aria-label="${esc(tt("atelier.stage", "3D prikaz kupaonice"))}"></div>
+        <div class="atl-prelude" id="atl-prelude" aria-hidden="true" style="--atl-prelude-light:${preludeLight.toFixed(3)}">
+          <img class="atl-prelude-dark" src="./assets/images/login-interior-dark-4k.webp" alt="" width="2160" height="3840" decoding="async">
+          <img class="atl-prelude-light" src="./assets/images/login-interior-light-4k.webp" alt="" width="2160" height="3840" decoding="async">
+        </div>
         <div id="atl-loading" class="atl-loading" role="status" aria-live="polite">
           ${esc(tt("atelier.loading", "Priprema prostora…"))}
         </div>
@@ -1063,6 +1084,27 @@ function onFixtureMoved(event) {
   autosave();
 }
 
+function resolveRoomPrelude() {
+  container?.querySelector("#atl-loading")?.remove();
+  const prelude = container?.querySelector("#atl-prelude");
+  if (!prelude) return;
+  prelude.classList.add("is-resolved");
+  window.setTimeout(() => prelude.remove(),
+    matchMedia("(prefers-reduced-motion: reduce)").matches ? 190 : 760);
+}
+
+function mountStaticRoom(stage, lightMix = 0) {
+  const mix = Math.max(0, Math.min(1, Number(lightMix) || 0));
+  container?.querySelector(".atl")?.setAttribute("data-room", "static");
+  stage.setAttribute("aria-label", tt("atelier.staticStage", "Statični prikaz kupaonice"));
+  stage.innerHTML = `
+    <div class="atl-static-room" aria-hidden="true" style="--atl-static-light:${mix.toFixed(3)}">
+      <img class="atl-static-room-dark" src="./assets/images/login-interior-dark-4k.webp" alt="" width="2160" height="3840" decoding="async">
+      <img class="atl-static-room-light" src="./assets/images/login-interior-light-4k.webp" alt="" width="2160" height="3840" decoding="async">
+    </div>`;
+  resolveRoomPrelude();
+}
+
 // ---- lifecycle --------------------------------------------------------------
 export async function render(el) {
   teardown();
@@ -1087,9 +1129,15 @@ export async function render(el) {
     },
   });
   const openingResult = await opening.done;
+  if (!alive(token) || openingResult?.cancelled) {
+    opening?.dispose();
+    opening = null;
+    return;
+  }
+  const handoffResult = await opening?.transitionOut?.();
   opening?.dispose();
   opening = null;
-  if (!alive(token) || openingResult?.cancelled) return;
+  if (!alive(token)) return;
   if (journey.current().chapter.id === "smjer" && journey.canAdvance()) journey.next();
   document.documentElement.setAttribute("data-akv-journey", "active");
 
@@ -1097,11 +1145,8 @@ export async function render(el) {
   if (!alive(token)) return;
   products = all;
 
-  container.innerHTML = shell();
+  container.innerHTML = shell(handoffResult);
   wire();
-
-  const mod = await roomReady;
-  if (!alive(token)) return;
 
   const initialAssignments = {};
   for (const [surface, a] of Object.entries(journey.assignments())) {
@@ -1114,11 +1159,15 @@ export async function render(el) {
 
   fixtureEventStage = container.querySelector("#atl-stage");
   fixtureEventStage.addEventListener("akv:fixture-moved", onFixtureMoved);
-  const handle = await mod.mountRoom(fixtureEventStage, {
+  let handle = null;
+  try {
+    const mod = await roomReady;
+    if (!alive(token)) return;
+    handle = await mod.mountRoom(fixtureEventStage, {
     room: { ...journey.room, fixtures: roomFixtures },
     assignments: initialAssignments,
     products,
-    onReady: () => container.querySelector("#atl-loading")?.remove(),
+    onReady: resolveRoomPrelude,
     // The room's native resting state: free look is real, but once the
     // customer lets go and a short pause passes, the camera eases back to
     // whatever the guide is CURRENTLY asking about — re-reading journey.current()
@@ -1140,6 +1189,13 @@ export async function render(el) {
   const restoredMood = journey.toJSON().decisions?.smjer?.optionId;
   if (restoredMood) previewDirection(restoredMood);
   syncJourneyFixtures();
+  } catch (error) {
+    if (!alive(token)) { handle?.dispose?.(); return; }
+    console.warn("[atelier] WebGL room unavailable; continuing with the static room.", error);
+    api = null;
+    fixtureEventStage.replaceChildren();
+    mountStaticRoom(fixtureEventStage, handoffResult?.lightMix);
+  }
 
   // prefers-reduced-motion: short dissolves, no ceremonial orbit, no
   // continuous drift — mirrored into BOTH the director and the engine's own

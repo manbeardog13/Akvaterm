@@ -46,6 +46,27 @@ test("landscape motion never animates blur and offers a still alternative", () =
   assert.match(atelier, /@media \(prefers-reduced-motion:reduce\)/);
 });
 
+test("the active room inherits the opening image until WebGL is ready", () => {
+  assert.match(atelier, /\.atl-prelude\{[^}]*z-index:1[^}]*pointer-events:none/);
+  assert.match(atelier, /\.atl-prelude img\{[^}]*object-position:center 58%[^}]*filter:blur\(16px\) saturate\(1\.10\) brightness\(1\.03\)/);
+  assert.match(atelier, /\.atl-guide\{[\s\S]*z-index:3/);
+  assert.match(atelier, /function resolveRoomPrelude\(\)[\s\S]*#atl-prelude[\s\S]*is-resolved/);
+  assert.match(atelier, /onReady: resolveRoomPrelude/);
+});
+
+test("hover polish is restricted to precise pointers so touch cannot stick", () => {
+  assert.match(atelier, /@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*\.atl-option:hover[\s\S]*\.atl-panorama:hover/);
+});
+
+test("phones without WebGL continue through the same journey on a static room", () => {
+  assert.match(atelier, /try \{[\s\S]*await mod\.mountRoom[\s\S]*catch \(error\)/);
+  assert.match(atelier, /WebGL room unavailable; continuing with the static room/);
+  assert.match(atelier, /mountStaticRoom\(fixtureEventStage, handoffResult\?\.lightMix\)/);
+  assert.match(atelier, /\.atl-static-room img\{[^}]*object-fit:cover[^}]*object-position:center 58%/);
+  assert.match(atelier, /\.atl\[data-room="static"\] \.atl-panorama\{display:none\}/);
+  assert.match(i18n, /"atelier\.staticStage": "Statični prikaz kupaonice"/);
+});
+
 test("the room amenity uses human language rather than a technical mode label", () => {
   assert.match(i18n, /"atelier\.panorama": "Pogled 360°"/);
   assert.match(i18n, /"atelier\.panoramaLabel": "Pokreni pogled kroz prostor"/);

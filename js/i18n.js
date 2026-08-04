@@ -567,6 +567,7 @@ const DICT = {
 
   /* ---- Atelier — guided commissioning journey ---- */
   "atelier.stage": "3D prikaz kupaonice",
+  "atelier.staticStage": "Statični prikaz kupaonice",
   "atelier.loading": "Priprema prostora…",
   "atelier.chapters": "Koraci",
   "atelier.panorama": "Pogled 360°",
