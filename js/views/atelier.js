@@ -35,6 +35,7 @@ import {
   surfaceFinishForDecision,
 } from "../commissioning.js";
 import { createCompletionRewardRegistry } from "../completion-reward.js";
+import { mountJourneyOpening } from "../journey-opening.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -55,6 +56,7 @@ let fixtureEventStage = null;
 let lastChapterId = null;
 let lastChapterIndex = -1;
 let preferredFixtureProductId = null;
+let opening = null;
 
 const QUOTE_EMAIL = "info@akvaterm.hr";
 const completionRewards = createCompletionRewardRegistry();
@@ -70,6 +72,11 @@ const liveSurfaceOptions = (decision) => ({
 });
 
 function alive(token) { return token === mountToken && container && container.isConnected; }
+
+function clearJourneyChrome() {
+  document.documentElement.removeAttribute("data-akv-journey");
+}
+if (typeof window !== "undefined") window.addEventListener("akv:teardown", clearJourneyChrome);
 
 // ---- persistence --------------------------------------------------------
 // Saved under the SAME kind as soba3d ('room3d'), because it produces the
@@ -173,6 +180,9 @@ function shell() {
         position:relative;
       }
       .atl [hidden]{display:none!important}
+      .atl-menu{position:fixed;z-index:8;left:max(18px,env(safe-area-inset-left,0px));top:max(18px,env(safe-area-inset-top,0px));display:grid;place-content:center;gap:5px;width:44px;height:44px;padding:0;border:0;background:transparent;cursor:pointer}
+      .atl-menu span{display:block;width:23px;height:2px;border-radius:999px;background:rgba(240,255,247,.70);box-shadow:0 1px rgba(255,255,255,.34),0 0 8px rgba(159,220,183,.16)}
+      .atl-menu:focus-visible{outline:2px solid rgba(218,242,224,.88);outline-offset:3px;border-radius:12px}
 
       /* Explicit height, matching soba3d.js's .s3d-stage clamp — an
          absolutely-positioned stage needs a sized ancestor, not height:100%
@@ -431,6 +441,112 @@ function shell() {
         .atl-grout-color[aria-pressed="true"],.atl-grout-width[aria-pressed="true"]{background:Highlight;color:HighlightText}
         .atl-payoff-head::before,.atl-payoff-head>strong::after,.atl-completion-bloom{display:none}
       }
+      /* LANDSCAPE WORKSPACE — the phone rotation earns a genuinely wider
+         composition. The room is the canvas; a single decision lens floats on
+         the right and the chapter path compresses into numbered waypoints over
+         the unobscured left field. No app header, dock or page gutter returns. */
+      @media(min-width:560px) and (orientation:landscape){
+        .atl{
+          --atl-ink:#F1F5F1;--atl-surface:rgba(8,12,10,.78);
+          --atl-glass-ink-muted:rgba(232,240,234,.62);
+          --atl-line:rgba(224,241,230,.15);--atl-glass-solid:#151A17;
+          --atl-shadow-2:0 34px 90px -28px rgba(0,0,0,.82);
+          position:fixed;inset:0;overflow:hidden;background:#020403;color:var(--atl-ink);
+        }
+        .atl-root{position:fixed;inset:0;height:auto;min-height:100dvh}
+        .atl-stage{inset:0;border-radius:0;background:#020403}
+        .atl-stage::before{
+          content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+          background:linear-gradient(90deg,rgba(1,3,2,.08) 0%,transparent 48%,rgba(1,3,2,.38) 72%,rgba(1,3,2,.72) 100%);
+        }
+        .atl-loading{
+          border-radius:0;background:#020403;color:rgba(235,243,237,.58);
+          font-size:11px;font-weight:650;letter-spacing:.13em;text-transform:uppercase;
+        }
+        .atl-menu{left:max(16px,env(safe-area-inset-left,0px));top:max(12px,env(safe-area-inset-top,0px))}
+        .atl-menu span{background:rgba(9,14,11,.62);box-shadow:0 1px rgba(255,255,255,.54),0 0 9px rgba(0,0,0,.32)}
+        .atl-chapters{
+          left:max(72px,calc(env(safe-area-inset-left,0px) + 72px));
+          right:calc(min(360px,42vw) + max(34px,env(safe-area-inset-right,0px)));
+          top:max(12px,env(safe-area-inset-top,0px));padding:0;gap:7px;overflow:visible;
+        }
+        .atl-chip{
+          position:relative;display:grid;grid-template-columns:40px 0fr;align-items:center;
+          min-width:44px;width:44px;min-height:44px;height:44px;padding:0;
+          overflow:hidden;border-color:rgba(231,245,236,.13);
+          background:rgba(5,9,7,.46);color:rgba(239,246,241,.64);
+          box-shadow:0 8px 24px -16px rgba(0,0,0,.78);
+        }
+        .atl-chip-index{font-size:10px;font-weight:750;letter-spacing:.04em;text-align:center}
+        .atl-chip-label{min-width:0;overflow:hidden;font-size:11px;opacity:0}
+        .atl-chip.is-active{
+          grid-template-columns:40px 1fr;width:auto;padding-right:14px;
+          background:rgba(222,238,226,.92);border-color:rgba(255,255,255,.48);color:#101511;
+        }
+        .atl-chip.is-active .atl-chip-label{opacity:1}
+        .atl-chip.is-done:not(.is-active)::after{
+          content:"";position:absolute;right:4px;bottom:4px;width:4px;height:4px;border-radius:50%;
+          background:#9ED6B5;box-shadow:0 0 8px rgba(158,214,181,.48);
+        }
+        .atl-guide{
+          left:auto;right:max(16px,env(safe-area-inset-right,0px));
+          top:max(16px,env(safe-area-inset-top,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));
+          width:min(360px,42vw);max-width:none;max-height:none;padding:17px 19px 15px;
+          border:1px solid transparent;border-radius:28px;
+          background:
+            linear-gradient(138deg,rgba(13,20,16,.70),rgba(6,11,8,.67) 43%,rgba(3,7,5,.76) 82%) padding-box,
+            linear-gradient(145deg,rgba(255,255,255,.40),rgba(171,224,192,.13) 32%,rgba(223,166,106,.17) 74%,rgba(255,255,255,.08)) border-box;
+          -webkit-backdrop-filter:blur(14px) saturate(145%) brightness(.91);
+          backdrop-filter:blur(14px) saturate(145%) brightness(.91);
+          box-shadow:
+            var(--atl-shadow-2),inset 0 1px rgba(255,255,255,.16),
+            inset 1px 0 rgba(180,230,201,.08),inset -1px 0 rgba(226,166,107,.055),
+            inset 0 -18px 32px -28px rgba(98,165,126,.18);
+          scrollbar-width:thin;scrollbar-color:rgba(221,237,226,.22) transparent;
+        }
+        .atl-guide.is-summary{width:min(430px,48vw);max-width:none;padding:18px 20px 15px}
+        .atl-progress{height:2px;margin-bottom:12px;background:rgba(225,240,230,.11)}
+        .atl-progress-fill{background:linear-gradient(90deg,#78BFA3,#D0B27B)}
+        .atl-eyebrow{margin-bottom:6px;color:rgba(222,238,227,.52);font-size:10px;letter-spacing:.13em}
+        .atl-question{margin-bottom:6px;font-size:clamp(18px,2.5vw,23px);font-weight:560;line-height:1.12;letter-spacing:-.025em}
+        .atl-help{margin-bottom:12px;color:var(--atl-glass-ink-muted);font-size:12.5px;line-height:1.35}
+        .atl-options{gap:7px;max-height:min(128px,33dvh);margin-bottom:12px;padding:1px 3px 2px 1px}
+        .atl-option{
+          width:100%;min-height:44px;padding:8px 11px;border-color:rgba(225,241,231,.13);
+          border-radius:15px;background:rgba(255,255,255,.055);color:var(--atl-ink);font-size:12.5px;
+        }
+        .atl-option.is-selected{border-color:rgba(220,239,225,.52);background:rgba(218,235,222,.91);color:#111612}
+        .atl-option-meta{margin-left:auto;color:inherit;opacity:.62}
+        .atl-swatch{width:27px;height:27px;border-radius:10px}
+        .atl-material{margin-top:-3px;margin-bottom:11px;padding-top:9px;border-top-color:rgba(225,241,231,.12)}
+        .atl-grout-color,.atl-grout-width,.atl-btn{background:rgba(255,255,255,.07);color:var(--atl-ink);border-color:rgba(225,241,231,.14)}
+        .atl-grout-color{box-shadow:inset 0 0 0 3px rgba(8,12,10,.82)}
+        .atl-grout-color[aria-pressed="true"]{box-shadow:inset 0 0 0 3px rgba(8,12,10,.82),0 0 0 2px #8FCBB0}
+        .atl-btn.atl-btn-primary{background:rgba(218,235,222,.93);color:#111612;box-shadow:none}
+        .atl-panorama{
+          left:max(18px,env(safe-area-inset-left,0px));right:auto;
+          bottom:max(16px,env(safe-area-inset-bottom,0px));min-height:44px;
+          border-color:rgba(229,243,234,.14);background:rgba(4,8,6,.52);color:rgba(239,246,241,.72);
+          box-shadow:0 16px 40px -24px rgba(0,0,0,.82);
+        }
+      }
+
+      /* Compact landscape phones keep the same composition, but the guide's
+         own progress/eyebrow already states position, so the external waypoint
+         rail yields its space rather than compressing the room into ribbons. */
+      @media(min-width:560px) and (max-width:719px) and (orientation:landscape){
+        .atl-chapters{display:none}
+        .atl-guide{
+          right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px));
+          bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(330px,48vw);
+          padding:14px 15px 13px;border-radius:24px;
+        }
+        .atl-guide.is-summary{width:min(360px,54vw);padding:15px 16px 13px}
+        .atl-question{font-size:17px}.atl-help{font-size:11.5px;margin-bottom:9px}
+        .atl-options{max-height:min(112px,30dvh);margin-bottom:9px}
+        .atl-panorama{left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px))}
+      }
+
       /* Transform on --atl-spring (the house's own small-control press curve),
          colour/shadow on --atl-smooth — the same split css/styles.css uses on
          every one of its own buttons (search --spring there). Distinct
@@ -461,6 +577,14 @@ function shell() {
           box-shadow var(--atl-dur) var(--atl-smooth),background-color var(--atl-dur) var(--atl-smooth),
           color var(--atl-dur) var(--atl-smooth)}
       }
+      @media(min-width:560px) and (orientation:landscape) and (prefers-reduced-motion:no-preference){
+        .atl-stage{animation:atl-room-enter .88s cubic-bezier(.22,1,.36,1) both}
+        .atl-menu,.atl-chapters,.atl-panorama{animation:atl-workspace-control-in .62s cubic-bezier(.22,1,.36,1) .18s both}
+        .atl-menu{animation-delay:.08s}.atl-panorama{animation-delay:.28s}
+        .atl-chip-label{transition:opacity .22s cubic-bezier(.22,1,.36,1)}
+      }
+      @keyframes atl-room-enter{from{opacity:.28;transform:scale(1.018)}to{opacity:1;transform:none}}
+      @keyframes atl-workspace-control-in{from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:none}}
       @keyframes atl-beat-in{
         from{opacity:.58;transform:translateX(var(--atl-beat-x,8px)) translateY(4px)}
         to{opacity:1;transform:translateX(0) translateY(0)}
@@ -496,6 +620,7 @@ function shell() {
       /* Never animate blur() — forces a full re-composite every frame. */
     </style>
     <div class="atl">
+      <button class="atl-menu" type="button" aria-label="${esc(tt("a11y.openMenu", "Otvori izbornik"))}"><span></span><span></span><span></span></button>
       <div class="atl-root">
         <div class="atl-stage" id="atl-stage" aria-label="${esc(tt("atelier.stage", "3D prikaz kupaonice"))}"></div>
         <div id="atl-loading" class="atl-loading" role="status" aria-live="polite">
@@ -688,7 +813,10 @@ function renderChapterNav(activeIndex) {
     if (i === activeIndex) cls.push("is-active");
     if (answered) cls.push("is-done");
     return `<button type="button" class="${cls.join(" ")}" data-goto="${esc(c.id)}"
-      aria-current="${i === activeIndex ? "step" : "false"}">${esc(c.title)}</button>`;
+      aria-label="${esc(`${i + 1}. ${c.title}`)}" aria-current="${i === activeIndex ? "step" : "false"}">
+      <span class="atl-chip-index" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>
+      <span class="atl-chip-label" aria-hidden="true">${esc(c.title)}</span>
+    </button>`;
   }).join("");
 }
 
@@ -831,6 +959,7 @@ function setPanorama(on, { returnToChapter = true } = {}) {
 }
 
 function wire() {
+  container.querySelector(".atl-menu")?.addEventListener("click", () => document.getElementById("sideOpen")?.click());
   container.querySelector("#atl-panorama").addEventListener("click", () => {
     setPanorama(!panoramaOn);
   });
@@ -939,6 +1068,7 @@ export async function render(el) {
   teardown();
   const token = ++mountToken;
   container = el;
+  document.documentElement.setAttribute("data-akv-journey", "opening");
 
   journey = createJourney(BATHROOM_V0);
   const saved = loadAutosave();
@@ -946,14 +1076,31 @@ export async function render(el) {
   if (saved?.room) journey.setRoom(saved.room);
   roomFixtures = Array.isArray(saved?.fixtures) ? saved.fixtures.map((fixture) => ({ ...fixture })) : [];
 
-  const all = await db.listProducts();
+  // Start local work during the quiet opening rather than after it. These
+  // promises do not gate the question or turn the 700 ms handoff into a loader.
+  const productsReady = db.listProducts();
+  const roomReady = import("../room3d.js");
+  opening = mountJourneyOpening(container, {
+    onBrief: ({ brief, directionId }) => {
+      journey?.decide("smjer", { optionId: directionId, brief }, Date.now());
+      autosave();
+    },
+  });
+  const openingResult = await opening.done;
+  opening?.dispose();
+  opening = null;
+  if (!alive(token) || openingResult?.cancelled) return;
+  if (journey.current().chapter.id === "smjer" && journey.canAdvance()) journey.next();
+  document.documentElement.setAttribute("data-akv-journey", "active");
+
+  const all = await productsReady;
   if (!alive(token)) return;
   products = all;
 
   container.innerHTML = shell();
   wire();
 
-  const mod = await import("../room3d.js");
+  const mod = await roomReady;
   if (!alive(token)) return;
 
   const initialAssignments = {};
@@ -1007,6 +1154,9 @@ export async function render(el) {
 
 export function teardown() {
   mountToken++;
+  opening?.dispose();
+  opening = null;
+  clearJourneyChrome();
   reducedMotionMQ?.removeEventListener?.("change", reducedMotionHandler);
   reducedMotionMQ = null;
   reducedMotionHandler = null;

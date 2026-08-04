@@ -89,7 +89,7 @@ import { authConfigured, getSession, onAuthChange, signOut } from "./db.js";
 // registration WITHOUT the query would fall back to; keep it equal to this
 // string anyway, so a hand-registered worker lands in the same cache.
 // The worker's SHELL list must still cover every shipped file.
-export const APP_V = "v11";
+export const APP_V = "v13";
 
 document.documentElement.lang = LANG;
 

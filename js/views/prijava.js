@@ -6,10 +6,8 @@
 // interior photograph generated specifically for this project. The approved
 // asset is local: no borrowed photograph, runtime GPU or external fetch.
 //
-// Depth is progressive enhancement. Fine pointers and device orientation move
-// the scene only a few pixels; iOS asks permission on an explicit control;
-// reduced motion resolves every variable to rest. Sensor values remain local
-// to the mounted view and all listeners are removed on teardown.
+// The threshold is deliberately still. No pointer parallax, device tilt or
+// travelling glare competes with the room's slow one-way cinematic settle.
 //
 // The public GitHub Pages build has no account backend. Its fields are natively
 // disabled and its enabled guest link always enters the experience. A configured
@@ -21,7 +19,6 @@ import {
   authConfigured, getSession, signIn, signInWithGoogle, signUp,
   requestPasswordReset, signOut, rememberedEmail, rememberEmail,
 } from "../db.js";
-import { depthCss, orientationDepth, pointerDepth } from "../login-depth.js";
 import { LOGIN_PHOTO_CSS } from "../login-photo-style.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -61,7 +58,6 @@ const ICON_EYE = SVG(`<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S
 const ICON_EYE_OFF = SVG(`<path d="M3 3l18 18"/><path d="M10.6 6.1A9.9 9.9 0 0 1 12 5.5c6.5 0 10 6.5 10 6.5a17 17 0 0 1-3.6 4.3M6.5 7.7A17 17 0 0 0 2 12s3.5 6.5 10 6.5a9.7 9.7 0 0 0 3.4-.6"/><path d="M9.7 9.9a2.6 2.6 0 0 0 3.7 3.6"/>`);
 const ICON_ARROW = SVG(`<path d="M5 12h14M13 6l6 6-6 6"/>`, 16);
 const ICON_INFO = SVG(`<circle cx="12" cy="12" r="8.6"/><path d="M12 11.4v4.6M12 8.2v.1"/>`, 17);
-const ICON_MOTION = SVG(`<path d="M8 4.5h8M6 8h12M5 11.5h14M7 15h10M9 18.5h6"/>`, 17);
 
 // Google's "G". The only mark in this app that is NOT re-coloured to the Iris
 // palette: Google's Third-Party Branding Guidelines require the four official
@@ -89,14 +85,12 @@ function sceneMarkup() {
   return `
     <aside class="pr-scene" aria-label="${esc(tf("prijava.sceneLabel", "Inspiracija za vašu kupaonicu"))}">
       <picture class="pr-scene-media" aria-hidden="true">
-        <img src="./assets/images/login-interior-cinematic.webp" alt="" width="1600" height="900"
-             decoding="async" fetchpriority="high">
+        <img class="pr-scene-dark" src="./assets/images/login-interior-dark-4k.webp" alt=""
+             width="2160" height="3840" decoding="async" fetchpriority="high">
+        <img class="pr-scene-light" src="./assets/images/login-interior-light-4k.webp" alt=""
+             width="2160" height="3840" decoding="async">
       </picture>
-    </aside>
-    <button type="button" class="pr-motion" id="prMotion" hidden
-            aria-label="${esc(tf("prijava.motionEnable", "Uključi pokret uređaja"))}">
-      ${ICON_MOTION}
-    </button>`;
+    </aside>`;
 }
 
 function thresholdMarkup(card) {
@@ -207,7 +201,7 @@ function signInMarkup(configured) {
          <button type="button" class="pr-footlink" id="prSwap">${esc(tf("prijava.createAccount", "Napravi račun"))}</button></p>`;
 
   const guest = configured ? "" : `
-       <a class="btn btn-primary pr-guest" href="#/" data-pr-enter>${esc(tf("prijava.guest", "Nastavi kao gost"))}${ICON_ARROW}</a>
+       <a class="btn btn-primary pr-guest" href="#/atelier" data-pr-enter>${esc(tf("prijava.guest", "Nastavi kao gost"))}${ICON_ARROW}</a>
        <p class="pr-guesthint">${esc(tf("prijava.guestHint", "Katalog, dizajner i 3D soba rade bez prijave."))}</p>`;
 
   // The fastest returning-user path stays first. Account creation puts its
@@ -250,7 +244,7 @@ function signedInMarkup(email) {
           </span>
         </div>
         <div class="pr-stack">
-          <a class="btn btn-primary btn-lg" href="#/" data-pr-enter>${esc(tf("prijava.toCatalog", "U katalog"))}${ICON_ARROW}</a>
+          <a class="btn btn-primary btn-lg" href="#/atelier" data-pr-enter>${esc(tf("prijava.toCatalog", "Nastavi"))}${ICON_ARROW}</a>
           <button type="button" class="btn btn-block" id="prSignOut">${esc(tf("prijava.signOut", "Odjava"))}</button>
         </div>
         <p class="pr-msg" id="prMsg" role="status" aria-live="polite"></p>
@@ -289,8 +283,6 @@ function clearChrome() {
 // header. Registered once, at module evaluation.
 if (typeof window !== "undefined") window.addEventListener("akv:teardown", clearChrome);
 
-let depthCleanup = null;
-
 export async function render(container) {
   ensureStyles();
   const configured = authConfigured();
@@ -306,7 +298,6 @@ export async function render(container) {
   container.innerHTML = session ? signedInMarkup(email) : signInMarkup(configured);
   document.documentElement.setAttribute(AUTH_ATTR, "on");
 
-  wirePhotoDepth(container);
   wireEntryHandoff(container);
   if (session) wireSignedIn(container);
   else if (configured) { wireForm(container); wireGoogle(container); }
@@ -327,13 +318,14 @@ async function leaveForApp() {
   try {
     const m = await import("../splash.js");
     await m.playSignInTransition({
+      navigate: () => { location.hash = "#/atelier"; },
       orientationCue: {
         title: tf("prijava.rotateTitle", "Okrenite telefon"),
         detail: tf("prijava.rotateBody", "Više prostora za vaš projekt"),
       },
     });
   } catch {
-    location.hash = "#/";
+    location.hash = "#/atelier";
   }
 }
 
@@ -453,121 +445,6 @@ function wireGoogle(container) {
   });
 }
 
-// Phone tilt is progressive enhancement, never a requirement. Android-class
-// browsers can deliver deviceorientation directly; iOS requires a user gesture,
-// so only that platform receives the explicit 44px permission control. No
-// sensor value leaves the page and the listener exists only while this route is
-// mounted. A fine-pointer equivalent keeps the same depth language on desktop.
-function wirePhotoDepth(container) {
-  depthCleanup?.();
-  depthCleanup = null;
-  const shell = container.querySelector(".pr-wrap");
-  const motionButton = container.querySelector("#prMotion");
-  if (!shell) return;
-
-  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  let frame = 0;
-  let next = { x: 0, y: 0 };
-  const removers = [];
-
-  const paint = () => {
-    frame = 0;
-    const css = depthCss(next, Boolean(reduced?.matches));
-    shell.style.setProperty("--pr-rx", css.rotateX);
-    shell.style.setProperty("--pr-ry", css.rotateY);
-    shell.style.setProperty("--pr-scene-x", css.sceneX);
-    shell.style.setProperty("--pr-scene-y", css.sceneY);
-    shell.style.setProperty("--pr-card-x", css.cardX);
-    shell.style.setProperty("--pr-card-y", css.cardY);
-    shell.style.setProperty("--pr-glare-x", css.glareX);
-    shell.style.setProperty("--pr-glare-y", css.glareY);
-  };
-  const queue = (vector) => {
-    next = vector;
-    if (!frame) frame = requestAnimationFrame(paint);
-  };
-  const onReducedChange = () => queue({ x: 0, y: 0 });
-  reduced?.addEventListener?.("change", onReducedChange);
-  removers.push(() => reduced?.removeEventListener?.("change", onReducedChange));
-
-  if (window.matchMedia?.("(hover:hover) and (pointer:fine)").matches) {
-    const onPointer = (event) => queue(pointerDepth(
-      event.clientX, event.clientY, shell.getBoundingClientRect(),
-    ));
-    const onLeave = () => queue({ x: 0, y: 0 });
-    shell.addEventListener("pointermove", onPointer, { passive: true });
-    shell.addEventListener("pointerleave", onLeave, { passive: true });
-    removers.push(() => shell.removeEventListener("pointermove", onPointer));
-    removers.push(() => shell.removeEventListener("pointerleave", onLeave));
-  }
-
-  let orientationBaseline = null;
-  const resetOrientationBaseline = () => { orientationBaseline = null; queue({ x: 0, y: 0 }); };
-  const onOrientation = (event) => {
-    const beta = Number(event.beta) || 0;
-    const gamma = Number(event.gamma) || 0;
-    if (!orientationBaseline) {
-      // A phone held upright commonly reports beta near 90 degrees. Treating
-      // that absolute pose as motion would pin the scene at its limit. The
-      // first sample is therefore the user's neutral hold; only subsequent
-      // tilt relative to it moves the threshold.
-      orientationBaseline = { beta, gamma };
-      queue({ x: 0, y: 0 });
-      return;
-    }
-    const angle = Number(screen.orientation?.angle ?? window.orientation ?? 0);
-    queue(orientationDepth(
-      beta - orientationBaseline.beta,
-      gamma - orientationBaseline.gamma,
-      angle,
-    ));
-  };
-  const startOrientation = () => {
-    window.addEventListener("deviceorientation", onOrientation, { passive: true });
-    removers.push(() => window.removeEventListener("deviceorientation", onOrientation));
-  };
-  const OrientationEvent = window.DeviceOrientationEvent;
-  if (OrientationEvent && typeof OrientationEvent.requestPermission === "function" && motionButton) {
-    motionButton.hidden = false;
-    const request = async () => {
-      try {
-        const result = await OrientationEvent.requestPermission();
-        if (result !== "granted") throw new Error("permission denied");
-        startOrientation();
-        motionButton.querySelector("span").textContent = tf("prijava.motionActive", "Pokret uključen");
-        motionButton.disabled = true;
-      } catch {
-        motionButton.querySelector("span").textContent = tf("prijava.motionDenied", "Pokret nije dopušten");
-        motionButton.disabled = true;
-      }
-    };
-    motionButton.addEventListener("click", request, { once: true });
-    removers.push(() => motionButton.removeEventListener("click", request));
-  } else if (OrientationEvent) {
-    startOrientation();
-  }
-  if (screen.orientation?.addEventListener) {
-    screen.orientation.addEventListener("change", resetOrientationBaseline);
-    removers.push(() => screen.orientation.removeEventListener("change", resetOrientationBaseline));
-  } else {
-    window.addEventListener("orientationchange", resetOrientationBaseline);
-    removers.push(() => window.removeEventListener("orientationchange", resetOrientationBaseline));
-  }
-
-  depthCleanup = () => {
-    if (frame) cancelAnimationFrame(frame);
-    for (const remove of removers) remove();
-    shell.style.removeProperty("--pr-rx");
-    shell.style.removeProperty("--pr-ry");
-    shell.style.removeProperty("--pr-scene-x");
-    shell.style.removeProperty("--pr-scene-y");
-    shell.style.removeProperty("--pr-card-x");
-    shell.style.removeProperty("--pr-card-y");
-    shell.style.removeProperty("--pr-glare-x");
-    shell.style.removeProperty("--pr-glare-y");
-  };
-}
-
 function wireSignedIn(container) {
   const button = container.querySelector("#prSignOut");
   const msg = container.querySelector("#prMsg");
@@ -681,6 +558,4 @@ function wireForm(container) {
 
 export function teardown() {
   clearChrome();
-  depthCleanup?.();
-  depthCleanup = null;
 }

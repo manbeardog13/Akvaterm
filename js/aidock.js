@@ -161,7 +161,7 @@ function tf(key, fallback, vars) {
 //     not a cosmetic one (see the note in the module footer).
 //   /prijava   — that view suppresses .topbar and .tabbar to be a single card
 //     on an empty ground. A violet tab stuck to its edge undoes the point of it.
-const HIDDEN_ROUTES = ['/savjetnik', '/prijava'];
+const HIDDEN_ROUTES = ['/savjetnik', '/prijava', '/atelier'];
 
 // ---- icons ------------------------------------------------------------------
 // Stroked, currentColor, aria-hidden — the same construction as the SVG helper

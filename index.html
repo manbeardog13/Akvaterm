@@ -51,7 +51,7 @@
   base-uri 'none';
   object-src 'none';
   form-action 'none';
-  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-MiUeQwgtJHkt/0MeIXVm7Rj8X++NDDrV+8/oC9WExN8=';
+  script-src 'self' 'sha256-D2XnioWKWXcIE2epN670TChceWuJD92o/6GT7rIBAsw=' 'sha256-DQc2j5FB6BI743ywOKtvGVgsqYFouFi8okKkH56Ey4o=';
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob:;
@@ -171,31 +171,20 @@
 </head>
 <body>
 
-<!-- Branded splash — visible on first paint (styles.css is render-blocking).
-     The inline script below owns its dismissal; js/app.js asks for it once the
-     first view has painted and never removes this element itself.
-
-     The wordmark is Akvaterm's own identity and is EXEMPT from the Iris
-     palette by operator instruction: AKVA in navy (--logo-navy #00008C), TERM
-     in red (--logo-red #d6252e), italic 800 in the text face — not Anton, not
-     teal/amber. css/styles.css owns those protected tokens; do not restyle the
-     logo when the palette changes. The rule beneath it sweeps teal -> amber,
-     which is where the Iris palette belongs. -->
+<!-- Refractive cold open — visible on first paint. The retired tiles,
+     wordmark billboard and glowing rule are deliberately absent. Three glass
+     contours resolve around a narrow photographic view into the same room the
+     login reveals, so the opening hands into the product rather than stopping
+     for a separate loader. -->
 <div id="splash" aria-hidden="true">
-  <div class="sp-core">
-    <!-- The tile field. Nine tiles on a grout gap, laid in a diagonal wave and
-         washing cool to warm, then lifting to hand the screen to the wordmark.
-         It is Akvaterm's own gesture in the most literal sense available: this
-         company lays tile, and a diagonal is the order tile is actually laid
-         in. Nothing here resembles ASC's entrance, which is a lava sweep for
-         an automotive brand.
-         Purely decorative and aria-hidden with the veil; the nine <i> elements
-         carry no meaning and are never read out. -->
-    <div class="sp-tiles" aria-hidden="true">
-      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  <div class="sp-stage">
+    <i class="sp-plane sp-plane-a"></i>
+    <i class="sp-plane sp-plane-b"></i>
+    <i class="sp-plane sp-plane-c"></i>
+    <div class="sp-aperture">
+      <i class="sp-depth"></i>
+      <i class="sp-rim"></i>
     </div>
-    <div class="sp-mark wordmark"><span class="akva">AKVA</span><span class="term">TERM</span></div>
-    <div class="sp-rule"><i></i></div>
   </div>
 </div>
 
@@ -218,24 +207,9 @@
    the user behind the veil. Service-worker registration lives in js/app.js —
    one registration only.
 
-   MIN_MS TRACKS THE CHOREOGRAPHY IN css/styles.css AND MUST BE UPDATED WITH
-   IT. A splash that begins fading through its own animation reads as a glitch
-   rather than as a hand-off, so this number is the last frame plus a beat.
-
-   The entrance is three acts (see "Branded splash" in css/styles.css):
-     0.00 - 0.56   nine tiles land on a diagonal wave
-     0.26 - 0.72   they wash teal -> amber along the same diagonal
-     0.70 - 0.96   the field settles and lifts out
-     0.76 - 1.18   the wordmark rises through it
-     0.90 - 1.37   the rule draws underneath, teal into amber
-     1.32 - 1.56   the warm end blooms
-   Last frame lands at 1560 ms, so MIN_MS is 1600. Total time to a live app is
-   ~1.6 s plus a 380 ms cross-fade the app's entrance plays underneath.
-
-   WAIT_MS must stay ABOVE MIN_MS. It starts the "slow load" shimmer, and a
-   value below the choreography would fire the patience state during the
-   entrance on every single launch — telling every user the app is struggling
-   while it is in fact on time.
+   The contours and aperture resolve by 1000 ms, so MIN_MS is 1050. WAIT_MS is
+   deliberately later and changes only the aperture's opacity in a restrained
+   breath; it never introduces a moving highlight, spinner, or animated blur.
 
    html.splashing IS the hand-off. While it is set, #main's entrance animations
    hold at frame 0 — animation-play-state:paused freezes the delay clock too —
@@ -250,14 +224,13 @@
    watchdog — because the one unacceptable outcome is a stripped veil over an
    app frozen invisible at frame 0. */
 (function () {
-  var MIN_MS = 1600, WAIT_MS = 2600, WATCHDOG_MS = 4600, t0 = Date.now(), done = false;
+  var MIN_MS = 1050, WAIT_MS = 2100, WATCHDOG_MS = 4400, t0 = Date.now(), done = false;
   var root = document.documentElement;
 
   root.classList.add("splashing");
 
-  /* Patience: if the app has not signalled ready by WAIT_MS, the rule starts a
-     slow shimmer so a slow first load looks like work rather than like a hang.
-     css/styles.css makes it a static gradient under prefers-reduced-motion. */
+  /* Patience: if the app has not signalled ready by WAIT_MS, the resolved room
+     takes one restrained opacity breath. Reduced motion keeps it static. */
   var waitT = setTimeout(function () {
     var s = document.getElementById("splash");
     if (s && !done) s.classList.add("wait");
