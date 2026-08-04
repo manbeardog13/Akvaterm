@@ -27,7 +27,14 @@
 import * as db from "../db.js";
 import { t } from "../i18n.js";
 import { createJourney, BATHROOM_V0 } from "../journey.js";
-import { formatEur, orderEstimate } from "../domain.js";
+import { formatEur, GROUT_COLORS } from "../domain.js";
+import {
+  ATELIER_GROUT_WIDTHS_MM,
+  buildCommission, buildFixturePlan, decisionProductIds,
+  productsForChapter, rankProductsForDirection, toggleProductChoice,
+  surfaceFinishForDecision,
+} from "../commissioning.js";
+import { createCompletionRewardRegistry } from "../completion-reward.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -41,7 +48,26 @@ let journey = null;
 let products = [];
 let container = null;
 let reducedMotionMQ = null;
+let reducedMotionHandler = null;
 let panoramaOn = false;   // the ambient showcase's own on/off, tracked here because the engine has no notion of "chapters" to return to
+let roomFixtures = [];    // product-bound placements; persisted independently of journey decisions
+let fixtureEventStage = null;
+let lastChapterId = null;
+let lastChapterIndex = -1;
+let preferredFixtureProductId = null;
+
+const QUOTE_EMAIL = "info@akvaterm.hr";
+const completionRewards = createCompletionRewardRegistry();
+
+const groutLabel = (id) => {
+  const color = GROUT_COLORS.find((item) => item.id === id);
+  return color ? tt(color.i18nKey, color.id) : id;
+};
+
+const liveSurfaceOptions = (decision) => ({
+  ...surfaceFinishForDecision(decision),
+  liveGrout: true,
+});
 
 function alive(token) { return token === mountToken && container && container.isConnected; }
 
@@ -57,6 +83,7 @@ function autosave() {
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
       room: journey.room,
       journeyState: journey.toJSON(),
+      fixtures: roomFixtures,
       at: Date.now(),
     }));
   } catch { /* storage may be unavailable — the journey still works this session */ }
@@ -75,11 +102,18 @@ function loadAutosave() {
 // "declare intent, the director computes the transform" rule describes.
 function directCamera(chapter) {
   if (!api?.camera || !chapter) return;
+  const fixtureTarget = chapter.kind === "fixtures"
+    ? (roomFixtures.find((fixture) => fixture.chapterId === chapter.id
+        && fixture.productId === preferredFixtureProductId)
+      || roomFixtures.find((fixture) => fixture.chapterId === chapter.id))?.type
+    : null;
+  const target = fixtureTarget || chapter.target || chapter.surface;
   switch (chapter.intent) {
     case "returnToOverview": api.camera.returnToOverview(); break;
-    case "focusSurface": api.camera.focusSurface(chapter.target ?? chapter.surface); break;
-    case "inspectMaterial": api.camera.inspectMaterial(chapter.target ?? chapter.surface); break;
-    case "orbitSelection": api.camera.orbitSelection(chapter.target ?? chapter.surface); break;
+    case "focusSurface": api.camera.focusSurface(target); break;
+    case "inspectMaterial": api.camera.inspectMaterial(target); break;
+    case "orbitSelection": api.camera.orbitSelection(target); break;
+    case "revealRoom": api.camera.revealRoom(); break;
     default: api.camera.returnToOverview();
   }
 }
@@ -103,10 +137,12 @@ function shell() {
         --atl-paper:var(--paper,#F2F2F2);
         --atl-ink:var(--ink,#313131);
         --atl-surface:var(--surface,#FFFFFF);
+        --atl-teal-300:var(--teal-300,#86DCE6);
         --atl-teal-600:var(--teal-600,#139EB1);
         --atl-teal-700:var(--teal-700,#0D707D);
         --atl-amber-500:var(--amber-500,#EAA651);
         --atl-amber-ink:var(--amber-ink,#935616);
+        --atl-brown-800:var(--brown-800,#68340F);
         --atl-mauve-ink:var(--mauve-600,#756168);
         --atl-line:var(--line-strong,rgba(104,52,15,.22));
         --atl-glass-bg:var(--glass-bg-text,hsl(187 44% 97% / .78));
@@ -136,6 +172,7 @@ function shell() {
         color:var(--atl-ink);
         position:relative;
       }
+      .atl [hidden]{display:none!important}
 
       /* Explicit height, matching soba3d.js's .s3d-stage clamp — an
          absolutely-positioned stage needs a sized ancestor, not height:100%
@@ -143,6 +180,19 @@ function shell() {
       .atl-root{position:relative;height:clamp(420px,84vh,760px);min-height:0}
       @media(min-width:720px){.atl-root{height:clamp(480px,80vh,820px)}}
       .atl-stage{position:absolute;inset:0;border-radius:var(--atl-r-lg);overflow:hidden;background:var(--atl-paper)}
+      .atl-stage::after{
+        content:"";position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;
+        background:radial-gradient(circle at 72% 30%,rgba(19,158,177,.11),transparent 48%);
+      }
+      .atl[data-mood="mirno"] .atl-stage::after{opacity:1;
+        background:radial-gradient(circle at 68% 26%,rgba(192,216,242,.18),transparent 52%)}
+      .atl[data-mood="toplo"] .atl-stage::after{opacity:1;
+        background:radial-gradient(circle at 72% 30%,rgba(234,166,81,.14),transparent 52%)}
+      .atl[data-mood="izrazito"] .atl-stage::after{opacity:1;
+        background:radial-gradient(circle at 72% 30%,rgba(104,52,15,.13),transparent 54%)}
+      .atl[data-chapter="ponuda"] .atl-stage::after{opacity:1;
+        background:radial-gradient(circle at 72% 34%,rgba(234,166,81,.13),transparent 42%),
+          radial-gradient(circle at 48% 46%,rgba(19,158,177,.10),transparent 60%)}
       .atl-loading{
         position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
         font-size:14px;font-weight:600;color:var(--atl-mauve-ink);background:var(--atl-paper);
@@ -155,7 +205,7 @@ function shell() {
          7.30:1, --atl-glass-ink-muted is 4.57:1. Both pass AA at any size. */
       .atl-guide{
         position:absolute;left:12px;right:12px;bottom:64px;z-index:2;
-        max-width:420px;
+        max-width:420px;max-height:calc(100% - 104px);overflow:auto;overscroll-behavior:contain;
         padding:16px 18px;border-radius:var(--atl-r-lg);
         background:var(--atl-glass-bg);
         box-shadow:
@@ -170,6 +220,9 @@ function shell() {
         color:var(--atl-ink);
       }
       @media(min-width:720px){ .atl-guide{ left:24px; bottom:24px; } }
+      .atl-guide.is-summary{max-width:540px;padding:20px 22px}
+      .atl-guide[data-flow="forward"]{--atl-beat-x:10px}
+      .atl-guide[data-flow="back"]{--atl-beat-x:-10px}
 
       .atl-progress{height:4px;border-radius:var(--atl-r-pill);background:rgba(104,52,15,.14);overflow:hidden;margin-bottom:10px}
       .atl-progress-fill{height:100%;background:var(--atl-teal-700);border-radius:inherit;width:0%}
@@ -182,8 +235,29 @@ function shell() {
       .atl-stale{display:block;margin:0 0 10px;padding:8px 10px;border-radius:var(--atl-r-sm);
         background:var(--atl-surface);color:var(--atl-amber-ink);font-size:12.5px;font-weight:600}
 
-      .atl-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+      .atl-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;max-height:min(240px,34vh);
+        overflow:auto;overscroll-behavior:contain;padding:2px 3px 3px 2px;scrollbar-width:thin}
       .atl-empty{font-size:13px;color:var(--atl-glass-ink-muted);margin:0 0 14px}
+
+      /* A material seam, not another chapter. It appears only after a tile is
+         chosen and keeps both decisions in the same visual beat as the close-up
+         camera. Every control is solid, so the one-glass budget remains intact. */
+      .atl-material{display:grid;gap:8px;margin:-3px 0 14px;padding-top:10px;border-top:1px solid var(--atl-line)}
+      .atl-material-head{display:grid;gap:2px}
+      .atl-material-title{margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+        color:var(--atl-glass-ink-muted)}
+      .atl-material-hint{margin:0;font-size:12px;line-height:1.35;color:var(--atl-glass-ink-muted)}
+      .atl-grout-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+      .atl-grout-label{min-width:70px;font-size:11.5px;font-weight:600;color:var(--atl-glass-ink-muted)}
+      .atl-grout-color,.atl-grout-width{min-width:44px;min-height:44px;border:1px solid var(--atl-line);
+        background:var(--atl-surface);color:var(--atl-ink);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+      .atl-grout-color{width:44px;padding:0;border-radius:50%;background:var(--atl-grout-color,#ddd);
+        box-shadow:inset 0 0 0 3px var(--atl-surface)}
+      .atl-grout-color[aria-pressed="true"]{border-color:var(--atl-teal-700);
+        box-shadow:inset 0 0 0 3px var(--atl-surface),0 0 0 2px var(--atl-teal-700)}
+      .atl-grout-width{padding:7px 11px;border-radius:var(--atl-r-pill)}
+      .atl-grout-width[aria-pressed="true"]{border-color:var(--atl-teal-700);background:var(--atl-teal-700);color:#fff}
+      .atl-grout-color:focus-visible,.atl-grout-width:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:3px}
 
       /* SOLID by design — see the header note above shell(). Each control's
          motion below is deliberately DIFFERENT, not one gesture reused five
@@ -209,14 +283,60 @@ function shell() {
       .atl-swatch{width:22px;height:22px;border-radius:50%;flex:none;background:var(--atl-swatch,#ddd);
         box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
       .atl-option-meta{font-size:11.5px;font-weight:500;opacity:.82}
+      .atl-option-mark{display:none;width:18px;height:18px;border-radius:50%;margin-left:auto;
+        align-items:center;justify-content:center;background:rgba(255,255,255,.18);font-size:11px}
+      .atl-option.is-selected .atl-option-mark{display:inline-flex}
 
-      .atl-summary-list{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}
-      .atl-summary-row{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;
-        font-variant-numeric:tabular-nums}
-      .atl-summary-total{margin:0 0 4px;font-size:15px}
-      .atl-summary-note{margin:0;font-size:12px;color:var(--atl-glass-ink-muted)}
+      .atl-payoff{display:grid;gap:12px}
+      .atl-guide.is-summary .atl-payoff{padding-bottom:56px}
+      .atl-payoff-head{position:relative;isolation:isolate;display:grid;padding:14px 16px;border-radius:var(--atl-r-md);
+        background:linear-gradient(135deg,var(--atl-teal-700) 0%,var(--atl-teal-700) 72%,var(--atl-brown-800) 145%);color:#fff;
+        box-shadow:0 14px 30px -20px rgba(13,112,125,.7)}
+      .atl-payoff-head::before{content:"";position:absolute;inset:0;z-index:3;border:2px solid rgba(255,255,255,.86);
+        border-radius:inherit;box-shadow:0 0 0 1px rgba(234,166,81,.52),inset 0 0 22px rgba(134,220,230,.2);
+        opacity:0;pointer-events:none}
+      .atl-payoff-kicker{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;opacity:.78}
+      .atl-payoff-head>strong{font-family:var(--font-display);font-size:clamp(28px,7vw,40px);
+        position:relative;width:max-content;max-width:100%;line-height:1.05;letter-spacing:-.035em;margin:4px 0}
+      .atl-payoff-head>strong::after{content:attr(data-total);position:absolute;inset:0;color:transparent;
+        background:linear-gradient(90deg,#fff 0%,#ffe0a0 48%,#fff 100%);background-clip:text;
+        -webkit-background-clip:text;clip-path:inset(0 100% 0 0);opacity:0;pointer-events:none}
+      .atl-payoff-head>small{font-size:11.5px;opacity:.8}
+      .atl-completion-bloom{position:absolute;inset:0;z-index:2;overflow:hidden;border-radius:inherit;
+        pointer-events:none}
+      .atl-completion-bloom i{--atl-bloom-x:0px;--atl-bloom-y:-50px;position:absolute;left:50%;top:48%;
+        width:5px;height:5px;border-radius:50%;background:var(--atl-amber-500);opacity:0}
+      .atl-completion-bloom i:nth-child(2n){border-radius:1px;background:#fff}
+      .atl-completion-bloom i:nth-child(3n){background:var(--atl-teal-300)}
+      .atl-completion-bloom i:nth-child(1){--atl-bloom-x:-145px;--atl-bloom-y:-46px}
+      .atl-completion-bloom i:nth-child(2){--atl-bloom-x:-104px;--atl-bloom-y:58px}
+      .atl-completion-bloom i:nth-child(3){--atl-bloom-x:-64px;--atl-bloom-y:-70px}
+      .atl-completion-bloom i:nth-child(4){--atl-bloom-x:-22px;--atl-bloom-y:72px}
+      .atl-completion-bloom i:nth-child(5){--atl-bloom-x:35px;--atl-bloom-y:-74px}
+      .atl-completion-bloom i:nth-child(6){--atl-bloom-x:78px;--atl-bloom-y:64px}
+      .atl-completion-bloom i:nth-child(7){--atl-bloom-x:118px;--atl-bloom-y:-56px}
+      .atl-completion-bloom i:nth-child(8){--atl-bloom-x:150px;--atl-bloom-y:36px}
+      .atl-project-meta{display:flex;flex-wrap:wrap;gap:6px}
+      .atl-project-meta span{padding:5px 9px;border:1px solid var(--atl-line);border-radius:var(--atl-r-pill);
+        background:var(--atl-surface);font-size:11.5px;font-weight:600}
+      .atl-summary h3{margin:2px 0 0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+        color:var(--atl-glass-ink-muted)}
+      .atl-summary-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+      .atl-summary-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+        padding:7px 0;border-bottom:1px solid var(--atl-line);font-size:13px;font-variant-numeric:tabular-nums}
+      .atl-summary-row>span:first-child{display:grid;gap:2px;min-width:0}
+      .atl-summary-row small{font-size:11.5px;color:var(--atl-glass-ink-muted);font-weight:500}
+      .atl-summary-row>span:last-child{white-space:nowrap;font-weight:700}
+      .atl-summary-row.is-stale{color:var(--atl-amber-ink)}
+      .atl-ready,.atl-summary-warning{margin:0;padding:9px 11px;border-radius:var(--atl-r-sm);
+        background:var(--atl-surface);font-size:12px;font-weight:700}
+      .atl-ready{color:var(--atl-teal-700);box-shadow:inset 3px 0 0 var(--atl-teal-700)}
+      .atl-summary-warning{color:var(--atl-amber-ink);box-shadow:inset 3px 0 0 var(--atl-amber-500)}
+      .atl-summary-note{margin:0;font-size:11.5px;line-height:1.4;color:var(--atl-glass-ink-muted)}
 
       .atl-nav{display:flex;align-items:center;gap:10px}
+      .atl-guide.is-summary .atl-nav{position:sticky;bottom:-1px;z-index:2;padding-top:13px;
+        background:linear-gradient(to bottom,transparent,var(--atl-glass-bg) 34%)}
       .atl-btn{
         min-height:44px;padding:8px 18px;border-radius:var(--atl-r-pill);border:1px solid transparent;
         font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
@@ -301,13 +421,15 @@ function shell() {
       @media (prefers-contrast:more){
         .atl-guide{background:var(--atl-surface);border:1px solid var(--atl-ink);
           -webkit-backdrop-filter:none;backdrop-filter:none}
-        .atl-option,.atl-chip,.atl-btn{border-color:var(--atl-ink)}
+        .atl-option,.atl-chip,.atl-btn,.atl-grout-color,.atl-grout-width{border-color:var(--atl-ink)}
       }
       @media (forced-colors:active){
         .atl-guide{background:Canvas;border:1px solid CanvasText;
           -webkit-backdrop-filter:none;backdrop-filter:none;forced-color-adjust:none;color:CanvasText}
-        .atl-option,.atl-chip,.atl-btn{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
-        .atl-option.is-selected,.atl-chip.is-active,.atl-btn-primary{background:Highlight;color:HighlightText}
+        .atl-option,.atl-chip,.atl-btn,.atl-grout-color,.atl-grout-width{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
+        .atl-option.is-selected,.atl-chip.is-active,.atl-btn-primary,
+        .atl-grout-color[aria-pressed="true"],.atl-grout-width[aria-pressed="true"]{background:Highlight;color:HighlightText}
+        .atl-payoff-head::before,.atl-payoff-head>strong::after,.atl-completion-bloom{display:none}
       }
       /* Transform on --atl-spring (the house's own small-control press curve),
          colour/shadow on --atl-smooth — the same split css/styles.css uses on
@@ -316,6 +438,14 @@ function shell() {
          gesture; the primary CTA is held a touch longer so the forward nudge
          reads as deliberate rather than twitchy. */
       @media (prefers-reduced-motion:no-preference){
+        .atl-stage::after{transition:opacity .7s var(--atl-smooth)}
+        .atl-guide.is-beat-entering{animation:atl-beat-in .44s var(--atl-smooth) both}
+        .atl-payoff.is-celebrating .atl-payoff-head{animation:atl-payoff-in .7s var(--atl-smooth) both}
+        .atl-payoff.is-celebrating .atl-payoff-head::before{animation:atl-completion-trace 1.15s var(--atl-smooth) .08s both}
+        .atl-payoff.is-celebrating .atl-payoff-head>strong::after{animation:atl-total-sweep .95s var(--atl-smooth) .18s both}
+        .atl-payoff.is-celebrating .atl-completion-bloom i{animation:atl-completion-bloom .88s var(--atl-spring) both}
+        .atl-payoff.is-celebrating .atl-completion-bloom i:nth-child(2n){animation-delay:.08s}
+        .atl-payoff.is-celebrating .atl-completion-bloom i:nth-child(3n){animation-delay:.15s}
         .atl-option{transition:transform var(--atl-dur-2) var(--atl-spring),
           box-shadow var(--atl-dur-2) var(--atl-smooth),border-color var(--atl-dur) var(--atl-smooth),
           background-color var(--atl-dur) var(--atl-smooth),color var(--atl-dur) var(--atl-smooth)}
@@ -327,6 +457,34 @@ function shell() {
           color var(--atl-dur) var(--atl-smooth)}
         .atl-panorama{transition:box-shadow var(--atl-dur-2) var(--atl-smooth),
           border-color var(--atl-dur) var(--atl-smooth),color var(--atl-dur) var(--atl-smooth)}
+        .atl-grout-color,.atl-grout-width{transition:border-color var(--atl-dur) var(--atl-smooth),
+          box-shadow var(--atl-dur) var(--atl-smooth),background-color var(--atl-dur) var(--atl-smooth),
+          color var(--atl-dur) var(--atl-smooth)}
+      }
+      @keyframes atl-beat-in{
+        from{opacity:.58;transform:translateX(var(--atl-beat-x,8px)) translateY(4px)}
+        to{opacity:1;transform:translateX(0) translateY(0)}
+      }
+      @keyframes atl-payoff-in{
+        from{opacity:.45;transform:scale(.975);box-shadow:0 0 0 rgba(13,112,125,0)}
+        to{opacity:1;transform:scale(1);box-shadow:0 14px 30px -20px rgba(13,112,125,.7)}
+      }
+      @keyframes atl-completion-trace{
+        0%{opacity:0;transform:scale(.985)}
+        28%{opacity:.96}
+        72%{opacity:.64}
+        100%{opacity:0;transform:scale(1.018)}
+      }
+      @keyframes atl-total-sweep{
+        0%{clip-path:inset(0 100% 0 0);opacity:0}
+        18%{opacity:1}
+        74%{clip-path:inset(0 0 0 0);opacity:1}
+        100%{clip-path:inset(0 0 0 100%);opacity:0}
+      }
+      @keyframes atl-completion-bloom{
+        0%{opacity:0;transform:translate(-50%,-50%) scale(.35) rotate(0)}
+        20%{opacity:.92}
+        100%{opacity:0;transform:translate(calc(-50% + var(--atl-bloom-x)),calc(-50% + var(--atl-bloom-y))) scale(.8) rotate(150deg)}
       }
       @media (prefers-reduced-motion:reduce){
         /* No transform anywhere — a hover lift or a forward nudge is still
@@ -360,6 +518,7 @@ function shell() {
           <h2 class="atl-question" id="atl-question"></h2>
           <p class="atl-help" id="atl-help"></p>
           <div class="atl-options" id="atl-options"></div>
+          <div class="atl-material" id="atl-material" hidden></div>
           <div class="atl-summary" id="atl-summary" hidden></div>
           <div class="atl-nav">
             <button type="button" class="atl-btn" id="atl-back">${esc(tt("atelier.back", "Natrag"))}</button>
@@ -380,7 +539,9 @@ function optionCard(chapter, opt, selected) {
 }
 
 function productCard(p, selected) {
-  const priceLabel = p.priceM2 != null ? `${formatEur(p.priceM2)} / m²` : "";
+  const priceLabel = p.priceM2 != null
+    ? `${formatEur(p.priceM2)} / m²`
+    : (p.priceUnit != null ? `${formatEur(p.priceUnit)} / kom` : "");
   return `
     <button type="button" class="atl-option atl-option-product${selected ? " is-selected" : ""}"
       data-product="${esc(p.id)}" aria-pressed="${selected ? "true" : "false"}"
@@ -388,7 +549,31 @@ function productCard(p, selected) {
       <span class="atl-swatch"></span>
       <span class="atl-option-label">${esc(p.name)}</span>
       <span class="atl-option-meta">${esc(priceLabel)}</span>
+      <span class="atl-option-mark" aria-hidden="true">✓</span>
     </button>`;
+}
+
+function materialControls(decision) {
+  if (!decision?.productId) return "";
+  const finish = surfaceFinishForDecision(decision);
+  return `
+    <div class="atl-material-head">
+      <p class="atl-material-title">${esc(tt("atelier.groutDetail", "Detalj fuge"))}</p>
+      <p class="atl-material-hint">${esc(tt("atelier.groutHint", "Prilagodite boju i širinu — spoj se mijenja pred vama."))}</p>
+    </div>
+    <div class="atl-grout-row" role="group" aria-label="${esc(tt("atelier.groutColor", "Boja fuge"))}">
+      <span class="atl-grout-label" aria-hidden="true">${esc(tt("atelier.groutColor", "Boja"))}</span>
+      ${GROUT_COLORS.map((color) => `
+        <button type="button" class="atl-grout-color" data-grout-color="${esc(color.id)}"
+          aria-label="${esc(groutLabel(color.id))}" aria-pressed="${color.id === finish.groutColorId}"
+          style="--atl-grout-color:${esc(color.hex)}"></button>`).join("")}
+    </div>
+    <div class="atl-grout-row" role="group" aria-label="${esc(tt("atelier.groutWidth", "Širina fuge"))}">
+      <span class="atl-grout-label" aria-hidden="true">${esc(tt("atelier.groutWidthShort", "Širina"))}</span>
+      ${ATELIER_GROUT_WIDTHS_MM.map((width) => `
+        <button type="button" class="atl-grout-width" data-grout-width="${width}"
+          aria-pressed="${width === finish.groutWidthMm}">${width} mm</button>`).join("")}
+    </div>`;
 }
 
 // ---- render one chapter's beat ---------------------------------------------
@@ -396,12 +581,32 @@ function renderChapter() {
   const cur = journey.current();
   const c = cur.chapter;
   const prog = journey.progress();
+  const moodId = journey.toJSON().decisions?.smjer?.optionId || "";
+  const changedChapter = lastChapterId !== c.id;
+  const flow = lastChapterIndex < 0 || cur.index >= lastChapterIndex ? "forward" : "back";
+  lastChapterId = c.id;
+  lastChapterIndex = cur.index;
+
+  const guide = container.querySelector("#atl-guide");
+  container.querySelector(".atl").dataset.mood = moodId;
+  container.querySelector(".atl").dataset.chapter = c.id;
+  guide.dataset.chapter = c.id;
+  guide.dataset.flow = flow;
+  if (changedChapter) {
+    guide.scrollTop = 0;
+    guide.classList.remove("is-beat-entering");
+    void guide.offsetWidth;
+    guide.classList.add("is-beat-entering");
+  }
 
   container.querySelector("#atl-progress-fill").style.width = `${Math.round(prog.fraction * 100)}%`;
   container.querySelector("#atl-progress-bar").setAttribute("aria-valuenow", String(Math.round(prog.fraction * 100)));
   container.querySelector("#atl-eyebrow").textContent = `${cur.index + 1} / ${journey.chapters.length} — ${c.title}`;
   container.querySelector("#atl-question").textContent = c.question;
-  container.querySelector("#atl-help").textContent = c.help || "";
+  container.querySelector("#atl-help").textContent = (c.help || "")
+    + (c.kind === "surface" && moodId
+      ? ` ${tt("atelier.directionOrder", "Prvi prijedlozi prate odabrani smjer.")}`
+      : "");
 
   const staleEl = container.querySelector("#atl-stale");
   if (cur.stale) {
@@ -414,9 +619,14 @@ function renderChapter() {
   }
 
   const optionsEl = container.querySelector("#atl-options");
+  const materialEl = container.querySelector("#atl-material");
   const summaryEl = container.querySelector("#atl-summary");
+  const completion = journey.completion();
+  guide.classList.toggle("is-summary", c.kind === "summary");
 
   if (c.kind === "direction") {
+    materialEl.hidden = true;
+    materialEl.innerHTML = "";
     summaryEl.hidden = true;
     optionsEl.hidden = false;
     optionsEl.innerHTML = c.options
@@ -425,21 +635,40 @@ function renderChapter() {
   } else if (c.kind === "surface" || c.kind === "fixtures") {
     summaryEl.hidden = true;
     optionsEl.hidden = false;
-    const list = products.filter((p) => p.category === c.category);
+    const available = productsForChapter(c, products);
+    const list = c.kind === "surface"
+      ? rankProductsForDirection(available, moodId)
+      : available;
+    const selected = new Set(c.kind === "fixtures"
+      ? decisionProductIds(cur.decision)
+      : (cur.decision?.productId ? [cur.decision.productId] : []));
     optionsEl.innerHTML = list.length
-      ? list.slice(0, 8).map((p) => productCard(p, cur.decision?.productId === p.id)).join("")
+      ? list.map((p) => productCard(p, selected.has(p.id))).join("")
       : `<p class="atl-empty">${esc(tt("atelier.noProducts", "Nema proizvoda u ovoj kategoriji."))}</p>`;
+    const controls = c.kind === "surface" ? materialControls(cur.decision) : "";
+    materialEl.innerHTML = controls;
+    materialEl.hidden = !controls;
   } else if (c.kind === "summary") {
+    materialEl.hidden = true;
+    materialEl.innerHTML = "";
     optionsEl.hidden = true;
     summaryEl.hidden = false;
-    summaryEl.innerHTML = renderSummary();
+    const state = journey.toJSON();
+    const celebrate = completion.ready && completionRewards.claim({
+      room: journey.room,
+      decisions: state.decisions,
+      assignments: journey.assignments(),
+    });
+    summaryEl.innerHTML = renderSummary({ celebrate });
   }
 
   container.querySelector("#atl-back").disabled = cur.isFirst;
   const nextBtn = container.querySelector("#atl-next");
-  nextBtn.disabled = c.kind !== "summary" && !cur.canAdvance;
+  nextBtn.disabled = c.kind === "summary" ? !completion.ready : !cur.canAdvance;
   nextBtn.textContent = c.kind === "summary"
-    ? tt("atelier.request", "Zatraži ponudu")
+    ? (completion.ready
+      ? tt("atelier.request", "Zatraži ponudu")
+      : tt("atelier.finishChoices", "Dovršite odabire"))
     : (c.required ? tt("atelier.next", "Dalje") : tt("atelier.skip", "Preskoči"));
 
   renderChapterNav(cur.index);
@@ -463,29 +692,49 @@ function renderChapterNav(activeIndex) {
   }).join("");
 }
 
-function renderSummary() {
-  const rows = journey.chapters
-    .filter((c) => c.kind === "surface" && journey.isAnswered(c.id))
-    .map((c) => {
-      const d = journey.current().chapter.id === c.id ? journey.current().decision : null;
-      const decision = d || Object.values(journey.assignments())[0];
-      return c;
-    });
-  const assigns = journey.assignments();
-  let total = 0;
-  const lines = Object.entries(assigns).map(([surface, a]) => {
-    const p = products.find((x) => x.id === a.productId);
-    if (!p) return "";
-    const areaM2 = surface === "floor" ? journey.room.widthM * journey.room.depthM
-      : journey.room.widthM * journey.room.heightM;
-    const est = orderEstimate(p, areaM2, "grid");
-    total += est.total || 0;
-    return `<li class="atl-summary-row"><span>${esc(p.name)}</span><span>${esc(formatEur(est.total || 0))}</span></li>`;
-  }).filter(Boolean);
+function renderSummary({ celebrate = false } = {}) {
+  const state = journey.toJSON();
+  const commission = buildCommission({
+    chapters: journey.chapters,
+    decisions: state.decisions,
+    assignments: journey.assignments(),
+    room: journey.room,
+    products,
+  });
+  const completion = journey.completion();
+  const fmtM = (value) => String(Math.round((Number(value) || 0) * 100) / 100).replace(".", ",");
+
+  const surfaceRows = commission.surfaces.map((row) => `
+    <li class="atl-summary-row${row.stale ? " is-stale" : ""}">
+      <span><strong>${esc(row.label)}</strong><small>${esc(row.product.name)} · ${esc(String(row.order.totalM2).replace(".", ","))} m² · ${esc(groutLabel(row.finish.groutColorId))} · ${row.finish.groutWidthMm} mm</small></span>
+      <span>${esc(formatEur(row.subtotal))}</span>
+    </li>`).join("");
+  const equipmentRows = commission.equipment.map((row) => `
+    <li class="atl-summary-row">
+      <span><strong>${esc(row.product.name)}</strong><small>${esc(row.label)}</small></span>
+      <span>${esc(formatEur(row.subtotal))}</span>
+    </li>`).join("");
+  const readiness = completion.ready
+    ? `<p class="atl-ready">${esc(tt("atelier.ready", "Projekt je spreman za razgovor s Akvatermom."))}</p>`
+    : `<p class="atl-summary-warning">${esc(tt("atelier.notReady", "Vratite se na označene korake i dovršite obavezne odabire."))}</p>`;
+
   return `
-    <ul class="atl-summary-list">${lines.join("")}</ul>
-    <p class="atl-summary-total">${esc(tt("atelier.estTotal", "Okvirna procjena"))}: <strong>${esc(formatEur(total))}</strong></p>
-    <p class="atl-summary-note">${esc(tt("atelier.estNote", "Točnu ponudu izrađuje Akvaterm."))}</p>`;
+    <div class="atl-payoff${celebrate ? " is-celebrating" : ""}">
+      <div class="atl-payoff-head">
+        ${celebrate ? `<span class="atl-completion-bloom" aria-hidden="true">${"<i></i>".repeat(8)}</span>` : ""}
+        <span class="atl-payoff-kicker">${esc(tt("atelier.project", "Projekt kupaonice"))}</span>
+        <strong data-total="${esc(formatEur(commission.total))}">${esc(formatEur(commission.total))}</strong>
+        <small>${esc(tt("atelier.demoEstimate", "Demo procjena materijala i odabrane opreme"))}</small>
+      </div>
+      <div class="atl-project-meta">
+        <span>${esc(`${fmtM(journey.room.widthM)} × ${fmtM(journey.room.depthM)} × ${fmtM(journey.room.heightM)} m`)}</span>
+        ${commission.direction ? `<span>${esc(commission.direction.label)}</span>` : ""}
+      </div>
+      ${surfaceRows ? `<h3>${esc(tt("atelier.surfaces", "Površine"))}</h3><ul class="atl-summary-list">${surfaceRows}</ul>` : ""}
+      ${equipmentRows ? `<h3>${esc(tt("atelier.equipment", "Oprema"))}</h3><ul class="atl-summary-list">${equipmentRows}</ul>` : ""}
+      ${readiness}
+      <p class="atl-summary-note">${esc(tt("atelier.estNote", "Procjena je informativna i ne uključuje otvore, ljepilo, fugu ni ugradnju. Točnu ponudu izrađuje Akvaterm."))}</p>
+    </div>`;
 }
 
 // ---- interaction ------------------------------------------------------------
@@ -494,18 +743,74 @@ function applyDirectionDecision(optionId) {
   const opt = chapter.options.find((o) => o.id === optionId);
   if (!opt) return;
   journey.decide(chapter.id, { optionId });
+  previewDirection(optionId);
   renderChapter();
+}
+
+function previewDirection(optionId) {
+  if (!api || Object.keys(journey.assignments()).length) return;
+  const tiles = rankProductsForDirection(
+    products.filter((product) => product.category === "keramika"),
+    optionId,
+  );
+  const floor = tiles[0];
+  const wall = tiles.find((product) => product.id !== floor?.id) || floor;
+  const moodFinish = liveSurfaceOptions({
+    groutColorId: optionId === "mirno" ? "bijela" : optionId === "izrazito" ? "antracit" : "siva",
+    groutWidthMm: optionId === "izrazito" ? 5 : 3,
+  });
+  if (floor) api.setSurface("floor", floor, moodFinish);
+  if (wall) {
+    for (const surface of ["wallN", "wallE", "wallS", "wallW"]) api.setSurface(surface, wall, moodFinish);
+  }
 }
 
 function applyProductDecision(productId) {
   const chapter = journey.current().chapter;
   const p = products.find((x) => x.id === productId);
   if (!p) return;
-  journey.decide(chapter.id, { productId });
+  if (chapter.kind === "fixtures") {
+    const productIds = toggleProductChoice(chapter, journey.current().decision, productId);
+    preferredFixtureProductId = productIds.includes(productId) ? productId : productIds[0] || null;
+    journey.decide(chapter.id, { productIds });
+    syncJourneyFixtures();
+  } else {
+    journey.decide(chapter.id, { productId, ...surfaceFinishForDecision(journey.current().decision) });
+  }
   if (chapter.kind === "surface" && chapter.surface && api) {
-    api.setSurface(chapter.surface, p, {});
+    const opts = liveSurfaceOptions(journey.current().decision);
+    for (const surface of (chapter.surfaces || [chapter.surface])) api.setSurface(surface, p, opts);
   }
   renderChapter();
+}
+
+function applyGroutDecision(patch) {
+  const cur = journey.current();
+  const chapter = cur.chapter;
+  if (chapter.kind !== "surface" || !cur.decision?.productId) return;
+  const product = products.find((item) => item.id === cur.decision.productId);
+  if (!product) return;
+  const finish = surfaceFinishForDecision({ ...cur.decision, ...patch });
+  journey.decide(chapter.id, { ...cur.decision, ...finish, productId: product.id });
+  const opts = { ...finish, liveGrout: true };
+  for (const surface of (chapter.surfaces || [chapter.surface])) api?.setSurface(surface, product, opts);
+  const materialEl = container.querySelector("#atl-material");
+  materialEl.innerHTML = materialControls(journey.current().decision);
+  autosave();
+}
+
+function syncJourneyFixtures() {
+  if (!api) return;
+  const state = journey.toJSON();
+  roomFixtures = buildFixturePlan({
+    chapters: journey.chapters,
+    decisions: state.decisions,
+    room: journey.room,
+    catalogue: api.getCatalogue(),
+    previous: roomFixtures,
+  });
+  api.setFixtures(roomFixtures);
+  autosave();
 }
 
 /** The ambient showcase's on/off — an amenity the customer opts into, never
@@ -535,6 +840,13 @@ function wire() {
     if (optBtn) { applyDirectionDecision(optBtn.dataset.option); return; }
     const prodBtn = e.target.closest("[data-product]");
     if (prodBtn) applyProductDecision(prodBtn.dataset.product);
+  });
+
+  container.querySelector("#atl-material").addEventListener("click", (e) => {
+    const color = e.target.closest("[data-grout-color]");
+    if (color) { applyGroutDecision({ groutColorId: color.dataset.groutColor }); return; }
+    const width = e.target.closest("[data-grout-width]");
+    if (width) applyGroutDecision({ groutWidthMm: Number(width.dataset.groutWidth) });
   });
 
   container.querySelector("#atl-next").addEventListener("click", () => {
@@ -567,14 +879,59 @@ function wire() {
 }
 
 function requestQuote() {
-  const assigns = journey.assignments();
-  const lines = Object.entries(assigns).map(([surface, a]) => {
-    const p = products.find((x) => x.id === a.productId);
-    return p ? `${surface}: ${p.name}` : "";
-  }).filter(Boolean).join("%0D%0A");
-  const subject = encodeURIComponent(tt("atelier.mailSubject", "Upit za kupaonicu — Akvaterm"));
-  const body = encodeURIComponent(tt("atelier.mailBody", "Odabrano:\n") + "\n") + lines;
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  const completion = journey.completion();
+  if (!completion.ready) {
+    window.AKV?.toast?.(tt("atelier.notReady", "Dovršite obavezne odabire prije slanja."));
+    return;
+  }
+
+  const state = journey.toJSON();
+  const commission = buildCommission({
+    chapters: journey.chapters,
+    decisions: state.decisions,
+    assignments: journey.assignments(),
+    room: journey.room,
+    products,
+  });
+  const fmtM = (value) => String(Math.round((Number(value) || 0) * 100) / 100).replace(".", ",");
+  const lines = [
+    tt("atelier.mailIntro", "Poštovani, molim razgovor i točnu ponudu za ovu kupaonicu:"),
+    "",
+    `${tt("atelier.dimensions", "Dimenzije")}: ${fmtM(journey.room.widthM)} × ${fmtM(journey.room.depthM)} × ${fmtM(journey.room.heightM)} m`,
+  ];
+  if (commission.direction) lines.push(`${tt("atelier.direction", "Smjer")}: ${commission.direction.label}`);
+  if (commission.surfaces.length) {
+    lines.push("", `${tt("atelier.surfaces", "Površine")}:`);
+    for (const row of commission.surfaces) {
+      lines.push(`- ${row.label}: ${row.product.name} — ${String(row.order.totalM2).replace(".", ",")} m² — ${groutLabel(row.finish.groutColorId)} ${row.finish.groutWidthMm} mm — ${formatEur(row.subtotal)}`);
+    }
+  }
+  if (commission.equipment.length) {
+    lines.push("", `${tt("atelier.equipment", "Oprema")}:`);
+    for (const row of commission.equipment) lines.push(`- ${row.product.name} — ${formatEur(row.subtotal)}`);
+  }
+  lines.push(
+    "",
+    `${tt("atelier.estTotal", "Demo procjena")}: ${formatEur(commission.total)}`,
+    tt("atelier.mailNote", "Procjena je informativna i ne uključuje otvore, ljepilo, fugu ni ugradnju."),
+    "",
+    location.href,
+  );
+
+  const subject = tt("atelier.mailSubject", "Upit za kupaonicu — Akvaterm");
+  window.location.href = `mailto:${QUOTE_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+  window.AKV?.toast?.(tt("atelier.mailOpen", "Otvaramo poruku s vašim projektom."));
+}
+
+function onFixtureMoved(event) {
+  const moved = event.detail;
+  const fixture = roomFixtures[moved?.index];
+  if (!fixture) return;
+  Object.assign(fixture, {
+    x: moved.x, z: moved.z, rotY: moved.rotY,
+    ax: moved.ax, az: moved.az,
+  });
+  autosave();
 }
 
 // ---- lifecycle --------------------------------------------------------------
@@ -587,6 +944,7 @@ export async function render(el) {
   const saved = loadAutosave();
   if (saved?.journeyState) journey.restore(saved.journeyState);
   if (saved?.room) journey.setRoom(saved.room);
+  roomFixtures = Array.isArray(saved?.fixtures) ? saved.fixtures.map((fixture) => ({ ...fixture })) : [];
 
   const all = await db.listProducts();
   if (!alive(token)) return;
@@ -601,11 +959,16 @@ export async function render(el) {
   const initialAssignments = {};
   for (const [surface, a] of Object.entries(journey.assignments())) {
     const p = products.find((x) => x.id === a.productId);
-    if (p) initialAssignments[surface] = { productId: p.id };
+    if (p) initialAssignments[surface] = {
+      productId: p.id,
+      ...liveSurfaceOptions(a),
+    };
   }
 
-  const handle = await mod.mountRoom(container.querySelector("#atl-stage"), {
-    room: journey.room,
+  fixtureEventStage = container.querySelector("#atl-stage");
+  fixtureEventStage.addEventListener("akv:fixture-moved", onFixtureMoved);
+  const handle = await mod.mountRoom(fixtureEventStage, {
+    room: { ...journey.room, fixtures: roomFixtures },
     assignments: initialAssignments,
     products,
     onReady: () => container.querySelector("#atl-loading")?.remove(),
@@ -627,24 +990,34 @@ export async function render(el) {
   });
   if (!alive(token)) { handle.dispose(); return; }
   api = handle;
+  const restoredMood = journey.toJSON().decisions?.smjer?.optionId;
+  if (restoredMood) previewDirection(restoredMood);
+  syncJourneyFixtures();
 
   // prefers-reduced-motion: short dissolves, no ceremonial orbit, no
   // continuous drift — mirrored into BOTH the director and the engine's own
   // glass blend, exactly as director3d/room3d document.
   reducedMotionMQ = matchMedia("(prefers-reduced-motion: reduce)");
-  const applyReducedMotion = () => api?.camera?.setReducedMotion(reducedMotionMQ.matches);
-  applyReducedMotion();
-  reducedMotionMQ.addEventListener?.("change", applyReducedMotion);
+  reducedMotionHandler = () => api?.camera?.setReducedMotion(reducedMotionMQ.matches);
+  reducedMotionHandler();
+  reducedMotionMQ.addEventListener?.("change", reducedMotionHandler);
 
   renderChapter();
 }
 
 export function teardown() {
   mountToken++;
-  reducedMotionMQ?.removeEventListener?.("change", () => {});
+  reducedMotionMQ?.removeEventListener?.("change", reducedMotionHandler);
   reducedMotionMQ = null;
+  reducedMotionHandler = null;
+  fixtureEventStage?.removeEventListener("akv:fixture-moved", onFixtureMoved);
+  fixtureEventStage = null;
   if (api) { api.camera?.stop(); api.dispose(); api = null; }
   journey = null;
   container = null;
   panoramaOn = false;
+  roomFixtures = [];
+  lastChapterId = null;
+  lastChapterIndex = -1;
+  preferredFixtureProductId = null;
 }

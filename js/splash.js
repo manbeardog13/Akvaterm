@@ -60,8 +60,9 @@
 // CONSTRAINTS THIS FILE HONOURS
 // ---------------------------------------------------------------------------
 //
-//   - Zero imports. Nothing is vendored, nothing is fetched, and the module can
-//     be imported from any view without dragging i18n or app state behind it.
+//   - Zero static imports. At departure it issues best-effort same-origin
+//     modulepreload hints for the next local journey surfaces, but never awaits
+//     them and never lets a warm-up delay navigation.
 //   - Only opacity and transform are ever animated. left/top/width are written
 //     once at build time to place a fixed overlay and never touched again;
 //     that is placement, not animation, and it costs no frame.
@@ -120,6 +121,10 @@ const SEL_CARD = ".pr-card";
 const SEL_WRAP = ".pr-wrap";
 const SEL_TO = ".topbar .brand";
 
+// Already local and service-worker-owned. These hints move fetch/parse work into
+// the intentional 700 ms handoff without turning that beat into a progress gate.
+const HANDOFF_MODULES = ["./views/katalog.js", "./views/atelier.js", "./views/savjetnik.js"];
+
 // Easing tokens with literal fallbacks. var() works in inline styles, but this
 // module can be imported into a page that has not loaded css/styles.css yet
 // (a test harness, a future route-level split), and an unresolvable var in a
@@ -146,17 +151,38 @@ const CSS = [
   "html." + FLY + " .topbar .brand{opacity:0}",
   "html." + FLY + "." + LAND + " .topbar .brand{opacity:1;transition:opacity " + T_LAND + "ms " + SMOOTH +
     ",transform var(--dur,200ms) var(--spring,cubic-bezier(.34,1.4,.5,1))}",
+  ".akv-orientation-cue{position:fixed;z-index:2147483645;left:50%;top:50%;display:flex;align-items:center;gap:15px;" +
+    "width:max-content;max-width:calc(100vw - 40px);padding:14px 18px 14px 15px;border:1px solid rgba(255,255,255,.22);" +
+    "border-radius:20px;background:rgba(9,12,11,.72);color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.32);" +
+    "backdrop-filter:blur(18px) saturate(1.08);-webkit-backdrop-filter:blur(18px) saturate(1.08);pointer-events:none;" +
+    "transform:translate3d(-50%,-44%,0);opacity:0;animation:akvOrientationCue " + T_TOTAL + "ms " + SMOOTH + " both}",
+  ".akv-orientation-device{position:relative;display:block;width:25px;height:42px;flex:0 0 auto;border:1.7px solid currentColor;" +
+    "border-radius:7px;transform-origin:50% 50%;animation:akvOrientationTurn " + T_TOTAL + "ms " + SNAP + " both}",
+  ".akv-orientation-device:before{content:'';position:absolute;left:50%;top:3px;width:7px;height:1.5px;border-radius:2px;" +
+    "background:currentColor;transform:translateX(-50%);opacity:.72}",
+  ".akv-orientation-device:after{content:'';position:absolute;left:50%;bottom:3px;width:3px;height:3px;border:1px solid currentColor;" +
+    "border-radius:50%;transform:translateX(-50%);opacity:.72}",
+  ".akv-orientation-copy{display:block;min-width:0}.akv-orientation-copy strong,.akv-orientation-copy span{display:block}",
+  ".akv-orientation-copy strong{font:650 13px/1.2 var(--font-text,system-ui,sans-serif);letter-spacing:.01em}",
+  ".akv-orientation-copy span{margin-top:4px;color:rgba(255,255,255,.64);font:500 11px/1.3 var(--font-text,system-ui,sans-serif)}",
+  "@keyframes akvOrientationTurn{0%,18%{transform:rotate(0deg)}72%,100%{transform:rotate(90deg)}}",
+  "@keyframes akvOrientationCue{0%{opacity:0;transform:translate3d(-50%,-42%,0)}12%,78%{opacity:1;transform:translate3d(-50%,-50%,0)}100%{opacity:0;transform:translate3d(-50%,-54%,0)}}",
+  "@media (min-width:761px),(orientation:landscape){.akv-orientation-cue{display:none!important}}",
   // SAFETY, not styling. If the class ever outlived a run — it cannot, but the
   // cost of being wrong is an app with no wordmark — reduced motion still shows
   // the real bar, and no overlay can paint.
   "@media (prefers-reduced-motion:reduce){",
   "  .akv-signin-ghost,.akv-signin-seam{display:none!important}",
+  "  .akv-orientation-cue{animation:none!important;opacity:1;transform:translate3d(-50%,-50%,0)}",
+  "  .akv-orientation-device{animation:none!important;transform:rotate(90deg)}",
   "  html." + FLY + " .topbar .brand{opacity:1!important}",
   "}",
   // The seam is a gradient hairline carrying no information. Forced-colors
   // repaints gradients as flat system colours, where it reads as a stray border.
   "@media (forced-colors:active){",
   "  .akv-signin-seam{display:none!important}",
+  "  .akv-orientation-cue{border:1px solid CanvasText;background:Canvas;color:CanvasText;forced-color-adjust:auto}",
+  "  .akv-orientation-copy span{color:CanvasText}",
   "  html." + FLY + " .topbar .brand{opacity:1!important}",
   "}",
 ].join("\n");
@@ -231,6 +257,70 @@ function prefersReduced() {
   }
 }
 
+function isPortraitPhone() {
+  try {
+    const viewport = window.visualViewport;
+    const width = Number(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 0);
+    const height = Number(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+    const coarse = !!window.matchMedia?.("(pointer: coarse)").matches;
+    const touch = Number(navigator.maxTouchPoints || 0) > 0;
+    return width > 0 && height > width && width <= 760 && (coarse || touch);
+  } catch {
+    return false;
+  }
+}
+
+function warmLocalJourneyModules() {
+  try {
+    if (!document.head) return;
+    const existing = Array.from(document.querySelectorAll("link[data-akv-handoff-preload]"));
+    for (const specifier of HANDOFF_MODULES) {
+      const href = new URL(specifier, import.meta.url).href;
+      if (existing.some((link) => link.href === href)) continue;
+      const link = document.createElement("link");
+      link.rel = "modulepreload";
+      link.href = href;
+      link.setAttribute("data-akv-handoff-preload", "");
+      document.head.appendChild(link);
+      existing.push(link);
+    }
+  } catch (err) {
+    warn("local module warm-up failed", err);
+  }
+}
+
+function buildOrientationCue(run) {
+  if (run.opts.orientationCue === false || !isPortraitPhone()) return null;
+  try {
+    const copy = run.opts.orientationCue && typeof run.opts.orientationCue === "object"
+      ? run.opts.orientationCue
+      : {};
+    const cue = document.createElement("div");
+    cue.className = "akv-orientation-cue";
+    cue.setAttribute("role", "status");
+    cue.setAttribute("aria-live", "polite");
+
+    const device = document.createElement("span");
+    device.className = "akv-orientation-device";
+    device.setAttribute("aria-hidden", "true");
+
+    const words = document.createElement("span");
+    words.className = "akv-orientation-copy";
+    const title = document.createElement("strong");
+    title.textContent = String(copy.title || "Okrenite telefon");
+    const detail = document.createElement("span");
+    detail.textContent = String(copy.detail || "Više prostora za vaš projekt");
+    words.append(title, detail);
+    cue.append(device, words);
+    document.body.appendChild(cue);
+    run.orientationCue = cue;
+    return cue;
+  } catch (err) {
+    warn("orientation cue failed", err);
+    return null;
+  }
+}
+
 function now() {
   try { return performance.now(); } catch { return Date.now(); }
 }
@@ -291,11 +381,12 @@ function cleanup(run) {
   for (const off of run.listeners) { try { off(); } catch { /* gone */ } }
   run.listeners.length = 0;
 
-  for (const node of [run.ghost, run.seam]) {
+  for (const node of [run.ghost, run.seam, run.orientationCue]) {
     try { if (node && node.remove) node.remove(); } catch (err) { warn("overlay removal failed", err); }
   }
   run.ghost = null;
   run.seam = null;
+  run.orientationCue = null;
 
   // Restored LAST, because these are the caller's own elements and are usually
   // already detached by app.js's swapMain() by the time we get here — harmless
@@ -700,6 +791,8 @@ function playFull(run) {
  *        Default sets location.hash = "#/". Pass false to own the route change
  *        yourself — the module will then never navigate, including on failure.
  * @param {boolean}              [options.reduced]   force the plain-fade path.
+ * @param {{title?:string,detail?:string}|false} [options.orientationCue]
+ *        portrait-phone handoff copy, or false to suppress the cue.
  * @param {AbortSignal}          [options.signal]    aborting cancels the run.
  * @returns {Promise<{reason:string,reduced:boolean,flew:boolean}> & {cancel:Function}}
  */
@@ -728,6 +821,7 @@ export function playSignInTransition(options) {
     restore: [],
     ghost: null,
     seam: null,
+    orientationCue: null,
     g0: null,
     fromRect: null,
     navigate: typeof opts.navigate === "function"
@@ -776,6 +870,8 @@ export function playSignInTransition(options) {
     }
 
     ensureStyles();
+    warmLocalJourneyModules();
+    buildOrientationCue(run);
 
     if (opts.reduced === true || prefersReduced()) {
       run.reduced = true;

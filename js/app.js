@@ -83,13 +83,13 @@ import { authConfigured, getSession, onAuthChange, signOut } from "./db.js";
 // THE version literal. Bumped on every ship, and there is exactly one of it:
 // the service worker is registered below as `./service-worker.js?v=${APP_V}`,
 // reads that query back as its VERSION, and derives `CACHE = "akv-" + VERSION`.
-// So the cache name follows this line automatically — it is "akv-v2" today —
+// So the cache name follows this line automatically from APP_V.
 // and the two cannot drift the way they did when service-worker.js carried its
 // own literal. service-worker.js's FALLBACK_VERSION is now only what a
 // registration WITHOUT the query would fall back to; keep it equal to this
 // string anyway, so a hand-registered worker lands in the same cache.
 // The worker's SHELL list must still cover every shipped file.
-export const APP_V = "v4";
+export const APP_V = "v11";
 
 document.documentElement.lang = LANG;
 

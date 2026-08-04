@@ -38,6 +38,7 @@ export const INTENT = {
   SURFACE: "focusSurface",
   INSPECT: "inspectMaterial",
   ORBIT: "orbitSelection",
+  REVEAL: "revealRoom",
 };
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,7 @@ export const BATHROOM_V0 = {
       intent: INTENT.OVERVIEW,
       // A mood chapter assigns nothing; it narrows what is offered later.
       kind: "direction",
+      required: true,
       options: [
         { id: "mirno", label: "Mirno i svijetlo", colorTags: ["bijela", "bez", "siva"], glossy: false },
         { id: "toplo", label: "Toplo i prirodno", colorTags: ["drvo", "bez", "smeđa"], glossy: false },
@@ -98,27 +100,56 @@ export const BATHROOM_V0 = {
       kind: "surface",
       category: "keramika",
       surface: "wallN",
+      surfaces: ["wallN", "wallE", "wallS", "wallW"],
       required: true,
     },
     {
       id: "sanitarije",
       title: "Sanitarija",
       question: "Što ide u prostor?",
-      help: "Umivaonik, WC, tuš ili kada — postavit ćemo ih u sobu.",
+      help: "Odaberite sve što želite — svaki umivaonik, WC ili tuš odmah postavljamo u sobu.",
       intent: INTENT.SURFACE,
       target: "vanity",
       kind: "fixtures",
       category: "sanitarije",
+      multiple: true,
+      // Catalogue products and room geometry are deliberately not conflated.
+      // A product may have an honest visual analogue, an exclusive alternative
+      // group, both, or neither. `null` types still belong in the proposal —
+      // they simply are not represented by misleading geometry in the room.
+      productFixtures: {
+        "san-01": { type: "wcModerni", choiceGroup: "wc", placement: "north-east" },
+        "san-02": { type: null, choiceGroup: "wc-seat" },
+        "san-03": { type: "umivaonikViseci", choiceGroup: "basin", placement: "east-mid" },
+        "san-04": { type: "umivaonikStup", choiceGroup: "basin", placement: "east-mid" },
+        "san-05": { type: "tusKabina", choiceGroup: "shower", placement: "north-west" },
+        "san-06": { type: "tusKabina", choiceGroup: "shower", placement: "north-west" },
+        "san-07": { type: null, choiceGroup: "wc-system" },
+      },
       required: true,
     },
     {
       id: "komfor",
       title: "Grijanje i klima",
       question: "Grijanje i hlađenje?",
-      help: "Za dimenzioniranje uvijek preporučujemo izlazak na teren.",
+      help: "Možete spojiti više rješenja ili ovaj korak ostaviti za razgovor na terenu.",
       intent: INTENT.OVERVIEW,
       kind: "fixtures",
-      category: "grijanje",
+      categories: ["grijanje", "klima"],
+      multiple: true,
+      productFixtures: {
+        "gri-01": { type: "radijator", choiceGroup: "visible-heating", placement: "south-mid" },
+        "gri-02": { type: "radijator", choiceGroup: "visible-heating", placement: "south-mid" },
+        "gri-03": { type: "radijator", choiceGroup: "visible-heating", placement: "south-mid" },
+        "gri-04": { type: null, choiceGroup: "underfloor" },
+        "gri-05": { type: null, choiceGroup: "heat-pump" },
+        "gri-06": { type: null, choiceGroup: "boiler" },
+        "kli-01": { type: "klima", choiceGroup: "climate", placement: "north-mid" },
+        "kli-02": { type: "klima", choiceGroup: "climate", placement: "north-mid" },
+        "kli-03": { type: "klima", choiceGroup: "climate", placement: "north-mid" },
+        "kli-04": { type: "klima", choiceGroup: "climate", placement: "north-mid" },
+        "kli-05": { type: "klima", choiceGroup: "climate", placement: "north-mid" },
+      },
       required: false,          // deferrable without blocking a proposal
     },
     {
@@ -126,7 +157,10 @@ export const BATHROOM_V0 = {
       title: "Ponuda",
       question: "Vaša kupaonica",
       help: "Pregled odabira s okvirnom procjenom. Točnu ponudu radi Akvaterm.",
-      intent: INTENT.OVERVIEW,
+      // A finite ceremonial establishing move, distinct from the opt-in
+      // standing Panorama loop. Reduced motion shortens it through the
+      // director contract; it never becomes an involuntary endless orbit.
+      intent: INTENT.REVEAL,
       kind: "summary",
     },
   ],
@@ -154,9 +188,21 @@ export function createJourney(definition = BATHROOM_V0) {
   const at = (i) => chapters[Math.max(0, Math.min(i, chapters.length - 1))];
   const indexOf = (id) => chapters.findIndex((c) => c.id === id);
 
-  /** A chapter is answered when it holds a decision and is not stale. */
+  /** A chapter is answered when it holds a meaningful decision and is not
+   *  stale. An empty multi-select is not an answer to a required chapter. */
   function isAnswered(id) {
-    return Boolean(state.decisions[id]) && !state.stale.has(id);
+    const chapter = chapters[indexOf(id)];
+    const decision = state.decisions[id];
+    if (!chapter || !decision || state.stale.has(id)) return false;
+    if (chapter.kind === "direction") return Boolean(decision.optionId);
+    if (chapter.kind === "surface") return Boolean(decision.productId);
+    if (chapter.kind === "fixtures") {
+      if (Array.isArray(decision.productIds)) return decision.productIds.length > 0;
+      if (decision.productId) return true;              // v0 draft compatibility
+      if (Array.isArray(decision.fixtures)) return decision.fixtures.length > 0;
+      return false;
+    }
+    return Boolean(decision);
   }
 
   /** Advance is allowed when the current chapter is answered OR optional.
@@ -246,6 +292,20 @@ export function createJourney(definition = BATHROOM_V0) {
     };
   }
 
+  /** Proposal readiness is stricter than navigation: optional chapters may be
+   *  deferred, but every required answer must be current. A stale material is
+   *  still preserved and shown; it simply cannot masquerade as quote-ready. */
+  function completion() {
+    const missing = chapters
+      .filter((chapter) => chapter.required && !isAnswered(chapter.id))
+      .map((chapter) => chapter.id);
+    return {
+      ready: missing.length === 0 && state.stale.size === 0,
+      missing,
+      stale: [...state.stale],
+    };
+  }
+
   /** Everything the view needs for the current beat, in one read. */
   function current() {
     const c = at(state.index);
@@ -268,7 +328,16 @@ export function createJourney(definition = BATHROOM_V0) {
     for (const c of chapters) {
       if (c.kind !== "surface" || !c.surface) continue;
       const d = state.decisions[c.id];
-      if (d && d.productId) out[c.surface] = { productId: d.productId, stale: state.stale.has(c.id) };
+      if (!d?.productId) continue;
+      for (const surface of (c.surfaces || [c.surface])) {
+        out[surface] = {
+          productId: d.productId,
+          pattern: d.pattern,
+          groutColorId: d.groutColorId,
+          groutWidthMm: d.groutWidthMm,
+          stale: state.stale.has(c.id),
+        };
+      }
     }
     return out;
   }
@@ -295,7 +364,7 @@ export function createJourney(definition = BATHROOM_V0) {
   }
 
   return {
-    current, next, back, decide, revise, affectedBy, progress,
+    current, next, back, decide, revise, affectedBy, progress, completion,
     assignments, isAnswered, canAdvance, toJSON, restore,
     get chapters() { return chapters; },
     get room() { return state.room; },

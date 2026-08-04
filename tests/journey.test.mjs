@@ -47,8 +47,18 @@ test("every camera intent is a real director verb", () => {
 test("surface chapters target real room3d surfaces", () => {
   const real = new Set(["floor", "wallN", "wallS", "wallE", "wallW"]);
   for (const c of BATHROOM_V0.chapters) {
-    if (c.kind === "surface") assert(real.has(c.surface), `${c.id} targets unknown surface ${c.surface}`);
+    if (c.kind !== "surface") continue;
+    for (const surface of (c.surfaces || [c.surface])) {
+      assert(real.has(surface), `${c.id} targets unknown surface ${surface}`);
+    }
   }
+});
+
+test("the wall decision covers and prices all four walls", () => {
+  const j = createJourney();
+  j.decide("zidovi", { productId: "ker-02" });
+  const ids = Object.keys(j.assignments()).sort();
+  assert(ids.join(",") === "wallE,wallN,wallS,wallW", `wall coverage is partial: ${ids}`);
 });
 
 console.log("\n[flow] advancing and blocking");
@@ -71,6 +81,22 @@ test("an optional chapter never blocks", () => {
   }
   assert(j.current().chapter.id === "komfor", `expected komfor, got ${j.current().chapter.id}`);
   assert(j.canAdvance(), "an optional chapter must be skippable — deferring is not failing");
+});
+
+test("direction is a real decision, not a skippable welcome screen", () => {
+  const j = createJourney();
+  assert(!j.canAdvance(), "the journey must begin with an intentional direction");
+  j.decide("smjer", { optionId: "toplo" });
+  assert(j.canAdvance(), "choosing a direction must open the path forward");
+});
+
+test("an empty required equipment selection is not an answer", () => {
+  const j = createJourney();
+  j.revise("sanitarije");
+  j.decide("sanitarije", { productIds: [] });
+  assert(!j.isAnswered("sanitarije"), "empty multi-select must stay incomplete");
+  j.decide("sanitarije", { productIds: ["san-01", "san-03"] });
+  assert(j.isAnswered("sanitarije"), "one or more selected products must answer the chapter");
 });
 
 test("back never loses a decision", () => {
@@ -164,6 +190,18 @@ test("staleness is surfaced in progress, not hidden", () => {
   j.decide("pod", { productId: "ker-01" });
   j.decide("smjer", { optionId: "izrazito" });
   assert(j.progress().staleCount === 1, "a stale chapter must be counted, not quietly dropped");
+});
+
+test("proposal readiness requires every required answer to be current", () => {
+  const j = createJourney();
+  assert(!j.completion().ready, "a fresh journey cannot be quote-ready");
+  j.decide("smjer", { optionId: "mirno" });
+  j.decide("pod", { productId: "ker-01" });
+  j.decide("zidovi", { productId: "ker-02" });
+  j.decide("sanitarije", { productIds: ["san-01"] });
+  assert(j.completion().ready, `complete journey was not ready: ${j.completion().missing}`);
+  j.decide("smjer", { optionId: "izrazito" });
+  assert(!j.completion().ready, "stale surfaces cannot masquerade as quote-ready");
 });
 
 console.log("\n[persistence] a commission survives a reload");

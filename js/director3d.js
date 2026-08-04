@@ -427,6 +427,16 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
     return goto(o.pos, o.target, SMOOTH.recover, "overview");
   }
 
+  /** One asymmetric establishing move for the journey's payoff. Unlike
+   *  orbitSelection() and playTour(), this is finite: it travels to one
+   *  composed pose and then settles into the director's ordinary living drift.
+   *  A reveal may be automatic because it never traps the customer in a loop. */
+  function revealRoom() {
+    if (destroyed) return makeResult("reveal", false, "disposed");
+    const pose = tourPose(35);
+    return goto(pose.pos, pose.target, SMOOTH.travel, "reveal");
+  }
+
   /** Stop directing and let the room breathe where it stands. */
   function settleIntoDrift() {
     cancel("settled-into-drift");
@@ -543,7 +553,7 @@ export function createDirector({ camera, controls, dims, surfaceRecs, requestFra
 
   return {
     focusSurface, inspectMaterial, orbitSelection, followGroutLine,
-    focusObject, returnToOverview, settleIntoDrift, yieldToUser, update,
+    focusObject, returnToOverview, revealRoom, settleIntoDrift, yieldToUser, update,
     playTour, stopTour,
     setReducedMotion(v) { reducedMotion = !!v; },
     isIdle: () => manual,

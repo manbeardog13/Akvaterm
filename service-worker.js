@@ -54,7 +54,7 @@
 
    A page may also postMessage {type:"akv:version"} to read this worker's
    version back (optionally passing its own as `v` for a logged comparison). */
-const FALLBACK_VERSION = "v4";           // only for a registration carrying no ?v= — keep == APP_V
+const FALLBACK_VERSION = "v11";          // only for a registration carrying no ?v= — keep == APP_V
 // BUG FIX 2026-08-03: was "v2" but APP_V in js/app.js line 92 is "v3". A hand-registered
 // worker or a stale cached index.html running an older app.js would create orphaned
 // caches (akv-v2 alongside akv-v3) instead of landing in the current cache. Synced to
@@ -77,6 +77,7 @@ const SHELL = [
   "./assets/icon.svg",
   "./data/catalog.seed.json",
   "./data/scenes.js",
+  "./assets/images/login-interior-cinematic.webp", // approved 106 KB local login photograph
   "./js/app.js",
   "./js/config.js",
   "./js/i18n.js",
@@ -94,6 +95,11 @@ const SHELL = [
   "./js/director3d.js",   // room3d imports it statically — a missing entry here is a broken 3D room offline, not a degraded one
   "./js/motion.js",       // director3d imports it statically — same reasoning, one level deeper
   "./js/journey.js",      // static import of atelier.js — the journey definition + state machine
+  "./js/commissioning.js", // pure journey -> room + proposal calculations
+  "./js/masked-reveal.js", // deterministic feathered material transition maths
+  "./js/live-grout.js",    // pure physical-width and interruptible grout motion maths
+  "./js/login-depth.js",   // pure pointer and device-orientation depth geometry
+  "./js/login-photo-style.js", // operator photo-set art direction for the login threshold
   "./js/terma.js",
   "./js/qrshare.js",
   "./js/splash.js",   // post-login transition; lazy-imported, so precached rather than blocking
@@ -136,6 +142,7 @@ const SHELL = [
   "./js/views/dizajner.js",
   "./js/views/soba3d.js",
   "./js/views/atelier.js",   // #/atelier — the guided journey, additive to soba3d
+  "./js/completion-reward.js", // one-shot proposal reward gate; no runtime dependency
   "./js/views/savjetnik.js",
   "./js/views/favoriti.js",
   "./js/views/dizajni.js",

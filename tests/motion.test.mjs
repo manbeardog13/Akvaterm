@@ -26,6 +26,9 @@ import { dirname, join } from "node:path";
 import {
   springScalar, blendFactor, latchGlass, stepBlend, driftAxis, isSettled,
 } from "../js/motion.js";
+import {
+  MASKED_REVEAL, advanceMaskedReveal, maskedRevealAlpha, maskedRevealTransform,
+} from "../js/masked-reveal.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -193,6 +196,38 @@ test("re-tiling mid-transition resumes cleanly from a known baseline", () => {
   assert(g > 0 && g < 1 && Number.isFinite(g), `resumed blend invalid: ${g}`);
 });
 
+// ---------------------------------------------------------------------------
+console.log("\n[behaviour] masked material replacement");
+// ---------------------------------------------------------------------------
+
+test("the mask preserves every pixel at the start and reveals every pixel at the end", () => {
+  for (const uv of [0, 0.25, 0.5, 0.75, 1]) {
+    close(maskedRevealAlpha(uv, 0), 0, 1e-9, `start alpha at ${uv}`);
+    close(maskedRevealAlpha(uv, 1), 1, 1e-9, `end alpha at ${uv}`);
+  }
+});
+
+test("the feather is monotonic and local while the reveal is moving", () => {
+  const samples = [0, 0.25, 0.5, 0.75, 1].map((uv) => maskedRevealAlpha(uv, 0.5));
+  for (let i = 1; i < samples.length; i++) {
+    assert(samples[i - 1] >= samples[i], `mask reversed at sample ${i}: ${samples}`);
+  }
+  assert(samples[0] === 1 && samples.at(-1) === 0,
+    `mid-reveal must preserve one side and replace the other: ${samples}`);
+});
+
+test("30/60/120 fps finish the material reveal in equal wall-clock time", () => {
+  const run = (fps) => {
+    let progress = 0;
+    const dt = 1 / fps;
+    for (let elapsed = 0; elapsed < MASKED_REVEAL.duration + 0.1; elapsed += dt) {
+      progress = advanceMaskedReveal(progress, dt);
+    }
+    return maskedRevealTransform(progress);
+  };
+  for (const fps of [30, 60, 120]) assert(run(fps).done, `${fps} fps did not settle`);
+});
+
 test("reduced motion settles faster and drift is suppressed", () => {
   const steps = (tau) => {
     let g = 0, n = 0;
@@ -259,6 +294,29 @@ test("applied[] is written only by applySurface", () => {
   assert(writes.length >= 1, "expected applySurface to write applied[]");
 });
 
+test("the masked reveal is render-only and releases every temporary resource", () => {
+  const start = room3d.indexOf("function finishSurfaceReveal");
+  const end = room3d.indexOf("function beginSurfaceReveal");
+  assert(start > 0 && end > start, "could not locate masked reveal cleanup");
+  const cleanup = room3d.slice(start, end);
+  assert(!/applied\s*\[/.test(cleanup), "reveal cleanup mutates product state");
+  assert(/rec\.mesh\.remove\(reveal\.overlay\)/.test(cleanup), "overlay is not removed");
+  assert(/reveal\.material\.dispose\(\)/.test(cleanup), "temporary material is not disposed");
+  assert(/reveal\.mask\.dispose\(\)/.test(cleanup), "temporary mask is not disposed");
+  assert(/else reveal\.texture\.dispose\(\)/.test(cleanup), "cancelled target texture is leaked");
+});
+
+test("masked reveals are on-demand, interruptible, and bypassed during restoration", () => {
+  assert(/finishSurfaceReveal\(rec, true\);[\s\S]{0,220}applied\[sid\]/.test(room3d),
+    "a newer surface choice does not settle its predecessor");
+  assert(/if \(updateSurfaceReveals\(dt\)\) again = true;/.test(room3d),
+    "the render loop does not stay alive only while a reveal is active");
+  assert(/groutWidthMm: a\.groutWidthMm,[\s\S]{0,40}\}, false\);/.test(room3d),
+    "restored assignments animate instead of mounting at their final state");
+  assert(/if \(reducedMotion\)[\s\S]{0,160}finishSurfaceReveal\(rec, true\)/.test(room3d),
+    "reduced motion does not settle an active reveal immediately");
+});
+
 test("capture is a reversible transaction that restores on throw", () => {
   assert(/function withOpaqueSurfaces/.test(room3d), "withOpaqueSurfaces missing");
   const start = room3d.indexOf("function withOpaqueSurfaces");
@@ -278,12 +336,20 @@ test("disposal marks destroyed BEFORE cancelling, so no verb can re-arm", () => 
 });
 
 test("every verb refuses to arm motion after disposal", () => {
-  for (const verb of ["focusSurface", "inspectMaterial", "orbitSelection", "followGroutLine", "returnToOverview"]) {
+  for (const verb of ["focusSurface", "inspectMaterial", "orbitSelection", "followGroutLine", "returnToOverview", "revealRoom"]) {
     const i = director3d.indexOf(`function ${verb}(`);
     assert(i > 0, `${verb} missing`);
     const head = director3d.slice(i, i + 260);
     assert(/if \(destroyed\) return makeResult/.test(head), `${verb} lacks a disposal guard`);
   }
+});
+
+test("the payoff reveal is a finite goto, never an automatic standing orbit", () => {
+  const i = director3d.indexOf("function revealRoom");
+  const block = director3d.slice(i, i + 520);
+  assert(i > 0, "revealRoom missing");
+  assert(/return goto\(/.test(block), "reveal does not use the interruptible finite move path");
+  assert(!/orbitSelection|playTour/.test(block), "the automatic payoff entered a standing motion state");
 });
 
 test("unknown targets report ok:false instead of failing silently", () => {

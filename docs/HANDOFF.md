@@ -1,5 +1,31 @@
 # HANDOFF — next session
 
+## Superseding update — 2026-08-04
+
+The operator explicitly replaced this file's older login authority with the
+photo set supplied on 2026-08-04. The later “Login: CLOSED / Do not restyle it”
+line below is historical and no longer governs the current surface.
+
+- `#/prijava` now uses the operator-approved local cinematic interior at
+  `assets/images/login-interior-cinematic.webp`, with no visible scene copy and
+  one compact glass card at a recorded 0.75 reference footprint. Its styling
+  lives in `js/login-photo-style.js`; depth geometry lives in `js/login-depth.js`.
+- Phone tilt is progressive and permission-gated where required. Reduced motion
+  is static; sensor values are neither stored nor transmitted; all listeners
+  are removed on teardown.
+- The 700 ms login departure now shows a minimal 90-degree phone-turn cue only
+  after entry and only on portrait touch phones. It does not lock orientation or
+  wait for a sensor. The same non-blocking beat module-preloads the next three
+  local journey surfaces; landscape and desktop receive no cue.
+- The guided bathroom v0 journey is complete locally: consequential direction,
+  all-wall decisions, multi-product equipment composition, persistent placement,
+  live grid grout colour/width, masked material reveal, priced proposal and one
+  finite completion reward.
+- The current work is on `feat/commissioning-journey-v0` and remains
+  **uncommitted and unpublished** pending an explicit commit/push decision.
+  Preserve the inherited dirty review batch and read
+  `docs/specs/cinematic-journey.md` for the section-level evidence.
+
 Written 2026-08-03 at the end of a long session. Read this first, then
 `docs/HOUSE_STANDARD.md`.
 

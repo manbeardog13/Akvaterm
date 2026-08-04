@@ -77,11 +77,15 @@ import { t } from "./i18n.js";
 import {
   GRID_M, IRIS, BARE_SURFACE_COLOR,
   MODEL_SPECS,
-  makeSurfaceTexture,
+  makeSurfaceTexture, normalizeSurfaceOptions,
   measureFootprint, rotatedExtent, limitsFor, axisSettle, reanchor,
   buildPlaceholder, loadPrototype, retainPrototypes, releasePrototypes, disposeObject,
 } from "./gfx3d.js";
 import { createDirector } from "./director3d.js";
+import {
+  MASKED_REVEAL, advanceMaskedReveal, maskedRevealTransform,
+} from "./masked-reveal.js";
+import { advanceLiveGrout, groutHalfUv } from "./live-grout.js";
 
 const DIM_MIN = 1.5, DIM_MAX = 8;
 const SURFACE_IDS = ["floor", "wallN", "wallE", "wallS", "wallW"];
@@ -116,6 +120,110 @@ const OUTWARD = {
 
 const clampDim = (v, fallback) =>
   Number.isFinite(v) ? Math.min(DIM_MAX, Math.max(DIM_MIN, v)) : fallback;
+
+// ---- Analytic grout material ------------------------------------------------
+// Atelier keeps its authored grid texture as the tile-face source and draws the
+// joint in the lit material shader. Width and colour therefore remain uniforms:
+// changing either never rebuilds a canvas, uploads another texture or compiles a
+// second shader program. The source pattern is deliberately grid-only; every
+// other laying pattern continues through the established baked texture path.
+const LIVE_GROUT_PROGRAM_KEY = "akv-live-grout-grid-v1";
+const MAP_FRAGMENT = `#ifdef USE_MAP
+	vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+	#ifdef DECODE_VIDEO_TEXTURE
+		sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
+	#endif
+	vec2 akvGridUv = vMapUv * uAkvTileRepeat;
+	vec2 akvCellUv = fract( akvGridUv );
+	vec2 akvEdge = min( akvCellUv, 1.0 - akvCellUv );
+	vec2 akvDeriv = max(vec2(
+		length( vec2( dFdx( akvGridUv.x ), dFdy( akvGridUv.x ) ) ),
+		length( vec2( dFdx( akvGridUv.y ), dFdy( akvGridUv.y ) ) )
+	), vec2( 0.00001 ));
+	vec2 akvTargetWidth = clamp( uAkvGroutHalf, vec2( 0.0 ), vec2( 0.49 ) );
+	vec2 akvDrawWidth = clamp( akvTargetWidth, akvDeriv, vec2( 0.5 ) );
+	vec2 akvLine = 1.0 - smoothstep(
+		akvDrawWidth - akvDeriv,
+		akvDrawWidth + akvDeriv,
+		akvEdge
+	);
+	vec2 akvCoverage = akvLine * clamp(
+		akvTargetWidth / max( akvDrawWidth, vec2( 0.00001 ) ),
+		vec2( 0.0 ), vec2( 1.0 )
+	);
+	float akvGrout = akvCoverage.x + akvCoverage.y - akvCoverage.x * akvCoverage.y;
+	sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, uAkvGroutColor, akvGrout );
+	diffuseColor *= sampledDiffuseColor;
+#endif`;
+
+function liveGroutValues(spec) {
+  const color = new THREE.Color(spec.groutColorHex);
+  return [spec.groutWidthMm, color.r, color.g, color.b];
+}
+
+function syncLiveGroutUniforms(state) {
+  const half = groutHalfUv(state.current[0], state.tileSizeMm);
+  state.uniforms.half.value.set(half[0], half[1]);
+  state.uniforms.color.value.setRGB(state.current[1], state.current[2], state.current[3]);
+}
+
+function installLiveGrout(material, spec) {
+  const current = liveGroutValues(spec);
+  const state = {
+    current,
+    target: [...current],
+    tileSizeMm: [...spec.tileSizeMm],
+    uniforms: {
+      half: { value: new THREE.Vector2() },
+      color: { value: new THREE.Color() },
+      tileRepeat: { value: new THREE.Vector2(...spec.tileRepeat) },
+    },
+  };
+  syncLiveGroutUniforms(state);
+  material.userData.akvLiveGrout = state;
+  material.defines = { ...(material.defines || {}), USE_UV: "" };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uAkvGroutHalf = state.uniforms.half;
+    shader.uniforms.uAkvGroutColor = state.uniforms.color;
+    shader.uniforms.uAkvTileRepeat = state.uniforms.tileRepeat;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <map_pars_fragment>",
+      `#include <map_pars_fragment>\n#ifdef USE_MAP\nuniform vec2 uAkvGroutHalf;\nuniform vec3 uAkvGroutColor;\nuniform vec2 uAkvTileRepeat;\n#endif`,
+    ).replace("#include <map_fragment>", MAP_FRAGMENT);
+  };
+  material.customProgramCacheKey = () => LIVE_GROUT_PROGRAM_KEY;
+  material.needsUpdate = true;
+}
+
+function clearLiveGrout(material) {
+  if (!material.userData.akvLiveGrout) return;
+  delete material.userData.akvLiveGrout;
+  if (material.defines) delete material.defines.USE_UV;
+  material.onBeforeCompile = () => {};
+  material.customProgramCacheKey = () => "";
+  material.needsUpdate = true;
+}
+
+function retargetLiveGrout(material, spec, reducedMotion) {
+  const state = material.userData.akvLiveGrout;
+  if (!state) return false;
+  state.target = liveGroutValues(spec);
+  if (reducedMotion) {
+    state.current = [...state.target];
+    syncLiveGroutUniforms(state);
+    return false;
+  }
+  return state.current.some((value, i) => value !== state.target[i]);
+}
+
+function updateLiveGrout(material, dt, reducedMotion) {
+  const state = material.userData.akvLiveGrout;
+  if (!state) return false;
+  const next = advanceLiveGrout(state.current, state.target, dt, { reducedMotion });
+  state.current = next.value;
+  syncLiveGroutUniforms(state);
+  return !next.done;
+}
 
 // ============================================================================
 // Fixture catalogue
@@ -244,6 +352,20 @@ const fixtureLabel = (type) => {
 };
 
 export const FIXTURE_TYPE_IDS = Object.keys(FIXTURE_SPECS);
+
+// Semantic names used by cinematic journeys. Persisted fixture type ids stay
+// Croatian and stable; guide copy stays free to say "vanity" or "bath" without
+// knowing which specific catalogue alternative supplied the geometry.
+const FIXTURE_SEMANTICS = {
+  vanity: ["umivaonik", "umivaonikStup", "umivaonikViseci"],
+  basin: ["umivaonik", "umivaonikStup", "umivaonikViseci"],
+  bath: ["kada", "kadaSlobodna", "tusKabina"],
+  shower: ["tusKabina"],
+  wc: ["wc", "wcKockasti", "wcModerni"],
+  radiator: ["radijator"],
+  climate: ["klima", "klimaVanjska"],
+  cabinets: ["ormaricVisoki", "kuhinjaDonji", "kuhinjaLadice", "kuhinjaKutni", "kuhinjaGornji"],
+};
 
 /** Public, read-only catalogue for the view's palette (label + grouping). */
 export const FIXTURE_CATALOGUE = FIXTURE_TYPE_IDS.map((type) => ({
@@ -543,15 +665,104 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
   // ---- Texturing through the shared pattern cell ---------------------------
   const applied = {}; // surfaceId -> { product, opts } for re-apply on setDims
 
-  function resetSurface(sid) {
-    const mat = surfaceRecs[sid].mesh.material;
-    if (mat.map) { mat.map.dispose(); mat.map = null; }
-    mat.color.set(bareColor(sid));
-    mat.roughness = 0.9;
+  // Inpainting's useful idea here is not generation; it is preservation. The
+  // existing material stays on the base mesh while a second material is shown
+  // through a soft moving alpha mask. Once the mask is full, the temporary
+  // layer is removed and the new texture becomes the ordinary base state.
+  function makeRevealMask() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 4;
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    gradient.addColorStop(0, "#fff");
+    gradient.addColorStop(1, "#000");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const mask = new THREE.CanvasTexture(canvas);
+    mask.wrapS = mask.wrapT = THREE.ClampToEdgeWrapping;
+    mask.minFilter = mask.magFilter = THREE.LinearFilter;
+    mask.generateMipmaps = false;
+    return mask;
+  }
+
+  function commitSurfaceTexture(rec, texture, roughness, liveGrout) {
+    const mat = rec.mesh.material;
+    if (mat.map && mat.map !== texture) mat.map.dispose();
+    mat.map = texture;
+    mat.color.set(0xffffff);
+    if (liveGrout) installLiveGrout(mat, liveGrout);
+    else clearLiveGrout(mat);
+    rec.baseRoughness = roughness;
+    if (rec.opaqueState) {
+      // Glass is a camera fact, not product state. Update its exact opaque
+      // target and reapply the current blend instead of cancelling coverage.
+      rec.opaqueState.roughness = roughness;
+      applyGlass(rec, rec.glass ?? 0);
+    } else {
+      mat.roughness = roughness;
+    }
     mat.needsUpdate = true;
   }
 
-  function applySurface(sid, product, opts = {}) {
+  function finishSurfaceReveal(rec, commit) {
+    const reveal = rec?.reveal;
+    if (!reveal) return;
+    rec.mesh.remove(reveal.overlay);
+    reveal.material.map = null;
+    reveal.material.alphaMap = null;
+    reveal.material.dispose();
+    reveal.mask.dispose();
+    rec.reveal = null;
+    if (commit) commitSurfaceTexture(rec, reveal.texture, reveal.roughness, reveal.liveGrout);
+    else reveal.texture.dispose();
+  }
+
+  function beginSurfaceReveal(rec, texture, roughness, liveGrout) {
+    const mask = makeRevealMask();
+    const start = maskedRevealTransform(0);
+    mask.repeat.set(start.repeatX, 1);
+    mask.offset.set(start.offsetX, 0);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      map: texture,
+      alphaMap: mask,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      roughness,
+      metalness: 0,
+      side: rec.mesh.material.side,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+    if (liveGrout) installLiveGrout(material, liveGrout);
+    const overlay = new THREE.Mesh(rec.mesh.geometry, material);
+    overlay.receiveShadow = true;
+    overlay.renderOrder = 2;
+    rec.mesh.add(overlay);
+    rec.reveal = {
+      overlay, material, mask, texture, roughness, liveGrout,
+      progress: 0,
+      duration: MASKED_REVEAL.duration,
+    };
+    requestRender();
+  }
+
+  function resetSurface(sid) {
+    const rec = surfaceRecs[sid];
+    finishSurfaceReveal(rec, false);
+    const mat = rec.mesh.material;
+    if (mat.map) { mat.map.dispose(); mat.map = null; }
+    clearLiveGrout(mat);
+    mat.color.set(bareColor(sid));
+    mat.roughness = 0.9;
+    rec.baseRoughness = 0.9;
+    mat.needsUpdate = true;
+  }
+
+  function applySurface(sid, product, opts = {}, animate = true) {
     const rec = surfaceRecs[sid];
     if (!rec) return;
     if (!product) {
@@ -560,24 +771,71 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       updateAriaLabel();
       return;
     }
+    // Settle an in-flight product replacement before reading the base material.
+    // Grout itself carries its exact current numeric value into every retarget,
+    // so rapid width/colour choices remain continuous instead of restarting.
+    finishSurfaceReveal(rec, true);
+    const normalizedRequest = normalizeSurfaceOptions(opts);
+    const previous = applied[sid];
+    const sameLiveGrid = animate
+      && normalizedRequest.liveGrout
+      && rec.mesh.material.userData.akvLiveGrout
+      && previous?.product?.id === product.id
+      && previous.opts.pattern === normalizedRequest.pattern
+      && previous.opts.rotationDeg === normalizedRequest.rotationDeg;
+    if (sameLiveGrid) {
+      const state = rec.mesh.material.userData.akvLiveGrout;
+      const spec = {
+        tileSizeMm: product.tileSizeMm,
+        tileRepeat: state.uniforms.tileRepeat.value.toArray(),
+        groutWidthMm: normalizedRequest.groutWidthMm,
+        groutColorHex: normalizedRequest.groutColorHex,
+      };
+      applied[sid] = { product, opts: normalizedRequest };
+      if (retargetLiveGrout(rec.mesh.material, spec, reducedMotion)) requestRender();
+      updateAriaLabel();
+      return;
+    }
     // gfx3d.makeSurfaceTexture is the single tiling pass: buildPatternCell →
     // CanvasTexture, sRGB, RepeatWrapping, max anisotropy, and
     // repeat = surfaceMetres / cellMetres so a 600 mm tile stays 600 mm.
-    const { texture, normalized } =
+    const { texture, normalized, liveGrout } =
       makeSurfaceTexture(product, opts, surfaceSizeM(sid), maxAniso);
-    const mat = rec.mesh.material;
-    if (mat.map) mat.map.dispose();
-    mat.map = texture;
-    mat.color.set(0xffffff);
-    mat.roughness = product.glossy ? 0.28 : 0.8;
-    // Re-tiling redefines what "opaque" means for this surface, so the glass
-    // blend has to be told its new baseline or the next frame would blend
-    // toward the PREVIOUS product's roughness.
-    rec.baseRoughness = mat.roughness;
-    rec.glass = null;
-    mat.needsUpdate = true;
+    const roughness = product.glossy ? 0.28 : 0.8;
+    // A rapid new choice supersedes the old transition. Settle its selected
+    // target first so no temporary texture or half-mask survives into the next
+    // reveal; the new selection then owns the only active overlay.
     applied[sid] = { product, opts: normalized };
+    if (animate && !reducedMotion && readyFired) beginSurfaceReveal(rec, texture, roughness, liveGrout);
+    else commitSurfaceTexture(rec, texture, roughness, liveGrout);
     updateAriaLabel();
+  }
+
+  function updateSurfaceReveals(dt) {
+    let active = false;
+    for (const rec of Object.values(surfaceRecs)) {
+      const reveal = rec.reveal;
+      if (!reveal) continue;
+      reveal.progress = advanceMaskedReveal(reveal.progress, dt, reveal.duration);
+      const transform = maskedRevealTransform(reveal.progress);
+      reveal.mask.offset.x = transform.offsetX;
+      // A wall that is currently providing glass camera coverage must keep the
+      // same presence while its product changes; the overlay cannot punch an
+      // opaque rectangle through that coverage layer.
+      reveal.material.opacity = 1 - (rec.glass ?? 0) * (1 - GLASS.floor);
+      if (transform.done) finishSurfaceReveal(rec, true);
+      else active = true;
+    }
+    return active;
+  }
+
+  function updateSurfaceGrout(dt) {
+    let active = false;
+    for (const rec of Object.values(surfaceRecs)) {
+      if (updateLiveGrout(rec.mesh.material, dt, reducedMotion)) active = true;
+      if (rec.reveal && updateLiveGrout(rec.reveal.material, dt, reducedMotion)) active = true;
+    }
+    return active;
   }
 
   // ---- Accessible name -----------------------------------------------------
@@ -1191,7 +1449,8 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     // named and the catalogue can grow without touching the target table.
     resolveFixture: (name) => {
       const want = String(name || "").toLowerCase();
-      const rec = fixtureRecs.find((r) => String(r?.f?.kind || "").toLowerCase() === want);
+      const types = FIXTURE_SEMANTICS[want] || [name];
+      const rec = fixtureRecs.find((r) => r && types.includes(r.type));
       return rec ? rec.group : null;
     },
   });
@@ -1299,6 +1558,8 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
     // The glass blend runs on its own clock, so a wall mid-transition keeps the
     // loop alive even when the camera itself has settled.
     if (updateWallVisibility(dt)) again = true;
+    if (updateSurfaceReveals(dt)) again = true;
+    if (updateSurfaceGrout(dt)) again = true;
     renderer.render(scene, camera);
     if (!readyFired) {
       readyFired = true;
@@ -1392,7 +1653,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
         pattern: a.pattern,
         groutColorId: a.groutColorId,
         groutWidthMm: a.groutWidthMm,
-      });
+      }, false);
     }
   }
   syncFixtures(Array.isArray(room.fixtures) ? room.fixtures : []);
@@ -1414,7 +1675,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       // re-run a loader per fixture and destroy the selection mid-edit.
       reflow();
       for (const [sid, rec] of Object.entries(applied)) {
-        if (rec) applySurface(sid, rec.product, rec.opts);
+        if (rec) applySurface(sid, rec.product, rec.opts, false);
       }
       updateAriaLabel();
       requestRender();
@@ -1435,6 +1696,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       followGroutLine(sid, o) { startCinematic(); director.followGroutLine(sid, o); },
       focusObject(obj, o) { startCinematic(); director.focusObject(obj, o); },
       returnToOverview() { startCinematic(); director.returnToOverview(); },
+      revealRoom() { startCinematic(); director.revealRoom(); },
       settleIntoDrift() { startCinematic(); director.settleIntoDrift(); },
       // The ambient showcase — an opt-in standing state, never guide-triggered.
       // Grabbing the camera or any other verb (a chapter change) supersedes it
@@ -1445,7 +1707,17 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       // Reduced motion: short dissolve, no ceremonial orbit, no continuous
       // drift. Set on BOTH — the glass blend is engine-side and would otherwise
       // keep its full-length transition while the camera had gone still.
-      setReducedMotion(v) { reducedMotion = !!v; director.setReducedMotion(v); },
+      setReducedMotion(v) {
+        reducedMotion = !!v;
+        director.setReducedMotion(v);
+        if (reducedMotion) {
+          for (const rec of Object.values(surfaceRecs)) {
+            finishSurfaceReveal(rec, true);
+            updateLiveGrout(rec.mesh.material, 0, true);
+          }
+          requestRender();
+        }
+      },
       /** Reversible capture transaction — see withOpaqueSurfaces(). */
       withOpaqueSurfaces(fn) { return withOpaqueSurfaces(fn); },
       get debug() { return { ...director.debug, cinematic }; },
@@ -1487,6 +1759,7 @@ export async function mountRoom(el, { room = {}, assignments = {}, products = []
       clearTimeout(idleReturnTimer);   // an armed return firing into a disposed room is exactly what dispose() exists to prevent
       cinematic = false;
       director.dispose();
+      for (const rec of Object.values(surfaceRecs)) finishSurfaceReveal(rec, false);
       canvasEl.style.touchAction = "pan-y";
       controls.dispose();
       recByGroup.clear();

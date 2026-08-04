@@ -402,15 +402,34 @@ function quarterTurn(deg) {
  * turn the texture's u axis is driven by the surface's v axis: the repeat pair
  * has to be swapped as well as the angle set, or a rotated wall re-scales.
  */
-export function makeSurfaceTexture(product, opts, surfaceMetres, maxAniso) {
-  const normalized = {
-    pattern: opts.pattern || "grid",
+export function normalizeSurfaceOptions(opts = {}) {
+  const pattern = opts.pattern || "grid";
+  return {
+    pattern,
     groutColorHex: opts.groutColorHex || groutHexById(opts.groutColorId),
-    groutWidthMm: Number.isFinite(opts.groutWidthMm) ? opts.groutWidthMm : 3,
+    groutWidthMm: Number.isFinite(opts.groutWidthMm) ? Math.max(0, opts.groutWidthMm) : 3,
+    rotationDeg: quarterTurn(opts.rotationDeg),
+    // The analytic path is intentionally bounded to the grid used by Atelier.
+    // Other room views keep their mature baked running-bond/herringbone/diagonal
+    // cells until those fields have equally strong filtering and visual proof.
+    liveGrout: opts.liveGrout === true && pattern === "grid",
   };
+}
+
+export function makeSurfaceTexture(product, opts = {}, surfaceMetres, maxAniso) {
+  const normalized = normalizeSurfaceOptions(opts);
+  const tileSizeMm = Array.isArray(product?.tileSizeMm) && product.tileSizeMm.length >= 2
+    ? product.tileSizeMm.map(Number)
+    : null;
+  const liveGrout = normalized.liveGrout && tileSizeMm?.every((value) => Number.isFinite(value) && value > 0);
+  normalized.liveGrout = !!liveGrout;
+  // Live grout is not painted into the canvas. The procedural tile faces are
+  // still generated once, while room3d draws and animates the joint in GLSL.
+  const bakedGroutWidthMm = liveGrout ? 0 : normalized.groutWidthMm;
   const { canvas, cellSizeMm } = buildPatternCell(product, {
     ...normalized,
-    scalePxPerMm: cellScaleFor(product, normalized.pattern, normalized.groutWidthMm),
+    groutWidthMm: bakedGroutWidthMm,
+    scalePxPerMm: cellScaleFor(product, normalized.pattern, bakedGroutWidthMm),
   });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -420,7 +439,7 @@ export function makeSurfaceTexture(product, opts, surfaceMetres, maxAniso) {
 
   const cellW = cellSizeMm[0] / 1000, cellH = cellSizeMm[1] / 1000;
   const [sw, sh] = surfaceMetres;
-  const rotationDeg = quarterTurn(opts.rotationDeg);
+  const rotationDeg = normalized.rotationDeg;
   if (rotationDeg === 90 || rotationDeg === 270) {
     texture.repeat.set(sh / cellW, sw / cellH);
   } else {
@@ -430,7 +449,15 @@ export function makeSurfaceTexture(product, opts, surfaceMetres, maxAniso) {
     texture.center.set(0.5, 0.5);
     texture.rotation = (rotationDeg * Math.PI) / 180;
   }
-  return { texture, cellSizeMm, normalized, rotationDeg };
+  const liveGroutSpec = liveGrout ? {
+    tileSizeMm,
+    // buildPatternCell intentionally uses a 2x2 variant for grid surfaces so
+    // neighbouring tiles can carry deterministic tone variation.
+    tileRepeat: [cellSizeMm[0] / tileSizeMm[0], cellSizeMm[1] / tileSizeMm[1]],
+    groutWidthMm: normalized.groutWidthMm,
+    groutColorHex: normalized.groutColorHex,
+  } : null;
+  return { texture, cellSizeMm, normalized, rotationDeg, liveGrout: liveGroutSpec };
 }
 
 // ============================================================================

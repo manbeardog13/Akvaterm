@@ -492,6 +492,35 @@ const CATALOG_CSS = `
   font-family:var(--akv-fam-text);font-weight:600;font-size:.875rem;letter-spacing:.02em;
 }
 
+/* ---- Atelier invitation -------------------------------------------------
+   A deliberate front door into the guided journey, not a fifth category and
+   not another navigation tab. The diagonal carries the same water-to-warmth
+   idea as the journey itself, using only Iris tokens already measured above. */
+.akv-journey{
+  position:relative;overflow:hidden;margin:0 0 28px;border-radius:var(--akv-r-2xl);
+  background:linear-gradient(135deg,var(--akv-teal-ink) 0%,var(--akv-teal-ink) 68%,var(--akv-brown) 150%);
+  color:#fff;box-shadow:var(--akv-sh-2),inset 0 1px 0 rgba(255,255,255,.20);
+}
+.akv-journey::after{
+  content:"";position:absolute;width:260px;height:260px;right:-80px;top:-150px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 0 0 34px rgba(255,255,255,.035),0 0 0 72px rgba(255,255,255,.025);
+  pointer-events:none;
+}
+.akv-journey-a{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;gap:20px;padding:clamp(22px,5vw,36px);color:inherit;text-decoration:none}
+.akv-journey-copy{display:grid;gap:7px;max-width:620px}
+.akv-journey-e{font-size:.6875rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#fff}
+.akv-journey-t{margin:0;font-family:var(--akv-fam-display);font-size:clamp(1.55rem,4vw,2.65rem);
+  line-height:1.08;letter-spacing:-.025em;color:#fff;overflow:visible;padding-top:.12em}
+.akv-journey-s{margin:0;max-width:54ch;font-size:.875rem;line-height:1.55;color:#fff}
+.akv-journey-btn{display:inline-flex;align-items:center;justify-content:center;min-height:49px;padding:0 20px;
+  border-radius:var(--akv-r-pill);background:var(--akv-amber);color:var(--akv-ink);
+  font-size:.875rem;font-weight:700;white-space:nowrap;box-shadow:0 8px 22px -14px rgba(93,79,79,.7)}
+@media(max-width:620px){
+  .akv-journey-a{grid-template-columns:1fr;align-items:start}
+  .akv-journey-btn{justify-self:start}
+}
+
 /* ---- section heading ----------------------------------------------------- */
 .akv-sec{display:flex;align-items:baseline;gap:12px;margin:0 0 16px;overflow:visible}
 
@@ -689,7 +718,7 @@ const CATALOG_CSS = `
   to{opacity:1;transform:none}
 }
 @media (prefers-reduced-motion:no-preference){
-  .akv-cat-card,.akv-pcard,.akv-dcard,.akv-empty,.akv-resume,.akv-panel{
+  .akv-cat-card,.akv-pcard,.akv-dcard,.akv-empty,.akv-resume,.akv-journey,.akv-panel{
     animation:akv-rise 420ms var(--akv-ease) backwards;
   }
   .akv-grid>.akv-pcard:nth-child(2),.akv-cats>.akv-cat-card:nth-child(2),#dizList>.akv-dcard:nth-child(2){animation-delay:26ms}
@@ -789,7 +818,7 @@ html[data-transparency="reduced"] .akv-cat-card::after{display:none}
       sees the finished layout, never a stuck 'from' state. */
 @media (prefers-reduced-motion:reduce){
   .akv-pcard,.akv-cat-card,.akv-chip,.akv-fav,.akv-btn,.akv-cat-card::after,.akv-thumb-load,
-  .akv-dcard,.akv-empty,.akv-resume,.akv-panel{
+  .akv-dcard,.akv-empty,.akv-resume,.akv-journey,.akv-panel{
     transition-duration:1ms !important;animation:none !important;
   }
   .akv-pcard:hover,.akv-pcard:focus-within,.akv-cat-card:hover,.akv-cat-card:focus-visible{transform:none}
@@ -1026,6 +1055,37 @@ function resumeMarkup(draft) {
   </section>`;
 }
 
+function readAtelierDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem("akv:atelier-draft") || "null");
+    const decisions = draft?.journeyState?.decisions;
+    return decisions && Object.keys(decisions).length ? draft : null;
+  } catch { return null; }
+}
+
+function journeyMarkup(hasDraft) {
+  const title = hasDraft
+    ? tf("kat.atelierResumeTitle", "Nastavite svoju kupaonicu")
+    : tf("kat.atelierTitle", "Od osjećaja do gotovog projekta");
+  const body = hasDraft
+    ? tf("kat.atelierResumeSub", "Vaši odabiri i raspored čekaju vas u Atelieru.")
+    : tf("kat.atelierSub", "Odgovorite na nekoliko mirnih pitanja dok se prostor, materijali i oprema oblikuju pred vama.");
+  const cta = hasDraft
+    ? tf("kat.atelierResumeCta", "Nastavi projekt")
+    : tf("kat.atelierCta", "Započni uređenje");
+  return `
+    <section class="akv-journey">
+      <a class="akv-journey-a" href="#/atelier">
+        <div class="akv-journey-copy">
+          <span class="akv-journey-e">${esc(tf("kat.atelierEyebrow", "Akvaterm Atelier"))}</span>
+          <h2 class="akv-journey-t">${esc(title)}</h2>
+          <p class="akv-journey-s">${esc(body)}</p>
+        </div>
+        <span class="akv-journey-btn">${esc(cta)}</span>
+      </a>
+    </section>`;
+}
+
 async function hydrateResume(container, draft, products) {
   const host = container.querySelector("#akvResume");
   if (!host) return;
@@ -1078,6 +1138,7 @@ function renderHome(container, products, favSet) {
   const featured = FEATURED_IDS.map((id) => products.find((p) => p.id === id)).filter(Boolean);
   const feat = featured.length ? featured : products.slice(0, 6);
   const draft = readDesignerDraft();
+  const atelierDraft = readAtelierDraft();
 
   container.innerHTML = `
     ${pageHead(
@@ -1086,6 +1147,7 @@ function renderHome(container, products, favSet) {
       tf("kat.sub", "Pločice i oprema za vaš dom — pregledajte, spremite favorite i primijenite u dizajneru."),
     )}
     <p class="akv-note">${esc(tf("kat.demo", "Demo katalog — proizvodi i cijene su ogledni podaci za prezentaciju, ne stvarna ponuda."))}</p>
+    ${journeyMarkup(Boolean(atelierDraft))}
     <nav class="akv-cats" aria-label="${esc(tf("kat.categories", "Kategorije"))}">
       ${CATEGORIES.map((c) => `
         <a class="akv-cat-card" data-cat="${esc(c.id)}" href="#/katalog/${esc(c.id)}">
