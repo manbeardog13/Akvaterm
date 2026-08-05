@@ -136,7 +136,15 @@ test("grout motion keeps the on-demand render loop alive only while active", () 
 test("Atelier persists finish decisions and exposes touch-sized controls", () => {
   assert(/journey\.decide\(chapter\.id, \{ productId, \.\.\.surfaceFinishForDecision/.test(atelier), "product choice drops finish state");
   assert(/min-width:44px;min-height:44px/.test(atelier), "grout controls miss the touch target floor");
-  assert(/data-grout-color/.test(atelier) && /data-grout-width/.test(atelier), "grout controls are not wired");
+  assert(/data-grout-color/.test(atelier) && /data-grout-step/.test(atelier), "grout controls are not wired");
+});
+
+test("the grout width control is a continuous stepper, not a flat pick-one list (operator instruction, 2026-08-05)", () => {
+  assert(/function stepGroutWidth/.test(atelier), "stepGroutWidth() is missing");
+  assert(/function groutWidthStepper/.test(atelier), "groutWidthStepper() markup is missing");
+  assert(/atl-grout-readout/.test(atelier), "the live current-value readout is missing");
+  assert(!/data-grout-width=/.test(atelier), "the old flat pick-one buttons are still present");
+  assert(/api\.camera\.followGroutLine\(target\)/.test(atelier), "entering the grout sub-step never calls the existing followGroutLine() camera verb");
 });
 
 test("the service worker precaches nothing (retired, operator instruction 2026-08-04)", () => {

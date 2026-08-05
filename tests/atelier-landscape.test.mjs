@@ -17,12 +17,21 @@ test("the deliberate menu uses the same optical material without reviving Terma"
   assert.match(globalStyle, /linear-gradient\(138deg,rgba\(12,18,14,\.76\),rgba\(4,8,6,\.68\) 72%\)/);
 });
 
-test("landscape is a full-bleed room with one right-side decision lens", () => {
+test("landscape is a full-bleed room; the bottom floating cluster is the same one portrait uses, no separate right-side card", () => {
   assert.match(atelier, /@media\(min-width:560px\) and \(orientation:landscape\)/);
   assert.match(atelier, /\.atl-root\{position:fixed;inset:0;height:auto;min-height:100dvh\}/);
   assert.match(atelier, /\.atl-stage\{inset:0;border-radius:0;background:#020403\}/);
-  assert.match(atelier, /\.atl-guide\{[\s\S]*left:auto;right:max\(16px,[\s\S]*width:min\(360px,42vw\)/);
-  assert.match(atelier, /backdrop-filter:blur\(14px\) saturate\(145%\) brightness\(\.91\)/);
+  // The right-side "decision lens" card this test used to assert on is gone
+  // (operator instruction, 2026-08-05, IMG_6516 — that exact card was
+  // blocking two-thirds of the room). The landscape media query now only
+  // caps .atl-guide's width, reusing the base rule's floating pieces.
+  assert.doesNotMatch(atelier, /left:auto;right:max\(16px,[\s\S]{0,80}width:min\(360px,42vw\)/,
+    "the removed right-side card must not have come back");
+  const landscapeBlock = atelier.slice(
+    atelier.indexOf("@media(min-width:560px) and (orientation:landscape){"),
+    atelier.indexOf("Compact landscape phones"),
+  );
+  assert.match(landscapeBlock, /\.atl-guide\{max-width:420px\}/);
 });
 
 test("chapter waypoints stay compact without sacrificing touch geometry", () => {
@@ -36,7 +45,6 @@ test("chapter waypoints stay compact without sacrificing touch geometry", () => 
 test("compact landscape phones keep the room instead of falling back to portrait", () => {
   assert.match(atelier, /@media\(min-width:560px\) and \(max-width:719px\) and \(orientation:landscape\)/);
   assert.match(atelier, /\.atl-chapters\{display:none\}/);
-  assert.match(atelier, /width:min\(330px,48vw\)/);
 });
 
 test("landscape motion never animates blur and offers a still alternative", () => {
@@ -49,13 +57,13 @@ test("landscape motion never animates blur and offers a still alternative", () =
 test("the active room inherits the opening image until WebGL is ready", () => {
   assert.match(atelier, /\.atl-prelude\{[^}]*z-index:1[^}]*pointer-events:none/);
   assert.match(atelier, /\.atl-prelude img\{[^}]*object-position:center 58%[^}]*filter:blur\(16px\) saturate\(1\.10\) brightness\(1\.03\)/);
-  assert.match(atelier, /\.atl-guide\{[\s\S]*z-index:3/);
+  assert.match(atelier, /\.atl-guide\{[\s\S]*z-index:2/);
   assert.match(atelier, /function resolveRoomPrelude\(\)[\s\S]*#atl-prelude[\s\S]*is-resolved/);
   assert.match(atelier, /onReady: resolveRoomPrelude/);
 });
 
 test("hover polish is restricted to precise pointers so touch cannot stick", () => {
-  assert.match(atelier, /@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*\.atl-option:hover[\s\S]*\.atl-panorama:hover/);
+  assert.match(atelier, /@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*\.atl-bubble:hover[\s\S]*\.atl-panorama:hover/);
 });
 
 test("phones without WebGL continue through the same journey on a static room", () => {

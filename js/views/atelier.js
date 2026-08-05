@@ -36,6 +36,7 @@ import {
 } from "../commissioning.js";
 import { createCompletionRewardRegistry } from "../completion-reward.js";
 import { mountJourneyOpening } from "../journey-opening.js";
+import { createAssetStrip } from "../asset-strip.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -57,6 +58,15 @@ let lastChapterId = null;
 let lastChapterIndex = -1;
 let preferredFixtureProductId = null;
 let opening = null;
+// "product" shows the tile/fixture strip; "grout" shows the width stepper —
+// never both, so a surface chapter still asks exactly one question at a
+// time even though it covers two decisions (operator instruction,
+// 2026-08-05: "this question only asks you for the tiles... that's on a
+// completely another question").
+let materialSubStep = "product";
+let strip = null;             // asset-strip.js controller for the current #atl-options
+let groutHoldTimer = null;
+let groutHoldInterval = null;
 
 const QUOTE_EMAIL = "info@akvaterm.hr";
 const completionRewards = createCompletionRewardRegistry();
@@ -107,7 +117,7 @@ function loadAutosave() {
 // The ONE place a chapter's `intent` becomes a director call. journey.js
 // never touches the camera directly — this is the seam the research report's
 // "declare intent, the director computes the transform" rule describes.
-function directCamera(chapter) {
+function directCamera(chapter, { subStep = materialSubStep } = {}) {
   if (!api?.camera || !chapter) return;
   const fixtureTarget = chapter.kind === "fixtures"
     ? (roomFixtures.find((fixture) => fixture.chapterId === chapter.id
@@ -115,6 +125,14 @@ function directCamera(chapter) {
       || roomFixtures.find((fixture) => fixture.chapterId === chapter.id))?.type
     : null;
   const target = fixtureTarget || chapter.target || chapter.surface;
+  // The grout sub-step gets its own camera verb — followGroutLine() already
+  // existed in director3d.js (tracks close along the actual grout line) but
+  // was never called from here; the stepper UI is the only piece that was
+  // actually missing.
+  if (chapter.kind === "surface" && subStep === "grout" && journey.current().decision?.productId) {
+    api.camera.followGroutLine(target);
+    return;
+  }
   switch (chapter.intent) {
     case "returnToOverview": api.camera.returnToOverview(); break;
     case "focusSurface": api.camera.focusSurface(target); break;
@@ -142,9 +160,14 @@ function shell({ lightMix = 0 } = {}) {
   return `
     <style>
       .atl{
-        --atl-paper:var(--paper,#F2F2F2);
-        --atl-ink:var(--ink,#313131);
-        --atl-surface:var(--surface,#FFFFFF);
+        /* Dark by default in every orientation now, not just landscape
+           (operator instruction, 2026-08-05: "have the background of the
+           designer viewer not White") — this is the same dark palette
+           landscape mode already proved out, just no longer gated behind an
+           orientation media query. */
+        --atl-paper:#020403;
+        --atl-ink:#F1F5F1;
+        --atl-surface:rgba(8,12,10,.78);
         --atl-teal-300:var(--teal-300,#86DCE6);
         --atl-teal-600:var(--teal-600,#139EB1);
         --atl-teal-700:var(--teal-700,#0D707D);
@@ -152,16 +175,24 @@ function shell({ lightMix = 0 } = {}) {
         --atl-amber-ink:var(--amber-ink,#935616);
         --atl-brown-800:var(--brown-800,#68340F);
         --atl-mauve-ink:var(--mauve-600,#756168);
-        --atl-line:var(--line-strong,rgba(104,52,15,.22));
+        --atl-line:rgba(224,241,230,.15);
         --atl-glass-bg:var(--glass-bg-text,hsl(187 44% 97% / .78));
-        --atl-glass-solid:var(--glass-solid,#F4FAFB);
-        --atl-glass-ink-muted:var(--glass-ink-muted,#5C4B51);
+        --atl-glass-solid:#151A17;
+        --atl-glass-ink-muted:rgba(232,240,234,.62);
         --atl-glass-blur:var(--glass-blur-md,18px);
-        --atl-shadow-2:var(--glass-shadow-2,0 2px 6px rgba(93,79,79,.14),0 12px 34px rgba(93,79,79,.22));
+        --atl-shadow-2:0 34px 90px -28px rgba(0,0,0,.82);
         --atl-rim-top:var(--glass-rim-top,rgba(255,255,255,.62));
         --atl-rim-bottom:var(--glass-rim-bottom,rgba(255,255,255,.26));
         --atl-rim-side:var(--glass-rim-side,rgba(255,255,255,.18));
         --atl-edge-dark:var(--glass-edge-dark,rgba(93,79,79,.12));
+        /* The bottom cluster's OWN, lighter recipe — genuinely see-through
+           (operator instruction, 2026-08-05: "they must be see-through...
+           transparent backgrounds"), distinct from --atl-glass-bg's heavier
+           78%-alpha fill, which stays reserved for the one deliberate
+           exception (.atl-guide.is-summary's document-style card). */
+        --atl-float-bg:rgba(18,22,20,.30);
+        --atl-float-border:rgba(255,255,255,.16);
+        --atl-float-blur:16px;
         --atl-r-sm:var(--r-sm,12px);
         --atl-r-md:var(--r-md,16px);
         --atl-r-lg:var(--r-lg,22px);
@@ -222,14 +253,37 @@ function shell({ lightMix = 0 } = {}) {
         border-radius:var(--atl-r-lg);
       }
 
-      /* THE ONE GLASS SURFACE. Recipe and contrast math copied from
-         soba3d.js's .s3d-hud — see that file for the full derivation. Worst
-         case (glass over a black floor) composites to #BEC3C4: --ink on it is
-         7.30:1, --atl-glass-ink-muted is 4.57:1. Both pass AA at any size. */
+      /* FLOATING GLASS, not one card (operator instruction, 2026-08-05, after
+         the earlier same-day .atl-guide size fix still wasn't enough — see
+         IMG_6516: "the right panel, the card, that can be completely
+         removed... I can't see shit because of that panel"). .atl-guide is
+         now a layout-only wrapper with no background of its own; every piece
+         inside it (the question label, each option bubble, the material
+         controls) carries the SAME proven glass recipe individually, at a
+         much smaller footprint, so the room shows through everywhere else.
+         This is still "one glass RECIPE, never a second divergent one" (the
+         rule this file used to phrase as "one glass surface" — see
+         soba3d.js's own history of exactly that defect) — just applied to N
+         small surfaces instead of one big one. Contrast math is unchanged:
+         worst case (glass over a black floor) composites to #BEC3C4; --ink
+         on it is 7.30:1, --atl-glass-ink-muted is 4.57:1, both pass AA. */
       .atl-guide{
         position:absolute;left:12px;right:12px;bottom:64px;z-index:2;
-        max-width:420px;max-height:min(52dvh,400px);overflow:auto;overscroll-behavior:contain;
-        padding:16px 18px;border-radius:var(--atl-r-lg);
+        max-width:420px;max-height:min(60dvh,460px);
+        display:flex;flex-direction:column;gap:10px;
+        overflow:visible;pointer-events:none;
+      }
+      .atl-guide > *{pointer-events:auto}
+      @media(min-width:720px){ .atl-guide{ left:24px; right:max(24px,env(safe-area-inset-right,0px)); bottom:24px; } }
+      .atl-guide[data-flow="forward"]{--atl-beat-x:10px}
+      .atl-guide[data-flow="back"]{--atl-beat-x:-10px}
+
+      /* The one deliberate exception: the final offer is a document to
+         review, not a lens floating over a room the customer is done
+         comparing materials in, so it keeps a real card. */
+      .atl-guide.is-summary{
+        max-width:min(540px,92vw);max-height:min(70dvh,560px);
+        overflow:auto;overscroll-behavior:contain;padding:20px 22px;border-radius:var(--atl-r-lg);
         background:var(--atl-glass-bg);
         box-shadow:
           var(--atl-shadow-2),
@@ -242,71 +296,146 @@ function shell({ lightMix = 0 } = {}) {
         backdrop-filter:blur(var(--atl-glass-blur)) saturate(180%) brightness(1.06);
         color:var(--atl-ink);
       }
-      @media(min-width:720px){ .atl-guide{ left:24px; right:max(24px,env(safe-area-inset-right,0px)); bottom:24px; } }
-      .atl-guide.is-summary{max-width:min(540px,92vw);padding:20px 22px}
-      .atl-guide[data-flow="forward"]{--atl-beat-x:10px}
-      .atl-guide[data-flow="back"]{--atl-beat-x:-10px}
 
-      .atl-progress{height:4px;border-radius:var(--atl-r-pill);background:rgba(104,52,15,.14);overflow:hidden;margin-bottom:10px}
+      /* The question label — its own small glass pill, not the whole card. */
+      .atl-question-group{
+        display:block;max-width:100%;padding:8px 14px;border-radius:16px;
+        border:1px solid var(--atl-float-border);
+        background:var(--atl-float-bg);
+        -webkit-backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        color:var(--atl-ink);
+      }
+      /* Not shown here any more — the chip rail's is-done/is-active states
+         already communicate progress, and this bottom cluster is fighting
+         for every millimetre of its ~2.5cm budget (operator instruction,
+         2026-08-05). The element (and renderChapter()'s width write) stay in
+         the DOM so nothing else has to change; it just never paints. */
+      .atl-progress{display:none}
       .atl-progress-fill{height:100%;background:var(--atl-teal-700);border-radius:inherit;width:0%}
-      @media(prefers-reduced-motion:no-preference){.atl-progress-fill{transition:width .5s var(--smooth,ease)}}
 
-      .atl-eyebrow{margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:.08em;
+      .atl-eyebrow{margin:0 0 2px;font-size:10.5px;font-weight:600;letter-spacing:.07em;
         text-transform:uppercase;color:var(--atl-glass-ink-muted)}
-      .atl-question{margin:0 0 4px;font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
-      .atl-help{margin:0 0 12px;font-size:13.5px;line-height:1.4;color:var(--atl-glass-ink-muted)}
-      .atl-stale{display:block;margin:0 0 10px;padding:8px 10px;border-radius:var(--atl-r-sm);
+      /* Typography pass (operator instruction, 2026-08-05: "the text...
+         doesn't look good") — borrowed structurally from login-photo-style.js's
+         .pr-title/.pr-sub (var(--font-display), tighter weight/tracking), not
+         its gold; atelier keeps its own established teal/amber accent tokens. */
+      .atl-question{margin:0 0 2px;font-family:var(--font-display);font-size:clamp(18px,4.2vw,21px);
+        font-weight:560;letter-spacing:-.02em;line-height:1.15}
+      /* Clamped to one line — the same ~2.5cm bottom-cluster budget above.
+         The full help text is still in the DOM for a screen reader; sighted
+         users get the question itself (the load-bearing content) and the
+         short version of the hint. */
+      .atl-help{margin:0;font-size:12.5px;line-height:1.35;color:var(--atl-glass-ink-muted);
+        display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+      .atl-stale{display:block;margin:8px 0 0;padding:8px 10px;border-radius:var(--atl-r-sm);
         background:var(--atl-surface);color:var(--atl-amber-ink);font-size:12.5px;font-weight:600}
 
-      .atl-options{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;max-height:min(168px,22dvh);
-        overflow:auto;overscroll-behavior:contain;padding:2px 3px 3px 2px;scrollbar-width:thin}
-      .atl-empty{font-size:13px;color:var(--atl-glass-ink-muted);margin:0 0 14px}
+      /* The floating asset strip: .atl-strip is the clipping viewport,
+         .atl-strip-track (== #atl-options) is the row asset-strip.js drives
+         via transform:translateX(). No max-height/overflow:auto here anymore
+         — that vertical-scroll budget existed only because the OLD flat
+         wrap-list could grow past its box; a single-row horizontal strip
+         can't, so the guide is shorter and the room behind it stays clearer. */
+      .atl-strip{overflow:hidden;touch-action:pan-y;margin:0 -4px;padding:4px}
+      .atl-strip-track{display:flex;flex-wrap:nowrap;gap:8px;will-change:transform;cursor:grab}
+      .atl-strip-track:active{cursor:grabbing}
+      .atl-strip-track.is-static{flex-wrap:wrap;transform:none!important;cursor:default;
+        max-height:min(168px,22dvh);overflow:auto;overscroll-behavior:contain}
+      .atl-empty{font-size:13px;color:var(--atl-glass-ink-muted);margin:0}
 
-      /* A material seam, not another chapter. It appears only after a tile is
-         chosen and keeps both decisions in the same visual beat as the close-up
-         camera. Every control is solid, so the one-glass budget remains intact. */
-      .atl-material{display:grid;gap:8px;margin:-3px 0 14px;padding-top:10px;border-top:1px solid var(--atl-line)}
+      /* Persistent "currently chosen" readout — the strip itself can drift
+         the selected bubble off-screen, so the pick still needs to be
+         visible without scrolling back to find it. */
+      .atl-strip-current{display:none;align-items:center;gap:8px;padding:6px 12px;border-radius:var(--atl-r-pill);
+        border:1px solid var(--atl-float-border);
+        background:var(--atl-float-bg);
+        -webkit-backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        color:var(--atl-ink);font-size:12.5px}
+      .atl-strip-current.is-shown{display:inline-flex}
+      .atl-strip-current strong{font-weight:700}
+      .atl-strip-current span{color:var(--atl-glass-ink-muted);font-weight:500}
+
+      /* A material seam, not another chapter — the grout sub-step replaces
+         the tile strip in place (materialSubStep gating in renderChapter()),
+         so only one of the two is ever visible: still one question at a time.
+         Its own small glass pill now, since nothing wraps it anymore. */
+      .atl-material{display:grid;gap:8px;padding:10px 14px;border-radius:16px;
+        border:1px solid var(--atl-float-border);
+        background:var(--atl-float-bg);
+        -webkit-backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        color:var(--atl-ink)}
       .atl-material-head{display:grid;gap:2px}
       .atl-material-title{margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
         color:var(--atl-glass-ink-muted)}
       .atl-material-hint{margin:0;font-size:12px;line-height:1.35;color:var(--atl-glass-ink-muted)}
+      .atl-material-back{align-self:start;min-height:32px;padding:4px 10px;border:0;background:transparent;
+        color:var(--atl-glass-ink-muted);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;
+        text-decoration:underline;text-underline-offset:2px}
       .atl-grout-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
       .atl-grout-label{min-width:70px;font-size:11.5px;font-weight:600;color:var(--atl-glass-ink-muted)}
-      .atl-grout-color,.atl-grout-width{min-width:44px;min-height:44px;border:1px solid var(--atl-line);
-        background:var(--atl-surface);color:var(--atl-ink);font:inherit;font-size:12px;font-weight:650;cursor:pointer}
-      .atl-grout-color{width:44px;padding:0;border-radius:50%;background:var(--atl-grout-color,#ddd);
+      .atl-grout-color{min-width:44px;min-height:44px;width:44px;padding:0;border:1px solid var(--atl-line);
+        border-radius:50%;background:var(--atl-grout-color,#ddd);color:var(--atl-ink);font:inherit;cursor:pointer;
         box-shadow:inset 0 0 0 3px var(--atl-surface)}
       .atl-grout-color[aria-pressed="true"]{border-color:var(--atl-teal-700);
         box-shadow:inset 0 0 0 3px var(--atl-surface),0 0 0 2px var(--atl-teal-700)}
-      .atl-grout-width{padding:7px 11px;border-radius:var(--atl-r-pill)}
-      .atl-grout-width[aria-pressed="true"]{border-color:var(--atl-teal-700);background:var(--atl-teal-700);color:#fff}
-      .atl-grout-color:focus-visible,.atl-grout-width:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:3px}
+      .atl-grout-color:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:3px}
 
-      /* SOLID by design — see the header note above shell(). Each control's
-         motion below is deliberately DIFFERENT, not one gesture reused five
-         times — chosen from what the control means, not copy-pasted, while
-         staying built from the same --atl-spring/--atl-smooth vocabulary so
-         the set still reads as one system rather than five unrelated ideas.
+      /* The continuous-value stepper (grout width today; the general pattern
+         for any future continuous property): step buttons flank a live
+         readout instead of N flat "pick one" buttons, and the camera is
+         already tracking the actual grout line the instant this mounts (see
+         directCamera()'s materialSubStep==="grout" branch, which calls the
+         previously-unused director3d.js followGroutLine()). */
+      .atl-grout-stepper{display:flex;align-items:center;justify-content:space-between;gap:10px}
+      .atl-grout-step{min-width:44px;min-height:44px;padding:0;border:1px solid var(--atl-line);
+        border-radius:50%;background:var(--atl-surface);color:var(--atl-ink);
+        font:inherit;font-size:20px;font-weight:700;line-height:1;cursor:pointer}
+      .atl-grout-step:disabled{opacity:.4;cursor:not-allowed}
+      .atl-grout-step:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:3px}
+      .atl-grout-readout{flex:1;text-align:center;font-size:13px;color:var(--atl-glass-ink-muted)}
+      .atl-grout-readout strong{color:var(--atl-ink);font-size:15px;font-weight:700;
+        font-variant-numeric:tabular-nums}
 
-         Option cards are things being WEIGHED against each other — the
-         gesture is a lift, like picking a card up off a table to look at it,
-         with a soft teal bloom that grows as you commit to it. */
-      .atl-option{
-        min-height:44px;padding:8px 14px;border:1px solid var(--atl-line);border-radius:var(--atl-r-pill);
-        background:var(--atl-surface);color:var(--atl-ink);font:inherit;font-size:13.5px;font-weight:600;
-        cursor:pointer;display:flex;align-items:center;gap:8px;
-        box-shadow:0 0 0 0 rgba(13,112,125,0);
+      /* Each bubble is its own small glass surface (same recipe as the
+         question label above — see the note at .atl-guide) — translucent
+         while available, going solid teal the instant it's chosen, so
+         selection stays legible even while the strip keeps drifting.
+         Motion is a lift, like picking a card up off a table to look at it,
+         built from the same --atl-spring/--atl-smooth vocabulary the rest of
+         this file's controls use. flex:none so drift/drag math in
+         asset-strip.js has a stable card width to measure. */
+      .atl-bubble{
+        flex:none;min-height:44px;padding:8px 14px;border:1px solid var(--atl-float-border);border-radius:18px;
+        background:var(--atl-float-bg);color:var(--atl-ink);font:inherit;font-size:13.5px;font-weight:600;
+        cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none;
+        -webkit-backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
       }
-      .atl-option:active{transform:translateY(0) scale(.975)}
-      .atl-option.is-selected{border-color:var(--atl-teal-700);background:var(--atl-teal-700);color:#FFFFFF}
-      .atl-option:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
-      .atl-option-product{padding-left:6px}
+      /* A faint refraction of the product's own colour through the glass
+         (operator instruction, 2026-08-05) — layered ABOVE the plain
+         --atl-float-bg fallback declared just above, so a browser that
+         can't parse color-mix() keeps the plain glass instead of losing its
+         background entirely. --atl-swatch is unset (falls through to
+         "transparent") on direction bubbles, which have no product colour. */
+      .atl-bubble[style*="--atl-swatch"]{
+        background:
+          linear-gradient(135deg,color-mix(in srgb,var(--atl-swatch,transparent) 26%,transparent),transparent 68%),
+          var(--atl-float-bg);
+      }
+      .atl-bubble:active{transform:translateY(0) scale(.975)}
+      .atl-bubble.is-selected{border-color:var(--atl-teal-700);background:var(--atl-teal-700);color:#FFFFFF;
+        -webkit-backdrop-filter:none;backdrop-filter:none}
+      .atl-bubble:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
+      .atl-bubble-product{padding-left:6px}
       .atl-swatch{width:22px;height:22px;border-radius:50%;flex:none;background:var(--atl-swatch,#ddd);
         box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
-      .atl-option-meta{font-size:11.5px;font-weight:500;opacity:.82}
-      .atl-option-mark{display:none;width:18px;height:18px;border-radius:50%;margin-left:auto;
+      .atl-bubble-meta{font-size:11.5px;font-weight:500;opacity:.82;white-space:nowrap}
+      .atl-bubble-mark{display:none;width:18px;height:18px;border-radius:50%;margin-left:auto;
         align-items:center;justify-content:center;background:rgba(255,255,255,.18);font-size:11px}
-      .atl-option.is-selected .atl-option-mark{display:inline-flex}
+      .atl-bubble.is-selected .atl-bubble-mark{display:inline-flex}
 
       .atl-payoff{display:grid;gap:12px}
       .atl-guide.is-summary .atl-payoff{padding-bottom:56px}
@@ -355,17 +484,20 @@ function shell({ lightMix = 0 } = {}) {
       .atl-summary-warning{color:var(--atl-amber-ink);box-shadow:inset 3px 0 0 var(--atl-amber-500)}
       .atl-summary-note{margin:0;font-size:11.5px;line-height:1.4;color:var(--atl-glass-ink-muted)}
 
-      /* Sticky on every step, not just .is-summary (operator instruction,
-         2026-08-05, from the atl-guide overlay audit): the guide's own
-         max-height now regularly forces internal scrolling, and the nav
-         buttons must stay reachable without the user discovering that
-         scroll first. */
-      .atl-nav{position:sticky;bottom:-1px;z-index:2;display:flex;align-items:center;gap:10px;
-        padding-top:13px;background:linear-gradient(to bottom,transparent,var(--atl-glass-bg) 34%)}
+      /* Back/Next float on their own now, clear of the bottom text+bubble
+         band entirely (operator instruction, 2026-08-05: "above them...
+         is the Terma text window and that's it" — reaching at most ~2.5cm
+         from the bottom of the screen). A vertical pair on the right edge,
+         mid-height, stays clear of the chip rail above and the bottom
+         cluster below without crowding either. */
+      .atl-nav{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:2;
+        display:flex;flex-direction:column;gap:10px}
       .atl-btn{
-        min-height:44px;padding:8px 18px;border-radius:var(--atl-r-pill);border:1px solid transparent;
+        min-height:44px;padding:8px 18px;border-radius:var(--atl-r-pill);border:1px solid var(--atl-float-border);
         font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
-        background:var(--atl-surface);color:var(--atl-ink);box-shadow:0 1px 2px rgba(93,79,79,.18);
+        background:var(--atl-float-bg);color:var(--atl-ink);
+        -webkit-backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
+        backdrop-filter:blur(var(--atl-float-blur)) saturate(150%);
       }
       .atl-btn:disabled{opacity:.5;cursor:not-allowed}
       /* Back RECEDES — the quietest control on the panel, on purpose: a
@@ -419,8 +551,7 @@ function shell({ lightMix = 0 } = {}) {
         box-shadow:0 1px 2px rgba(93,79,79,.18),0 0 20px 2px rgba(19,158,177,.28)}
       .atl-panorama:focus-visible{outline:3px solid var(--atl-teal-700);outline-offset:2px}
       @media(hover:hover) and (pointer:fine){
-        .atl-option:hover{border-color:var(--atl-amber-500);transform:translateY(-2px);
-          box-shadow:0 6px 14px -8px rgba(13,112,125,.35)}
+        .atl-bubble:hover{border-color:var(--atl-amber-500);transform:translateY(-2px)}
         .atl-btn:not(.atl-btn-primary):hover:not(:disabled){border-color:var(--atl-line);opacity:.72}
         .atl-btn.atl-btn-primary:hover:not(:disabled){transform:translateX(3px);
           box-shadow:0 6px 16px -4px rgba(13,112,125,.55)}
@@ -435,29 +566,44 @@ function shell({ lightMix = 0 } = {}) {
       }
 
       /* ---- Degradation paths — the same five soba3d.js ships, landing on
-         --atl-glass-solid. See that file for why each one is required. ---- */
+         --atl-glass-solid. See that file for why each one is required.
+         Retargeted from the old single .atl-guide surface to every small
+         floating surface the panel-removal split it into. ---- */
       @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-        .atl-guide{background:var(--atl-glass-solid)}
+        .atl-guide.is-summary,.atl-question-group,.atl-bubble,.atl-material,.atl-strip-current,.atl-btn{
+          background:var(--atl-glass-solid)}
       }
       @media (prefers-reduced-transparency:reduce){
-        html:not([data-transparency="full"]) .atl-guide{
+        html:not([data-transparency="full"]) .atl-guide.is-summary,
+        html:not([data-transparency="full"]) .atl-question-group,
+        html:not([data-transparency="full"]) .atl-bubble,
+        html:not([data-transparency="full"]) .atl-material,
+        html:not([data-transparency="full"]) .atl-strip-current,
+        html:not([data-transparency="full"]) .atl-btn{
           background:var(--atl-glass-solid);-webkit-backdrop-filter:none;backdrop-filter:none;
         }
       }
-      html[data-transparency="reduced"] .atl-guide{
+      html[data-transparency="reduced"] .atl-guide.is-summary,
+      html[data-transparency="reduced"] .atl-question-group,
+      html[data-transparency="reduced"] .atl-bubble,
+      html[data-transparency="reduced"] .atl-material,
+      html[data-transparency="reduced"] .atl-strip-current,
+      html[data-transparency="reduced"] .atl-btn{
         background:var(--atl-glass-solid);-webkit-backdrop-filter:none;backdrop-filter:none;
       }
       @media (prefers-contrast:more){
-        .atl-guide{background:var(--atl-surface);border:1px solid var(--atl-ink);
+        .atl-guide.is-summary,.atl-question-group,.atl-bubble,.atl-material,.atl-strip-current,.atl-btn{
+          background:var(--atl-surface);border:1px solid var(--atl-ink);
           -webkit-backdrop-filter:none;backdrop-filter:none}
-        .atl-option,.atl-chip,.atl-btn,.atl-grout-color,.atl-grout-width{border-color:var(--atl-ink)}
+        .atl-chip,.atl-grout-color,.atl-grout-step{border-color:var(--atl-ink)}
       }
       @media (forced-colors:active){
-        .atl-guide{background:Canvas;border:1px solid CanvasText;
+        .atl-guide.is-summary,.atl-question-group,.atl-bubble,.atl-material,.atl-strip-current,.atl-btn{
+          background:Canvas;border:1px solid CanvasText;
           -webkit-backdrop-filter:none;backdrop-filter:none;forced-color-adjust:none;color:CanvasText}
-        .atl-option,.atl-chip,.atl-btn,.atl-grout-color,.atl-grout-width{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
-        .atl-option.is-selected,.atl-chip.is-active,.atl-btn-primary,
-        .atl-grout-color[aria-pressed="true"],.atl-grout-width[aria-pressed="true"]{background:Highlight;color:HighlightText}
+        .atl-chip,.atl-grout-color,.atl-grout-step{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}
+        .atl-bubble.is-selected,.atl-chip.is-active,.atl-btn-primary,
+        .atl-grout-color[aria-pressed="true"]{background:Highlight;color:HighlightText}
         .atl-payoff-head::before,.atl-payoff-head>strong::after,.atl-completion-bloom{display:none}
       }
       /* LANDSCAPE WORKSPACE — the phone rotation earns a genuinely wider
@@ -487,7 +633,7 @@ function shell({ lightMix = 0 } = {}) {
         .atl-menu span{background:rgba(9,14,11,.62);box-shadow:0 1px rgba(255,255,255,.54),0 0 9px rgba(0,0,0,.32)}
         .atl-chapters{
           left:max(72px,calc(env(safe-area-inset-left,0px) + 72px));
-          right:calc(min(360px,42vw) + max(34px,env(safe-area-inset-right,0px)));
+          right:max(72px,env(safe-area-inset-right,0px));
           top:max(12px,env(safe-area-inset-top,0px));padding:0;gap:7px;overflow:visible;
         }
         .atl-chip{
@@ -508,41 +654,13 @@ function shell({ lightMix = 0 } = {}) {
           content:"";position:absolute;right:4px;bottom:4px;width:4px;height:4px;border-radius:50%;
           background:#9ED6B5;box-shadow:0 0 8px rgba(158,214,181,.48);
         }
-        .atl-guide{
-          left:auto;right:max(16px,env(safe-area-inset-right,0px));
-          top:max(16px,env(safe-area-inset-top,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));
-          width:min(360px,42vw);max-width:none;max-height:none;padding:17px 19px 15px;
-          border:1px solid transparent;border-radius:28px;
-          background:
-            linear-gradient(138deg,rgba(13,20,16,.70),rgba(6,11,8,.67) 43%,rgba(3,7,5,.76) 82%) padding-box,
-            linear-gradient(145deg,rgba(255,255,255,.40),rgba(171,224,192,.13) 32%,rgba(223,166,106,.17) 74%,rgba(255,255,255,.08)) border-box;
-          -webkit-backdrop-filter:blur(14px) saturate(145%) brightness(.91);
-          backdrop-filter:blur(14px) saturate(145%) brightness(.91);
-          box-shadow:
-            var(--atl-shadow-2),inset 0 1px rgba(255,255,255,.16),
-            inset 1px 0 rgba(180,230,201,.08),inset -1px 0 rgba(226,166,107,.055),
-            inset 0 -18px 32px -28px rgba(98,165,126,.18);
-          scrollbar-width:thin;scrollbar-color:rgba(221,237,226,.22) transparent;z-index:3;
-        }
-        .atl-guide.is-summary{width:min(430px,48vw);max-width:none;padding:18px 20px 15px}
-        .atl-progress{height:2px;margin-bottom:12px;background:rgba(225,240,230,.11)}
-        .atl-progress-fill{background:linear-gradient(90deg,#78BFA3,#D0B27B)}
-        .atl-eyebrow{margin-bottom:6px;color:rgba(222,238,227,.52);font-size:10px;letter-spacing:.13em}
-        .atl-question{margin-bottom:6px;font-size:clamp(18px,2.5vw,23px);font-weight:560;line-height:1.12;letter-spacing:-.025em}
-        .atl-help{margin-bottom:12px;color:var(--atl-glass-ink-muted);font-size:12.5px;line-height:1.35}
-        .atl-options{gap:7px;max-height:min(128px,33dvh);margin-bottom:12px;padding:1px 3px 2px 1px}
-        .atl-option{
-          width:100%;min-height:44px;padding:8px 11px;border-color:rgba(225,241,231,.13);
-          border-radius:15px;background:rgba(255,255,255,.055);color:var(--atl-ink);font-size:12.5px;
-        }
-        .atl-option.is-selected{border-color:rgba(220,239,225,.52);background:rgba(218,235,222,.91);color:#111612}
-        .atl-option-meta{margin-left:auto;color:inherit;opacity:.62}
-        .atl-swatch{width:27px;height:27px;border-radius:10px}
-        .atl-material{margin-top:-3px;margin-bottom:11px;padding-top:9px;border-top-color:rgba(225,241,231,.12)}
-        .atl-grout-color,.atl-grout-width,.atl-btn{background:rgba(255,255,255,.07);color:var(--atl-ink);border-color:rgba(225,241,231,.14)}
-        .atl-grout-color{box-shadow:inset 0 0 0 3px rgba(8,12,10,.82)}
-        .atl-grout-color[aria-pressed="true"]{box-shadow:inset 0 0 0 3px rgba(8,12,10,.82),0 0 0 2px #8FCBB0}
-        .atl-btn.atl-btn-primary{background:rgba(218,235,222,.93);color:#111612;box-shadow:none}
+        /* No more right-side "decision lens" card (operator instruction,
+           2026-08-05, IMG_6516: this exact card was blocking two-thirds of
+           the room in landscape — "I don't know the orientation of my
+           bathtub"). The base rule's bottom-anchored floating cluster
+           applies unchanged here too; only the chip rail above stays
+           landscape-specific. */
+        .atl-guide{max-width:420px}
         .atl-panorama{
           left:max(18px,env(safe-area-inset-left,0px));right:auto;
           bottom:max(16px,env(safe-area-inset-bottom,0px));min-height:44px;
@@ -551,19 +669,13 @@ function shell({ lightMix = 0 } = {}) {
         }
       }
 
-      /* Compact landscape phones keep the same composition, but the guide's
-         own progress/eyebrow already states position, so the external waypoint
-         rail yields its space rather than compressing the room into ribbons. */
+      /* Compact landscape phones: the chip rail yields its space on a short
+         viewport rather than compressing the room into ribbons. The bottom
+         floating cluster no longer needs a special-cased width/position
+         here — it was only ever tuned for the right-side card this
+         breakpoint used to also carry. */
       @media(min-width:560px) and (max-width:719px) and (orientation:landscape){
         .atl-chapters{display:none}
-        .atl-guide{
-          right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px));
-          bottom:max(12px,env(safe-area-inset-bottom,0px));width:min(330px,48vw);
-          padding:14px 15px 13px;border-radius:24px;
-        }
-        .atl-guide.is-summary{width:min(360px,54vw);padding:15px 16px 13px}
-        .atl-question{font-size:17px}.atl-help{font-size:11.5px;margin-bottom:9px}
-        .atl-options{max-height:min(112px,30dvh);margin-bottom:9px}
         .atl-panorama{left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px))}
       }
 
@@ -582,8 +694,8 @@ function shell({ lightMix = 0 } = {}) {
         .atl-payoff.is-celebrating .atl-completion-bloom i{animation:atl-completion-bloom .88s var(--atl-spring) both}
         .atl-payoff.is-celebrating .atl-completion-bloom i:nth-child(2n){animation-delay:.08s}
         .atl-payoff.is-celebrating .atl-completion-bloom i:nth-child(3n){animation-delay:.15s}
-        .atl-option{transition:transform var(--atl-dur-2) var(--atl-spring),
-          box-shadow var(--atl-dur-2) var(--atl-smooth),border-color var(--atl-dur) var(--atl-smooth),
+        .atl-bubble{transition:transform var(--atl-dur-2) var(--atl-spring),
+          border-color var(--atl-dur) var(--atl-smooth),
           background-color var(--atl-dur) var(--atl-smooth),color var(--atl-dur) var(--atl-smooth)}
         .atl-btn{transition:transform var(--atl-dur-2) var(--atl-spring),
           box-shadow var(--atl-dur-2) var(--atl-smooth),border-color var(--atl-dur) var(--atl-smooth),
@@ -593,7 +705,7 @@ function shell({ lightMix = 0 } = {}) {
           color var(--atl-dur) var(--atl-smooth)}
         .atl-panorama{transition:box-shadow var(--atl-dur-2) var(--atl-smooth),
           border-color var(--atl-dur) var(--atl-smooth),color var(--atl-dur) var(--atl-smooth)}
-        .atl-grout-color,.atl-grout-width{transition:border-color var(--atl-dur) var(--atl-smooth),
+        .atl-grout-color,.atl-grout-step{transition:border-color var(--atl-dur) var(--atl-smooth),
           box-shadow var(--atl-dur) var(--atl-smooth),background-color var(--atl-dur) var(--atl-smooth),
           color var(--atl-dur) var(--atl-smooth)}
       }
@@ -634,7 +746,7 @@ function shell({ lightMix = 0 } = {}) {
         /* No transform anywhere — a hover lift or a forward nudge is still
            motion. Colour/shadow state changes remain instant, which reads as
            a clean state swap rather than as "the animation was removed". */
-        .atl-option:hover,.atl-option:active,.atl-btn:hover,.atl-btn:active,
+        .atl-bubble:hover,.atl-bubble:active,.atl-btn:hover,.atl-btn:active,
         .atl-chip:hover,.atl-chip:active{transform:none}
         .atl-prelude.is-resolved{opacity:0;transition:opacity .17s linear}
       }
@@ -661,20 +773,23 @@ function shell({ lightMix = 0 } = {}) {
 
         <div class="atl-guide" id="atl-guide" role="region"
              aria-label="${esc(tt("atelier.guideLabel", "Vodič kroz uređenje"))}">
-          <div class="atl-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="atl-progress-bar">
-            <div class="atl-progress-fill" id="atl-progress-fill"></div>
+          <div class="atl-question-group">
+            <div class="atl-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="atl-progress-bar">
+              <div class="atl-progress-fill" id="atl-progress-fill"></div>
+            </div>
+            <p class="atl-eyebrow" id="atl-eyebrow"></p>
+            <h2 class="atl-question" id="atl-question"></h2>
+            <p class="atl-help" id="atl-help"></p>
+            <span class="atl-stale" id="atl-stale" hidden></span>
           </div>
-          <p class="atl-eyebrow" id="atl-eyebrow"></p>
-          <h2 class="atl-question" id="atl-question"></h2>
-          <p class="atl-help" id="atl-help"></p>
-          <div class="atl-options" id="atl-options"></div>
+          <span class="atl-strip-current" id="atl-strip-current"></span>
+          <div class="atl-strip"><div class="atl-strip-track" id="atl-options"></div></div>
           <div class="atl-material" id="atl-material" hidden></div>
           <div class="atl-summary" id="atl-summary" hidden></div>
-          <div class="atl-nav">
-            <button type="button" class="atl-btn" id="atl-back">${esc(tt("atelier.back", "Natrag"))}</button>
-            <span class="atl-stale" id="atl-stale" hidden></span>
-            <button type="button" class="atl-btn atl-btn-primary" id="atl-next">${esc(tt("atelier.next", "Dalje"))}</button>
-          </div>
+        </div>
+        <div class="atl-nav" id="atl-nav">
+          <button type="button" class="atl-btn" id="atl-back">${esc(tt("atelier.back", "Natrag"))}</button>
+          <button type="button" class="atl-btn atl-btn-primary" id="atl-next">${esc(tt("atelier.next", "Dalje"))}</button>
         </div>
       </div>
     </div>`;
@@ -682,25 +797,49 @@ function shell({ lightMix = 0 } = {}) {
 
 function optionCard(chapter, opt, selected) {
   return `
-    <button type="button" class="atl-option${selected ? " is-selected" : ""}"
+    <button type="button" class="atl-bubble${selected ? " is-selected" : ""}"
       data-option="${esc(opt.id)}" aria-pressed="${selected ? "true" : "false"}">
-      <span class="atl-option-label">${esc(opt.label)}</span>
+      <span class="atl-bubble-label">${esc(opt.label)}</span>
     </button>`;
 }
 
-function productCard(p, selected) {
-  const priceLabel = p.priceM2 != null
+function productPriceLabel(p) {
+  return p.priceM2 != null
     ? `${formatEur(p.priceM2)} / m²`
     : (p.priceUnit != null ? `${formatEur(p.priceUnit)} / kom` : "");
+}
+
+function productCard(p, selected) {
   return `
-    <button type="button" class="atl-option atl-option-product${selected ? " is-selected" : ""}"
+    <button type="button" class="atl-bubble atl-bubble-product${selected ? " is-selected" : ""}"
       data-product="${esc(p.id)}" aria-pressed="${selected ? "true" : "false"}"
       style="--atl-swatch:${esc(p.baseColorHex || "#ddd")}">
       <span class="atl-swatch"></span>
-      <span class="atl-option-label">${esc(p.name)}</span>
-      <span class="atl-option-meta">${esc(priceLabel)}</span>
-      <span class="atl-option-mark" aria-hidden="true">✓</span>
+      <span class="atl-bubble-label">${esc(p.name)}</span>
+      <span class="atl-bubble-meta">${esc(productPriceLabel(p))}</span>
+      <span class="atl-bubble-mark" aria-hidden="true">✓</span>
     </button>`;
+}
+
+// The continuous-value pattern (operator instruction, 2026-08-05): a step
+// button flanks a live readout instead of N flat "pick one" buttons, and the
+// camera is already tracking the actual grout line by the time this renders
+// — see directCamera()'s materialSubStep==="grout" branch below, which
+// finally calls the previously-unused director3d.js followGroutLine().
+function groutWidthStepper(width) {
+  const idx = ATELIER_GROUT_WIDTHS_MM.indexOf(width);
+  const atMin = idx <= 0;
+  const atMax = idx < 0 || idx >= ATELIER_GROUT_WIDTHS_MM.length - 1;
+  return `
+    <div class="atl-grout-stepper" role="group" aria-label="${esc(tt("atelier.groutWidth", "Širina fuge"))}">
+      <button type="button" class="atl-grout-step" data-grout-step="prev" ${atMin ? "disabled" : ""}
+        aria-label="${esc(tt("atelier.groutNarrower", "Uže"))}">−</button>
+      <span class="atl-grout-readout" id="atl-grout-readout" aria-live="polite">
+        ${esc(tt("atelier.groutCurrent", "Trenutni razmak"))}: <strong>${width} mm</strong>
+      </span>
+      <button type="button" class="atl-grout-step" data-grout-step="next" ${atMax ? "disabled" : ""}
+        aria-label="${esc(tt("atelier.groutWider", "Šire"))}">+</button>
+    </div>`;
 }
 
 function materialControls(decision) {
@@ -708,6 +847,9 @@ function materialControls(decision) {
   const finish = surfaceFinishForDecision(decision);
   return `
     <div class="atl-material-head">
+      <button type="button" class="atl-material-back" data-material-back>
+        ${esc(tt("atelier.backToTiles", "← Natrag na pločice"))}
+      </button>
       <p class="atl-material-title">${esc(tt("atelier.groutDetail", "Detalj fuge"))}</p>
       <p class="atl-material-hint">${esc(tt("atelier.groutHint", "Prilagodite boju i širinu — spoj se mijenja pred vama."))}</p>
     </div>
@@ -718,12 +860,7 @@ function materialControls(decision) {
           aria-label="${esc(groutLabel(color.id))}" aria-pressed="${color.id === finish.groutColorId}"
           style="--atl-grout-color:${esc(color.hex)}"></button>`).join("")}
     </div>
-    <div class="atl-grout-row" role="group" aria-label="${esc(tt("atelier.groutWidth", "Širina fuge"))}">
-      <span class="atl-grout-label" aria-hidden="true">${esc(tt("atelier.groutWidthShort", "Širina"))}</span>
-      ${ATELIER_GROUT_WIDTHS_MM.map((width) => `
-        <button type="button" class="atl-grout-width" data-grout-width="${width}"
-          aria-pressed="${width === finish.groutWidthMm}">${width} mm</button>`).join("")}
-    </div>`;
+    ${groutWidthStepper(finish.groutWidthMm)}`;
 }
 
 // ---- render one chapter's beat ---------------------------------------------
@@ -768,23 +905,44 @@ function renderChapter() {
     staleEl.hidden = true;
   }
 
+  if (changedChapter) {
+    // Returning to an already-answered surface chapter opens straight on
+    // fine-tuning the grout, not back at the tile you already picked.
+    materialSubStep = (c.kind === "surface" && cur.decision?.productId) ? "grout" : "product";
+  }
+
   const optionsEl = container.querySelector("#atl-options");
+  const stripEl = optionsEl.parentElement;
+  const currentEl = container.querySelector("#atl-strip-current");
   const materialEl = container.querySelector("#atl-material");
   const summaryEl = container.querySelector("#atl-summary");
   const completion = journey.completion();
   guide.classList.toggle("is-summary", c.kind === "summary");
 
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  strip?.destroy();
+  strip = null;
+
+  const showStrip = (list, selected, cardFor, currentLabel) => {
+    stripEl.hidden = false;
+    optionsEl.innerHTML = list.length
+      ? list.map((item) => cardFor(item, selected.has(item.id))).join("")
+      : `<p class="atl-empty">${esc(tt("atelier.noProducts", "Nema proizvoda u ovoj kategoriji."))}</p>`;
+    optionsEl.classList.toggle("is-static", reducedMotion);
+    if (!reducedMotion && list.length > 1) strip = createAssetStrip({ viewport: stripEl, track: optionsEl });
+    if (currentEl) {
+      currentEl.classList.toggle("is-shown", Boolean(currentLabel));
+      currentEl.innerHTML = currentLabel || "";
+    }
+  };
+
   if (c.kind === "direction") {
     materialEl.hidden = true;
     materialEl.innerHTML = "";
     summaryEl.hidden = true;
-    optionsEl.hidden = false;
-    optionsEl.innerHTML = c.options
-      .map((o) => optionCard(c, o, cur.decision?.optionId === o.id))
-      .join("");
+    showStrip(c.options, new Set(cur.decision?.optionId ? [cur.decision.optionId] : []), (o, sel) => optionCard(c, o, sel), "");
   } else if (c.kind === "surface" || c.kind === "fixtures") {
     summaryEl.hidden = true;
-    optionsEl.hidden = false;
     const available = productsForChapter(c, products);
     const list = c.kind === "surface"
       ? rankProductsForDirection(available, moodId)
@@ -792,16 +950,23 @@ function renderChapter() {
     const selected = new Set(c.kind === "fixtures"
       ? decisionProductIds(cur.decision)
       : (cur.decision?.productId ? [cur.decision.productId] : []));
-    optionsEl.innerHTML = list.length
-      ? list.map((p) => productCard(p, selected.has(p.id))).join("")
-      : `<p class="atl-empty">${esc(tt("atelier.noProducts", "Nema proizvoda u ovoj kategoriji."))}</p>`;
-    const controls = c.kind === "surface" ? materialControls(cur.decision) : "";
+    const pickedProduct = c.kind === "surface" ? products.find((p) => p.id === cur.decision?.productId) : null;
+    const showGrout = c.kind === "surface" && materialSubStep === "grout" && pickedProduct;
+    if (showGrout) {
+      stripEl.hidden = true;
+      if (currentEl) currentEl.classList.remove("is-shown");
+    } else {
+      showStrip(list, selected, (p, sel) => productCard(p, sel),
+        pickedProduct ? `<strong>${esc(pickedProduct.name)}</strong><span> · ${esc(productPriceLabel(pickedProduct))}</span>` : "");
+    }
+    const controls = showGrout ? materialControls(cur.decision) : "";
     materialEl.innerHTML = controls;
     materialEl.hidden = !controls;
   } else if (c.kind === "summary") {
     materialEl.hidden = true;
     materialEl.innerHTML = "";
-    optionsEl.hidden = true;
+    stripEl.hidden = true;
+    if (currentEl) currentEl.classList.remove("is-shown");
     summaryEl.hidden = false;
     const state = journey.toJSON();
     const celebrate = completion.ready && completionRewards.claim({
@@ -934,6 +1099,9 @@ function applyProductDecision(productId) {
     const opts = liveSurfaceOptions(journey.current().decision);
     for (const surface of (chapter.surfaces || [chapter.surface])) api.setSurface(surface, p, opts);
   }
+  // The tile is chosen — the next question this same chapter has is grout,
+  // never both at once (see the materialSubStep comment at its declaration).
+  if (chapter.kind === "surface") materialSubStep = "grout";
   renderChapter();
 }
 
@@ -950,6 +1118,19 @@ function applyGroutDecision(patch) {
   const materialEl = container.querySelector("#atl-material");
   materialEl.innerHTML = materialControls(journey.current().decision);
   autosave();
+}
+
+function stepGroutWidth(dir) {
+  const cur = journey.current();
+  const finish = surfaceFinishForDecision(cur.decision);
+  const idx = ATELIER_GROUT_WIDTHS_MM.indexOf(finish.groutWidthMm);
+  // Clamps at the ends rather than wrapping — jumping 8mm straight back to
+  // 2mm would be exactly the kind of canned restart director3d.js's own
+  // header already rejects for camera motion; the same principle applies to
+  // a value the customer is actively fine-tuning by feel.
+  const next = Math.max(0, Math.min(ATELIER_GROUT_WIDTHS_MM.length - 1, idx + dir));
+  if (next === idx) return;
+  applyGroutDecision({ groutWidthMm: ATELIER_GROUT_WIDTHS_MM[next] });
 }
 
 function syncJourneyFixtures() {
@@ -996,12 +1177,34 @@ function wire() {
     if (prodBtn) applyProductDecision(prodBtn.dataset.product);
   });
 
-  container.querySelector("#atl-material").addEventListener("click", (e) => {
+  const materialEl = container.querySelector("#atl-material");
+  materialEl.addEventListener("click", (e) => {
+    const back = e.target.closest("[data-material-back]");
+    if (back) { materialSubStep = "product"; renderChapter(); return; }
     const color = e.target.closest("[data-grout-color]");
     if (color) { applyGroutDecision({ groutColorId: color.dataset.groutColor }); return; }
-    const width = e.target.closest("[data-grout-width]");
-    if (width) applyGroutDecision({ groutWidthMm: Number(width.dataset.groutWidth) });
+    const step = e.target.closest("[data-grout-step]");
+    if (step) stepGroutWidth(step.dataset.groutStep === "next" ? 1 : -1);
   });
+  // Press-and-hold repeat on the stepper: one immediate step on press, then
+  // repeating after a short pause so a customer can walk the value from 2mm
+  // to 8mm without four separate taps.
+  const clearGroutHold = () => {
+    window.clearTimeout(groutHoldTimer); window.clearInterval(groutHoldInterval);
+    groutHoldTimer = null; groutHoldInterval = null;
+  };
+  materialEl.addEventListener("pointerdown", (e) => {
+    const step = e.target.closest("[data-grout-step]");
+    if (!step || step.disabled) return;
+    const dir = step.dataset.groutStep === "next" ? 1 : -1;
+    clearGroutHold();
+    groutHoldTimer = window.setTimeout(() => {
+      groutHoldInterval = window.setInterval(() => stepGroutWidth(dir), 140);
+    }, 450);
+  });
+  materialEl.addEventListener("pointerup", clearGroutHold);
+  materialEl.addEventListener("pointerleave", clearGroutHold);
+  materialEl.addEventListener("pointercancel", clearGroutHold);
 
   container.querySelector("#atl-next").addEventListener("click", () => {
     const cur = journey.current();
@@ -1230,4 +1433,11 @@ export function teardown() {
   lastChapterId = null;
   lastChapterIndex = -1;
   preferredFixtureProductId = null;
+  strip?.destroy();
+  strip = null;
+  window.clearTimeout(groutHoldTimer);
+  window.clearInterval(groutHoldInterval);
+  groutHoldTimer = null;
+  groutHoldInterval = null;
+  materialSubStep = "product";
 }
