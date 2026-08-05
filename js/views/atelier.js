@@ -219,7 +219,13 @@ function shell({ lightMix = 0 } = {}) {
       /* Explicit height, matching soba3d.js's .s3d-stage clamp — an
          absolutely-positioned stage needs a sized ancestor, not height:100%
          of #main's unconstrained flow. */
-      .atl-root{position:relative;height:clamp(420px,84vh,760px);min-height:0}
+      /* Its own dark background too, not just .atl-stage's — operator report,
+         2026-08-05 (tablet): a ~0.7cm black stripe appeared the moment the
+         stage went dark, almost certainly a pre-existing sub-pixel gap below
+         .atl-root (height is a vh clamp, never guaranteed to reach exactly
+         100%) that used to blend invisibly against a light stage and now
+         shows as a stark seam against a light outer app shell. */
+      .atl-root{position:relative;height:clamp(420px,84vh,760px);min-height:0;background:var(--atl-paper)}
       @media(min-width:720px){.atl-root{height:clamp(480px,80vh,820px)}}
       .atl-stage{position:absolute;inset:0;border-radius:var(--atl-r-lg);overflow:hidden;background:var(--atl-paper)}
       .atl-prelude{position:absolute;inset:0;z-index:1;overflow:hidden;border-radius:var(--atl-r-lg);pointer-events:none;background:#020403;opacity:1}
