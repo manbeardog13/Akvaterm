@@ -286,9 +286,19 @@ html[data-akv-auth] #main{width:100%;max-width:none;min-height:100dvh;margin:0;p
 .pr-form fieldset{min-inline-size:0;margin:0;padding:0;border:0}.pr-form fieldset[disabled]{opacity:.5}
 .pr-field{margin-bottom:calc(11px * var(--pr-card-vscale))}.pr-input{position:relative;display:flex;align-items:center;min-height:44px;border:1px solid var(--pr-line);border-radius:14px;background:var(--pr-input);transition:border-color 160ms ease,background 160ms ease}
 .pr-input:focus-within{border-color:rgba(230,215,168,.72);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(230,215,168,.09)}
-.pr-ic{display:flex;margin-left:16px;color:var(--pr-muted)}
-.pr-input input{width:100%;min-width:0;padding:0 14px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 13px/1 var(--font-text)}
-.pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{display:grid;place-items:center;min-width:38px;min-height:38px;margin-right:3px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
+/* The icon and the reveal button used to sit in the flex flow, which shrank
+   the <input> itself down to the gap between them -- so the native
+   iOS/Safari focus-and-autofill highlight (which traces the INPUT's own
+   box, not .pr-input's) started after the icon and, on the password field
+   only, stopped short of the eye button, making the two fields look wired
+   differently (operator report, 2026-08-05, on-device screenshots). Taking
+   icon and eye out of flow makes the input the pill's full edge-to-edge
+   box on both fields, so any native ring traces the same rectangle either
+   way. */
+.pr-ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);display:flex;color:var(--pr-muted);pointer-events:none}
+.pr-input input{width:100%;min-width:0;padding:0 14px 0 48px;border:0;outline:0;background:transparent;color:var(--pr-text);font:500 13px/1 var(--font-text)}
+.pr-input.has-eye input{padding-right:44px}
+.pr-input input::placeholder{color:var(--pr-muted);opacity:1}.pr-eye{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:grid;place-items:center;min-width:38px;min-height:38px;padding:0;border:0;background:transparent;color:var(--pr-muted);cursor:pointer}.pr-eye:focus-visible{outline:2px solid var(--pr-accent);outline-offset:-4px;border-radius:11px}
 .pr-err{display:block;min-height:0;margin:4px 3px 0;color:var(--pr-danger);font-size:10px;line-height:1.35}.pr-err:not(:empty){min-height:16px}.pr-field.is-bad .pr-input{border-color:var(--pr-danger)}
 .pr-rowend{display:flex;justify-content:flex-end;margin:-2px 2px calc(10px * var(--pr-card-vscale))}.pr-forgot,.pr-footlink{min-height:38px;padding:0;border:0;background:none;color:var(--pr-muted);font:600 11px/1 var(--font-text);cursor:pointer}.pr-footlink{display:inline-flex;align-items:center;vertical-align:middle;color:var(--pr-accent);margin-left:5px}.pr-forgot:hover,.pr-footlink:hover{color:var(--pr-text)}.pr-forgot:focus-visible,.pr-footlink:focus-visible{outline:2px solid var(--pr-accent);outline-offset:2px;border-radius:5px}
 /* Button/input heights cut ~15% too (operator instruction, 2026-08-04,

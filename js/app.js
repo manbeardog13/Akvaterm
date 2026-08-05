@@ -653,6 +653,13 @@ function watchAuthState() {
     if (announce && authedEmail) {
       announce = false;
       toast(T("prijava.success", "Prijavljeni ste."));
+      // Google's OAuth redirect lands back on whatever route the browser was
+      // last on (often the catalogue), bypassing prijava.js's leaveForApp() --
+      // that function only runs for the email/password path, which never
+      // navigates away from the page. Every OTHER successful sign-in already
+      // enters the atelier journey; a Google sign-in must too (operator
+      // report, 2026-08-05: landed on Katalog after logging in).
+      location.hash = "#/atelier";
     }
   });
 

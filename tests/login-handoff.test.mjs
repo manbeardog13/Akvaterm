@@ -254,3 +254,36 @@ test("the approved 4K login photographs are optimized for static delivery", () =
     assert.ok(stat.size < 800_000, `${name} regressed to ${stat.size} bytes`);
   }
 });
+
+test("the email and password fields wire their native focus box identically (operator report, 2026-08-05)", () => {
+  // Icon and reveal button used to sit in the flex flow, shrinking the
+  // <input> itself down to the gap between them, so iOS's native
+  // focus/autofill highlight (which traces the INPUT's own box) started
+  // after the icon and, password-only, stopped short of the eye button.
+  // Both must now be taken out of flow so the input is the full pill on
+  // both fields.
+  assert.match(style, /\.pr-ic\{position:absolute;left:16px;top:50%;transform:translateY\(-50%\)/);
+  assert.match(style, /\.pr-eye\{position:absolute;right:3px;top:50%;transform:translateY\(-50%\)/);
+  assert.match(style, /\.pr-input input\{width:100%;min-width:0;padding:0 14px 0 48px/);
+  assert.match(style, /\.pr-input\.has-eye input\{padding-right:44px\}/);
+  assert.doesNotMatch(style, /\.pr-ic\{display:flex;margin-left:16px/, "the old flex-flow icon rule must be gone");
+  assert.doesNotMatch(style, /margin-right:3px/, "the old flex-flow eye-button gap must be gone");
+});
+
+test("only the password field's wrapper gets the has-eye modifier", () => {
+  assert.match(login, /class="pr-input\$\{opts\.eye \? " has-eye" : ""\}"/);
+});
+
+test("a Google sign-in enters the atelier journey like every other sign-in path", () => {
+  const app = fs.readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  // Email/password sign-in and sign-up both call leaveForApp() -> #/atelier
+  // directly (prijava.js). Google's OAuth redirect leaves the page and comes
+  // back on whatever route the browser last had, bypassing that call
+  // entirely -- confirmed live on-device (operator screenshot, 2026-08-05:
+  // landed on Katalog after signing in). The fix lives in the one place that
+  // definitely runs for an OAuth return: the announce-once branch gated on
+  // oauthReturn.kind === "code".
+  const announceBlock = app.slice(app.indexOf("let announce = oauthReturn"), app.indexOf("// A failed return leaves no session"));
+  assert.match(announceBlock, /if \(announce && authedEmail\) \{/);
+  assert.match(announceBlock, /location\.hash = "#\/atelier";/);
+});

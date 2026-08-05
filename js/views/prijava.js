@@ -160,7 +160,7 @@ function field(id, labelKey, labelFallback, opts) {
   const label = esc(tf(labelKey, labelFallback));
   return `
     <div class="pr-field">
-      <span class="pr-input">
+      <span class="pr-input${opts.eye ? " has-eye" : ""}">
         <span class="pr-ic">${opts.icon}</span>
         <input id="${id}" type="${opts.type}" name="${opts.name}"
                autocomplete="${opts.autocomplete}"${opts.inputmode ? ` inputmode="${opts.inputmode}"` : ""}
